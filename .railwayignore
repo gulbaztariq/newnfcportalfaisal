@@ -1,0 +1,12 @@
+node_modules
+**/node_modules
+old project
+*.pdf
+client/dist
+server/.env
+server/.env.bak
+server/dev.sqlite
+server/uploads/*
+!server/uploads/.gitkeep
+server/e2e.sqlite
+*.log

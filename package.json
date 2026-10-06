@@ -1,0 +1,15 @@
+{
+  "name": "nfc-vcards",
+  "private": true,
+  "description": "NFC & vCard SaaS - Node.js (Express + Sequelize/MySQL) API and React (Vite) website and portals",
+  "engines": { "node": "22.x" },
+  "scripts": {
+    "install:all": "npm --prefix server install && npm --prefix client install",
+    "db:setup": "npm --prefix server run db:sync && npm --prefix server run db:seed",
+    "db:reset": "npm --prefix server run db:reset",
+    "dev:server": "npm --prefix server run dev",
+    "dev:client": "npm --prefix client run dev",
+    "build": "npm --prefix server ci --omit=dev && npm --prefix client ci --include=dev && npm --prefix client run build",
+    "start": "node server/src/scripts/sync.js --safe && node server/src/scripts/seed.js && node server/src/index.js"
+  }
+}
