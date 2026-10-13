@@ -1,6 +1,6 @@
 const { esc, url, color, nl2br } = require('../../utils/html');
 const { TEMPLATES, LAYOUTS } = require('./catalog');
-const BASE_CSS = require('./styles');
+const BASE_CSS = require('./styles') + require('./premium');
 const { t: labelsFor, RTL } = require('./i18n');
 
 const BY_SLUG = Object.fromEntries(TEMPLATES.map((t) => [t.slug, t]));
@@ -119,7 +119,9 @@ function themeOf(v, template, app) {
     + `--chip:color-mix(in srgb,${p} ${dark ? 18 : 12}%,transparent);`
     + `--sh:${dark ? '0 1px 0 rgba(255,255,255,.04) inset,0 20px 40px -24px rgba(0,0,0,.8)' : '0 1px 2px rgba(16,24,40,.04),0 12px 32px -16px rgba(16,24,40,.16)'};color-scheme:${dark ? 'dark' : 'light'}`;
   const lang = v.default_language || 'en';
-  return { layout, dark, lowp: dark && lum(p) < 0.1, p, font, vars, lang, dir: RTL.has(lang) ? 'rtl' : 'ltr', L: labelsFor(lang), favicon: app.favicon };
+  // optional corner style chosen by the owner; overrides the layout's own --r
+  const radius = { sharp: '4px', soft: '14px', round: '28px' }[th.radius] || '';
+  return { layout, dark, lowp: dark && lum(p) < 0.1, p, font, vars, radius, lang, dir: RTL.has(lang) ? 'rtl' : 'ltr', L: labelsFor(lang), favicon: app.favicon };
 }
 
 function headTags({ v, th, title, desc, link, appUrl, nonce, noindex }) {
@@ -159,7 +161,7 @@ function footer(v, app, appUrl, L, pages) {
 function render({ v, template, services = [], gallery = [], testimonials = [], products = [], blogs = [], pages = [], app, appUrl, nonce }) {
   const th = themeOf(v, template, app);
   const { layout, L } = th;
-  const sec = { contact: true, social: true, services: true, gallery: true, testimonials: true, hours: true, qr: true, enquiry: true, links: true, products: true, appointments: true, blog: true, embeds: true, payments: true, map: true, ...(v.sections || {}) };
+  const sec = { about: true, contact: true, social: true, services: true, gallery: true, testimonials: true, hours: true, qr: true, enquiry: true, links: true, products: true, appointments: true, blog: true, embeds: true, payments: true, map: true, ...(v.sections || {}) };
   const link = `${appUrl}/${v.url_alias}`;
   const fullName = [v.first_name, v.last_name].filter(Boolean).join(' ') || v.name;
   const initials = fullName.split(/\s+/).map((w) => w[0]).slice(0, 2).join('').toUpperCase();
@@ -170,7 +172,9 @@ function render({ v, template, services = [], gallery = [], testimonials = [], p
   const today = DAYS[(new Date().getDay() + 6) % 7][0];
   const alias = esc(v.url_alias);
 
-  const H = (icon, label) => `<h3><i class="${icon}" aria-hidden="true"></i><span>${label}</span></h3>`; // section heading (labels are our own i18n strings)
+  // section heading: our own i18n label, or the owner's custom heading (escaped)
+  const titles = v.section_titles || {};
+  const H = (key, icon, label) => `<h3><i class="${icon}" aria-hidden="true"></i><span>${titles[key] ? esc(String(titles[key]).slice(0, 60)) : label}</span></h3>`;
   const mapHref = v.location ? (v.location_url || `https://maps.google.com/?q=${encodeURIComponent(v.location)}`) : '';
 
   let cover = `<div class="cover ${v.cover_image ? 'img' : 'g'}"${v.cover_image ? ` style="background-image:url('${url(v.cover_image)}')"` : ''}></div>`;
@@ -193,7 +197,7 @@ function render({ v, template, services = [], gallery = [], testimonials = [], p
   const apptOn = sec.appointments && appt.enabled && Object.values(appt.slots || {}).some((x) => x?.length);
   const currencyOf = (pr) => pr.currency_code || '';
 
-  const productsHtml = sec.products && products.length ? `<section class="sec">${H('ri-shopping-bag-3-line', L.products)}<div class="prods">${products.map((pr) => {
+  const productsHtml = sec.products && products.length ? `<section class="sec s-products">${H('products', 'ri-shopping-bag-3-line', L.products)}<div class="prods">${products.map((pr) => {
     const img = (pr.images || [])[0];
     return `<div class="prod"><div class="img">${img ? `<img src="${url(img)}" alt="${esc(pr.name)}" loading="lazy" data-lb="${url(img)}">` : ''}${(pr.images || []).length > 1 ? `<div class="dots">${pr.images.map(() => '<span></span>').join('')}</div>` : ''}</div>
     <div class="body"><b>${esc(pr.name)}</b>${pr.price !== null && pr.price !== undefined ? `<span class="price">${money(pr.price, currencyOf(pr))}</span>` : ''}${pr.in_stock === false ? `<span class="out">${L.out}</span>` : ''}
@@ -201,7 +205,7 @@ function render({ v, template, services = [], gallery = [], testimonials = [], p
     <div class="row2">${v.enable_enquiry_form ? `<button type="button" data-enq="${esc(pr.name)}">${L.enquire}</button>` : ''}${pr.product_url ? `<a class="pri" href="${url(pr.product_url)}" target="_blank" rel="noopener">${L.buy}</a>` : ''}</div></div></div>`;
   }).join('')}</div></section>` : '';
 
-  const galleryHtml = sec.gallery && gallery.length ? `<section class="sec">${H('ri-image-2-line', L.gallery)}${cats.length > 1 ? `<div class="chips" id="gcats"><button class="on" data-cat="">${L.all}</button>${cats.map((c) => `<button data-cat="${esc(c)}">${esc(c)}</button>`).join('')}</div>` : ''}<div class="gal" id="gal">${gallery.map((g) => (g.type === 'youtube' && /^[\w-]{11}$/.test(g.video_url || '')
+  const galleryHtml = sec.gallery && gallery.length ? `<section class="sec s-gallery">${H('gallery', 'ri-image-2-line', L.gallery)}${cats.length > 1 ? `<div class="chips" id="gcats"><button class="on" data-cat="">${L.all}</button>${cats.map((c) => `<button data-cat="${esc(c)}">${esc(c)}</button>`).join('')}</div>` : ''}<div class="gal" id="gal">${gallery.map((g) => (g.type === 'youtube' && /^[\w-]{11}$/.test(g.video_url || '')
     ? `<a class="vid" href="#" data-cat="${esc(g.category || '')}" data-yt="${esc(g.video_url)}"><img src="https://i.ytimg.com/vi/${esc(g.video_url)}/hqdefault.jpg" alt="${esc(g.caption || '')}" loading="lazy"></a>`
     : g.image ? `<a href="#" data-cat="${esc(g.category || '')}" data-lb="${url(g.image)}"><img src="${url(g.image)}" alt="${esc(g.caption || '')}" loading="lazy"></a>` : '')).join('')}</div></section>` : '';
 
@@ -213,15 +217,55 @@ function render({ v, template, services = [], gallery = [], testimonials = [], p
   if (sec.embeds && v.linkedin_embed && /^urn:li:(share|ugcPost|activity):\d+$/.test(v.linkedin_embed)) embeds.push(`<div class="embed"><iframe src="https://www.linkedin.com/embed/feed/update/${esc(v.linkedin_embed)}" height="520" loading="lazy" title="LinkedIn"></iframe></div>`);
   for (const f of v.iframes || []) if (/^https:\/\//.test(f.url)) embeds.push(`<div class="embed"><iframe src="${url(f.url)}" height="360" loading="lazy" title="${esc(f.title || 'embed')}" sandbox="allow-scripts allow-same-origin allow-popups allow-forms"></iframe></div>`);
 
+  const blocks = {
+    about: sec.about && v.description ? `<section class="sec s-about">${H('about', 'ri-user-3-line', L.about)}<div class="box about">${nl2br(v.description)}</div></section>` : '',
+    contact: sec.contact && contactRows.length ? `<section class="sec s-contact">${H('contact', 'ri-contacts-book-2-line', L.contact)}<div class="box list">${contactRows.map(([i, l, val, h]) => `${h ? `<a class="row" href="${url(h)}"${h.startsWith('http') ? ' target="_blank" rel="noopener"' : ''}>` : '<div class="row">'}<i class="${i}"></i><div><small>${l}</small><span>${esc(val)}</span></div>${h ? '<i class="ri-arrow-right-s-line go" aria-hidden="true"></i></a>' : '</div>'}`).join('')}</div></section>` : '',
+    social: sec.social && socials.length ? `<section class="sec s-social">${H('social', 'ri-share-circle-line', L.social)}<div class="social">${socials.map(([k, u]) => `<a href="${url(u)}" target="_blank" rel="noopener" aria-label="${SOCIAL[k][1]}" title="${SOCIAL[k][1]}"><i class="${SOCIAL[k][0]}"></i></a>`).join('')}</div></section>` : '',
+    links: sec.links && (v.custom_links || []).length ? `<section class="sec s-links">${H('links', 'ri-links-line', L.links)}<div class="links">${v.custom_links.map((l) => `<a href="${url(l.url)}" target="_blank" rel="noopener"><span>${esc(l.label)}</span><i class="ri-arrow-right-up-line"></i></a>`).join('')}</div></section>` : '',
+    services: sec.services && services.length ? `<section class="sec s-services">${H('services', 'ri-briefcase-4-line', L.services)}<div class="box svc">${services.map((x) => `<div class="item">${x.image ? `<img src="${url(x.image)}" alt="" loading="lazy">` : '<span class="ic" aria-hidden="true"><i class="ri-star-line"></i></span>'}<div><b>${esc(x.name)}</b>${x.description ? `<p>${esc(x.description)}</p>` : ''}${x.service_url ? `<a class="more" href="${url(x.service_url)}" target="_blank" rel="noopener">${L.readmore} &rarr;</a>` : ''}${v.enable_enquiry_form ? ` <a class="more" href="#enq" data-enq="${esc(x.name)}">${L.enquire}</a>` : ''}</div></div>`).join('')}</div></section>` : '',
+    products: productsHtml,
+    appointments: apptOn ? `<section class="sec s-appointments" id="appt-sec">${H('appointments', 'ri-calendar-event-line', L.appointment)}<div class="box appt" id="appt">
+    ${appt.paid && appt.price ? `<p class="price"><i class="ri-price-tag-3-line"></i> ${esc(appt.price)} · ${appt.duration || 30} min</p>` : `<p class="price"><i class="ri-time-line"></i> ${appt.duration || 30} min</p>`}
+    <div class="days" id="days"></div><div class="slots" id="slots"></div>
+    <form class="enq" id="book" novalidate style="display:none">
+      ${appt.by_service && services.length ? `<select name="service_name" style="width:100%;padding:12px 14px;border-radius:12px;border:1px solid var(--line);background:var(--bg);color:var(--tx);font-family:inherit"><option value="">${L.service}</option>${services.map((x) => `<option>${esc(x.name)}</option>`).join('')}</select>` : ''}
+      <input name="name" placeholder="${L.name}" maxlength="120" required><input name="email" type="email" placeholder="${L.email}" maxlength="191"><input name="phone" placeholder="${L.phone}" maxlength="30">
+      <textarea name="notes" rows="2" placeholder="${L.message}" maxlength="1000"></textarea>
+      <button class="btn" type="submit"><i class="ri-calendar-check-line"></i>${L.book}</button><div class="msg" id="book-msg"></div>
+    </form></div></section>` : '',
+    gallery: galleryHtml,
+    testimonials: sec.testimonials && testimonials.length ? `<section class="sec s-testimonials">${H('testimonials', 'ri-chat-quote-line', L.testimonials)}<div class="tst">${testimonials.map((t) => `<div class="box"><p class="q">&ldquo;${esc(t.description)}&rdquo;</p><div class="who">${t.image ? `<img src="${url(t.image)}" alt="" loading="lazy">` : ''}${esc(t.name)}</div></div>`).join('')}</div></section>` : '',
+    payments: sec.payments && (v.payment_links || []).length ? `<section class="sec s-payments">${H('payments', 'ri-wallet-3-line', L.payments)}<div class="pays">${v.payment_links.map((l) => `<a href="${url(l.url)}" target="_blank" rel="noopener"><i class="${PAY_ICONS[l.type] || PAY_ICONS.link}"></i>${esc(l.label)}</a>`).join('')}</div></section>` : '',
+    blog: sec.blog && blogs.length ? `<section class="sec s-blog">${H('blog', 'ri-article-line', L.blog)}<div class="posts">${blogs.map((b) => `<a class="post" href="/${alias}/blog/${esc(b.slug)}">${b.image ? `<img src="${url(b.image)}" alt="" loading="lazy">` : ''}<div><b>${esc(b.title)}</b><small>${esc(String(b.created_at).slice(0, 10))} · ${L.readmore}</small></div></a>`).join('')}</div></section>` : '',
+    embeds: embeds.length ? `<section class="sec s-embeds">${H('embeds', 'ri-play-circle-line', L.videos)}<div style="display:grid;gap:12px">${embeds.join('')}</div></section>` : '',
+    map: sec.map && v.location_embed && /^https:\/\/(www\.)?google\.[a-z.]+\/maps\/embed/.test(v.location_embed) ? `<section class="sec s-map">${H('map', 'ri-map-2-line', L.location)}<div class="embed"><iframe src="${url(v.location_embed)}" height="260" loading="lazy" referrerpolicy="no-referrer-when-downgrade" title="map"></iframe></div></section>` : '',
+    hours: sec.hours && hasHours ? `<section class="sec s-hours">${H('hours', 'ri-time-line', L.hours)}<div class="box hours">${days.map(([d, label]) => `<div class="d${d === today ? ' today' : ''}"><span>${label}</span><span>${hours[d]?.open ? `${esc(hours[d].from)} - ${esc(hours[d].to)}` : L.closed}</span></div>`).join('')}</div></section>` : '',
+    qr: sec.qr && v.show_qr_code ? `<section class="sec s-qr">${H('qr', 'ri-qr-code-line', L.qr)}<div class="box qr"><img src="/${alias}/qr.png" alt="QR code" loading="lazy" width="120" height="120"><div><p>${L.scan}</p><a class="btn" style="margin-top:10px" href="/${alias}/qr.png" download="${alias}-qr.png"><i class="ri-download-line"></i>${L.download}</a></div></div></section>` : '',
+    enquiry: sec.enquiry && v.enable_enquiry_form ? `<section class="sec s-enquiry" id="enq-sec">${H('enquiry', 'ri-mail-send-line', L.touch)}<div class="box"><form class="enq" id="enq" novalidate>
+    <input name="name" placeholder="${L.name}" maxlength="120" required>
+    <input name="email" type="email" placeholder="${L.email}" maxlength="191">
+    <input name="phone" placeholder="${L.phone}" maxlength="30">
+    <input name="product_name" id="enq-about" type="hidden">
+    <textarea name="message" rows="3" placeholder="${L.message}" maxlength="2000" required></textarea>
+    ${v.enquiry_attachment ? `<label style="font-size:13px;color:var(--muted)">${L.attach}<input name="attachment" type="file" accept="image/*,application/pdf" style="margin-top:6px"></label>` : ''}
+    <input name="website" tabindex="-1" autocomplete="off" style="position:absolute;left:-9999px" aria-hidden="true">
+    <button class="btn" type="submit"><i class="ri-send-plane-line"></i>${L.send}</button><div class="msg" id="enq-msg"></div>
+  </form></div></section>` : '',
+  };
+  // owner's drag-and-drop order; sections it doesn't mention keep their default place at the end
+  const order = [...new Set([...(Array.isArray(v.section_order) ? v.section_order : []).filter((k) => Object.hasOwn(blocks, k)), ...Object.keys(blocks)])];
+  const ordered = order.map((k) => blocks[k]).filter(Boolean).join('\n');
+
   const html = `<!doctype html>
 <html lang="${esc(th.lang)}" dir="${th.dir}">
 <head>
 ${headTags({ v, th, title, desc: v.meta_description || v.description || v.occupation, link, appUrl, nonce })}
 </head>
 <body>
-<main class="wrap l-${layout} ${th.dark ? 'is-dark' : 'is-light'}${th.lowp ? ' lowp' : ''} ${v.profile_image ? 'has-av' : 'no-av'}">
+<main class="wrap l-${layout} ${th.dark ? 'is-dark' : 'is-light'}${th.lowp ? ' lowp' : ''} ${v.profile_image ? 'has-av' : 'no-av'}"${th.radius ? ` style="--r:${th.radius}"` : ''}>
   <header class="hero">
     ${cover}
+    <div class="deco" aria-hidden="true"><span>${esc(initials)}</span></div>
     <div class="hero-main">
       <div class="av">${v.profile_image ? `<img class="avatar" src="${url(v.profile_image)}" alt="${esc(fullName)}" width="140" height="140" fetchpriority="high">` : `<div class="avatar ph" aria-hidden="true">${esc(initials)}</div>`}</div>
       <div class="id">
@@ -244,54 +288,7 @@ ${headTags({ v, th, title, desc: v.meta_description || v.description || v.occupa
   <a class="save" id="save" href="/${alias}/contact.vcf"><i class="ri-user-add-line"></i>${L.save}</a>
   ${v.pwa_enable ? `<button class="install" id="install" type="button"><i class="ri-download-cloud-2-line"></i>${L.install}</button>` : ''}
 
-  ${v.description ? `<section class="sec">${H('ri-user-3-line', L.about)}<div class="box about">${nl2br(v.description)}</div></section>` : ''}
-
-  ${sec.contact && contactRows.length ? `<section class="sec">${H('ri-contacts-book-2-line', L.contact)}<div class="box list">${contactRows.map(([i, l, val, h]) => `${h ? `<a class="row" href="${url(h)}"${h.startsWith('http') ? ' target="_blank" rel="noopener"' : ''}>` : '<div class="row">'}<i class="${i}"></i><div><small>${l}</small><span>${esc(val)}</span></div>${h ? '<i class="ri-arrow-right-s-line go" aria-hidden="true"></i></a>' : '</div>'}`).join('')}</div></section>` : ''}
-
-  ${sec.social && socials.length ? `<section class="sec">${H('ri-share-circle-line', L.social)}<div class="social">${socials.map(([k, u]) => `<a href="${url(u)}" target="_blank" rel="noopener" aria-label="${SOCIAL[k][1]}" title="${SOCIAL[k][1]}"><i class="${SOCIAL[k][0]}"></i></a>`).join('')}</div></section>` : ''}
-
-  ${sec.links && (v.custom_links || []).length ? `<section class="sec">${H('ri-links-line', L.links)}<div class="links">${v.custom_links.map((l) => `<a href="${url(l.url)}" target="_blank" rel="noopener"><span>${esc(l.label)}</span><i class="ri-arrow-right-up-line"></i></a>`).join('')}</div></section>` : ''}
-
-  ${sec.services && services.length ? `<section class="sec">${H('ri-briefcase-4-line', L.services)}<div class="box svc">${services.map((x) => `<div class="item">${x.image ? `<img src="${url(x.image)}" alt="" loading="lazy">` : '<span class="ic" aria-hidden="true"><i class="ri-star-line"></i></span>'}<div><b>${esc(x.name)}</b>${x.description ? `<p>${esc(x.description)}</p>` : ''}${x.service_url ? `<a class="more" href="${url(x.service_url)}" target="_blank" rel="noopener">${L.readmore} &rarr;</a>` : ''}${v.enable_enquiry_form ? ` <a class="more" href="#enq" data-enq="${esc(x.name)}">${L.enquire}</a>` : ''}</div></div>`).join('')}</div></section>` : ''}
-
-  ${productsHtml}
-
-  ${apptOn ? `<section class="sec" id="appt-sec">${H('ri-calendar-event-line', L.appointment)}<div class="box appt" id="appt">
-    ${appt.paid && appt.price ? `<p class="price"><i class="ri-price-tag-3-line"></i> ${esc(appt.price)} · ${appt.duration || 30} min</p>` : `<p class="price"><i class="ri-time-line"></i> ${appt.duration || 30} min</p>`}
-    <div class="days" id="days"></div><div class="slots" id="slots"></div>
-    <form class="enq" id="book" novalidate style="display:none">
-      ${appt.by_service && services.length ? `<select name="service_name" style="width:100%;padding:12px 14px;border-radius:12px;border:1px solid var(--line);background:var(--bg);color:var(--tx);font-family:inherit"><option value="">${L.service}</option>${services.map((x) => `<option>${esc(x.name)}</option>`).join('')}</select>` : ''}
-      <input name="name" placeholder="${L.name}" maxlength="120" required><input name="email" type="email" placeholder="${L.email}" maxlength="191"><input name="phone" placeholder="${L.phone}" maxlength="30">
-      <textarea name="notes" rows="2" placeholder="${L.message}" maxlength="1000"></textarea>
-      <button class="btn" type="submit"><i class="ri-calendar-check-line"></i>${L.book}</button><div class="msg" id="book-msg"></div>
-    </form></div></section>` : ''}
-
-  ${galleryHtml}
-
-  ${sec.testimonials && testimonials.length ? `<section class="sec">${H('ri-chat-quote-line', L.testimonials)}<div class="tst">${testimonials.map((t) => `<div class="box"><p class="q">&ldquo;${esc(t.description)}&rdquo;</p><div class="who">${t.image ? `<img src="${url(t.image)}" alt="" loading="lazy">` : ''}${esc(t.name)}</div></div>`).join('')}</div></section>` : ''}
-
-  ${sec.payments && (v.payment_links || []).length ? `<section class="sec">${H('ri-wallet-3-line', L.payments)}<div class="pays">${v.payment_links.map((l) => `<a href="${url(l.url)}" target="_blank" rel="noopener"><i class="${PAY_ICONS[l.type] || PAY_ICONS.link}"></i>${esc(l.label)}</a>`).join('')}</div></section>` : ''}
-
-  ${sec.blog && blogs.length ? `<section class="sec">${H('ri-article-line', L.blog)}<div class="posts">${blogs.map((b) => `<a class="post" href="/${alias}/blog/${esc(b.slug)}">${b.image ? `<img src="${url(b.image)}" alt="" loading="lazy">` : ''}<div><b>${esc(b.title)}</b><small>${esc(String(b.created_at).slice(0, 10))} · ${L.readmore}</small></div></a>`).join('')}</div></section>` : ''}
-
-  ${embeds.length ? `<section class="sec">${H('ri-play-circle-line', L.videos)}<div style="display:grid;gap:12px">${embeds.join('')}</div></section>` : ''}
-
-  ${sec.map && v.location_embed && /^https:\/\/(www\.)?google\.[a-z.]+\/maps\/embed/.test(v.location_embed) ? `<section class="sec">${H('ri-map-2-line', L.location)}<div class="embed"><iframe src="${url(v.location_embed)}" height="260" loading="lazy" referrerpolicy="no-referrer-when-downgrade" title="map"></iframe></div></section>` : ''}
-
-  ${sec.hours && hasHours ? `<section class="sec">${H('ri-time-line', L.hours)}<div class="box hours">${days.map(([d, label]) => `<div class="d${d === today ? ' today' : ''}"><span>${label}</span><span>${hours[d]?.open ? `${esc(hours[d].from)} - ${esc(hours[d].to)}` : L.closed}</span></div>`).join('')}</div></section>` : ''}
-
-  ${sec.qr && v.show_qr_code ? `<section class="sec">${H('ri-qr-code-line', L.qr)}<div class="box qr"><img src="/${alias}/qr.png" alt="QR code" loading="lazy" width="120" height="120"><div><p>${L.scan}</p><a class="btn" style="margin-top:10px" href="/${alias}/qr.png" download="${alias}-qr.png"><i class="ri-download-line"></i>${L.download}</a></div></div></section>` : ''}
-
-  ${sec.enquiry && v.enable_enquiry_form ? `<section class="sec" id="enq-sec">${H('ri-mail-send-line', L.touch)}<div class="box"><form class="enq" id="enq" novalidate>
-    <input name="name" placeholder="${L.name}" maxlength="120" required>
-    <input name="email" type="email" placeholder="${L.email}" maxlength="191">
-    <input name="phone" placeholder="${L.phone}" maxlength="30">
-    <input name="product_name" id="enq-about" type="hidden">
-    <textarea name="message" rows="3" placeholder="${L.message}" maxlength="2000" required></textarea>
-    ${v.enquiry_attachment ? `<label style="font-size:13px;color:var(--muted)">${L.attach}<input name="attachment" type="file" accept="image/*,application/pdf" style="margin-top:6px"></label>` : ''}
-    <input name="website" tabindex="-1" autocomplete="off" style="position:absolute;left:-9999px" aria-hidden="true">
-    <button class="btn" type="submit"><i class="ri-send-plane-line"></i>${L.send}</button><div class="msg" id="enq-msg"></div>
-  </form></div></section>` : ''}
+  ${ordered}
 
   ${footer(v, app, appUrl, L, pages)}
   ${v.sticky_bar !== false ? '<div style="height:70px"></div>' : ''}

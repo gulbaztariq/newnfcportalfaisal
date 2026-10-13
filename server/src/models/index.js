@@ -217,6 +217,8 @@ const Vcard = sequelize.define('vcard', {
   custom_links: json('custom_links', []), // [{label,url}]
   business_hours: json('business_hours', {}), // { mon: {open:true, from:'09:00', to:'17:00'} }
   sections: json('sections', {}), // { services:true, gallery:true, ... } visibility switches
+  section_order: json('section_order', []), // ['about','contact',...] owner's drag-and-drop order
+  section_titles: json('section_titles', {}), // { services: 'What I do' } custom section headings
   password: T.STRING(191),
   custom_css: T.TEXT,
   custom_code: T.TEXT('long'), // own HTML/CSS/JS design, served sandboxed from /c/{alias}

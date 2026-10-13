@@ -101,7 +101,9 @@ const vcardUpload = makeUpload('vcards', { maxMb: 5 }).fields([{ name: 'profile_
 const videoUpload = makeUpload('vcards', { types: { 'video/mp4': '.mp4', 'video/webm': '.webm' }, maxMb: 25 }).single('video');
 const VCARD_FIELDS = ['name', 'occupation', 'description', 'first_name', 'last_name', 'email', 'region_code', 'phone', 'alternative_email', 'alternative_phone',
   'location', 'location_url', 'company', 'job_title', 'dob', 'site_title', 'meta_keyword', 'meta_description', 'google_analytics', 'default_language', 'custom_css', 'custom_code', 'custom_code_enabled'];
-const JSON_FIELDS = ['theme', 'social_links', 'custom_links', 'business_hours', 'sections', 'iframes', 'payment_links', 'qr_settings', 'appointment_settings'];
+const JSON_FIELDS = ['theme', 'social_links', 'custom_links', 'business_hours', 'sections', 'section_order', 'section_titles', 'iframes', 'payment_links', 'qr_settings', 'appointment_settings'];
+// sections of the public card that can be shown/hidden, reordered and renamed (views/templates/render.js)
+const SECTION_KEYS = ['about', 'contact', 'social', 'links', 'services', 'products', 'appointments', 'gallery', 'testimonials', 'payments', 'blog', 'embeds', 'map', 'hours', 'qr', 'enquiry'];
 const sanitizeHtml = require('sanitize-html');
 const legalHtml = (h) => sanitizeHtml(String(h || ''), { allowedTags: sanitizeHtml.defaults.allowedTags.concat(['h1', 'h2', 'u', 's']), allowedSchemes: ['http', 'https', 'mailto', 'tel'] });
 const hhmm = (t) => (/^\d{2}:\d{2}$/.test(String(t)) ? t : null);
@@ -135,7 +137,8 @@ r.put('/vcards/:id', vcardUpload, trackStorage, wrap(async (req, res) => {
     data.template_id = Number(b.template_id);
   }
   if (b.theme) {
-    const t = pick(b.theme, ['primary', 'secondary', 'background', 'text', 'font']);
+    const t = pick(b.theme, ['primary', 'secondary', 'background', 'text', 'font', 'radius']);
+    if (t.radius !== undefined && !['', 'sharp', 'soft', 'round'].includes(t.radius)) delete t.radius;
     for (const k of ['primary', 'secondary', 'background', 'text']) if (t[k] && !/^#[0-9a-f]{6}$/i.test(t[k])) delete t[k];
     if (t.font && !/^[\w\s',-]{1,80}$/.test(t.font)) delete t.font;
     data.theme = { ...(v.theme || {}), ...t };
@@ -143,7 +146,9 @@ r.put('/vcards/:id', vcardUpload, trackStorage, wrap(async (req, res) => {
   if (b.social_links) data.social_links = Object.fromEntries(Object.entries(b.social_links).filter(([, u]) => u).map(([k, u]) => [k, safeUrl(String(u).slice(0, 500))]));
   if (b.custom_links && features.custom_links) data.custom_links = (Array.isArray(b.custom_links) ? b.custom_links : []).slice(0, 20).map((l) => ({ label: String(l.label || '').slice(0, 80), url: safeUrl(String(l.url || '').slice(0, 500)) })).filter((l) => l.label && l.url);
   if (b.business_hours) data.business_hours = b.business_hours;
-  if (b.sections) data.sections = Object.fromEntries(Object.entries(b.sections).map(([k, val]) => [k, toBool(val)]));
+  if (b.sections) data.sections = Object.fromEntries(Object.entries(b.sections).filter(([k]) => SECTION_KEYS.includes(k)).map(([k, val]) => [k, toBool(val)]));
+  if (Array.isArray(b.section_order)) data.section_order = [...new Set(b.section_order.filter((k) => SECTION_KEYS.includes(k)))];
+  if (b.section_titles && typeof b.section_titles === 'object') data.section_titles = Object.fromEntries(Object.entries(b.section_titles).filter(([k, val]) => SECTION_KEYS.includes(k) && typeof val === 'string' && val.trim()).map(([k, val]) => [k, val.trim().slice(0, 60)]));
   for (const k of ['status', 'enable_enquiry_form', 'show_qr_code']) if (b[k] !== undefined) data[k] = toBool(b[k]);
   if (b.hide_branding !== undefined) data.hide_branding = features.hide_branding ? toBool(b.hide_branding) : false;
   if (b.password !== undefined && features.password) data.password = b.password ? await bcrypt.hash(String(b.password), 10) : null;

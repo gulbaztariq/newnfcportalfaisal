@@ -48,6 +48,8 @@ module.exports = {
   LAYOUTS: [
     'classic', 'modern', 'minimal', 'dark', 'card', 'split', 'bold', 'elegant', 'soft', 'corporate',
     'photo', 'glass', 'sidebar', 'editorial', 'brutal', 'mesh', 'mono', 'luxe', 'playful', 'splithero', 'stack', 'neon', 'paper', 'aurora',
+    // premium layouts (premium.js)
+    'banner', 'wave', 'linkhub', 'breeze', 'cinema', 'metal', 'ticket', 'bento', 'marble', 'swiss', 'duotone', 'monogram', 'timeline', 'retro', 'holo', 'spotlight',
   ],
   TEMPLATES: [
     T('vcard1', 'Code Craft', 'Developer', 'dark', '#22d3ee', '#a78bfa', '#0b1020', '#e2e8f0', F.space),
@@ -146,5 +148,23 @@ module.exports = {
     T('vcard90', 'Glass', 'General', 'glass', '#60a5fa', '#c084fc', '#0b1020', '#f1f5ff', F.urbanist),
     T('vcard91', 'Paper', 'General', 'paper', '#1f2937', '#b91c1c', '#f4efe4', '#1f1f1f', F.fraunces),
     T('vcard92', 'Neon', 'General', 'neon', '#f0abfc', '#22d3ee', '#06020e', '#fdf4ff', F.syne),
+
+    /* ---------- premium designs ---------- */
+    T('vcard93', 'Banner', 'Business Professional', 'banner', '#2563eb', '#0ea5e9', '#ffffff', '#0f172a', F.jakarta),
+    T('vcard94', 'Tide', 'Consultant / Sales', 'wave', '#0f766e', '#5eead4', '#f7fbfa', '#0f2a2a', F.manrope),
+    T('vcard95', 'Linkhub', 'Creator / Influencer', 'linkhub', '#7c3aed', '#ec4899', '#ffffff', '#1f1235', F.outfit),
+    T('vcard96', 'Breeze', 'Wellness / Coach', 'breeze', '#f472b6', '#60a5fa', '#fbfaff', '#1e1b3a', F.urbanist),
+    T('vcard97', 'Cinema', 'Personal Brand / Model', 'cinema', '#111111', '#f5c26b', '#fafafa', '#0a0a0a', F.sora),
+    T('vcard98', 'Titanium', 'Executive / Director', 'metal', '#9ca3af', '#d4af37', '#0c0c0e', '#ececf0', F.montserrat),
+    T('vcard99', 'Boarding Pass', 'Travel / Events', 'ticket', '#1d4ed8', '#f59e0b', '#f4f6fb', '#0f172a', F.space),
+    T('vcard100', 'Bento', 'Product / Tech', 'bento', '#4f46e5', '#f97316', '#f6f6f9', '#111827', F.figtree),
+    T('vcard101', 'Marble', 'Luxury / Bridal / Jewellery', 'marble', '#b08d57', '#7a6a58', '#f7f4ef', '#2b2520', F.cormorant),
+    T('vcard102', 'Helvetica', 'Architect / Designer', 'swiss', '#e11d1d', '#111111', '#ffffff', '#111111', F.archivo),
+    T('vcard103', 'Duotone', 'Photographer / Artist', 'duotone', '#ff3d7f', '#2b2bff', '#ffffff', '#111111', F.syne),
+    T('vcard104', 'Monogram', 'Lawyer / Advocate', 'monogram', '#1f3a2e', '#b8975a', '#fbf8f1', '#1c2420', F.baskerville),
+    T('vcard105', 'Journey', 'Coach / Speaker', 'timeline', '#0ea5e9', '#8b5cf6', '#ffffff', '#0f172a', F.lexend),
+    T('vcard106', 'Groovy', 'Cafe / Creative Studio', 'retro', '#e4572e', '#f3a712', '#fdf3e1', '#2b1d0e', F.bricolage),
+    T('vcard107', 'Prism', 'Tech / Web3 / Creative', 'holo', '#a78bfa', '#22d3ee', '#0d0b1a', '#f1efff', F.space),
+    T('vcard108', 'Spotlight', 'Performer / Speaker', 'spotlight', '#fbbf24', '#f97316', '#09090b', '#fafafa', F.playfair),
   ],
 };

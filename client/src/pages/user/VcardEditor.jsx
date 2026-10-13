@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence, Reorder, useDragControls } from 'motion/react';
 import { ArrowLeft, ExternalLink, QrCode, Save, IdCard, Palette, Share2, Link2, Briefcase, Images, MessageSquareQuote, Clock, Settings2, Lock, Plus, Pencil, Trash2, ArrowUp, ArrowDown, RotateCcw, Smartphone, RefreshCw, Globe, MessageCircle, Music2, Send, Sparkles } from 'lucide-react';
 import { Facebook, Instagram, Twitter, Linkedin, Youtube } from '@/components/BrandIcons';
 import { Github, Dribbble } from '@/components/BrandIcons';
@@ -11,6 +11,7 @@ import { PageHeader, Card, CardHeader, CardBody, Button, ButtonLink, Field, Inpu
 import { TemplatePicker } from './Vcards';
 import AiButton from '@/components/AiButton';
 import { MediaTab, PaymentLinksTab, LegalTab, QrTab, AppointmentsTab, ProductsTab, BlogTab, PagesTab, AdvancedExtras } from './EditorExtras';
+import { GripVertical, Eye, EyeOff } from 'lucide-react';
 import { Film, Package, CalendarClock, Newspaper, FileStack, Wallet as WalletIcon, QrCode as QrIcon, Scale, BarChart3 } from 'lucide-react';
 
 const SOCIAL = [
@@ -20,8 +21,14 @@ const SOCIAL = [
   ['dribbble', 'Dribbble'], ['behance', Sparkles, 'Behance'], ['reddit', Sparkles, 'Reddit'], ['discord', MessageCircle, 'Discord'],
 ];
 const DAYS = [['mon', 'Monday'], ['tue', 'Tuesday'], ['wed', 'Wednesday'], ['thu', 'Thursday'], ['fri', 'Friday'], ['sat', 'Saturday'], ['sun', 'Sunday']];
-const FONTS = ["'Inter', system-ui, sans-serif", "'Poppins', system-ui, sans-serif", "'Montserrat', system-ui, sans-serif", "'Space Grotesk', system-ui, sans-serif", "'Playfair Display', Georgia, serif", "'Lora', Georgia, serif", "'Roboto', system-ui, sans-serif", "'Open Sans', system-ui, sans-serif"];
-const SECTIONS = [['contact', 'Contact details'], ['social', 'Social icons'], ['links', 'Custom links'], ['services', 'Services'], ['products', 'Products'], ['appointments', 'Appointments'], ['gallery', 'Gallery'], ['testimonials', 'Testimonials'], ['payments', 'Payment links'], ['blog', 'Blog'], ['embeds', 'Embeds'], ['map', 'Map'], ['hours', 'Business hours'], ['qr', 'QR code'], ['enquiry', 'Enquiry form']];
+// every family the card renderer whitelists (server views/templates/render.js GOOGLE_FONTS)
+const SANS = ['Inter', 'Poppins', 'Montserrat', 'Space Grotesk', 'Roboto', 'Open Sans', 'DM Sans', 'Outfit', 'Plus Jakarta Sans', 'Manrope', 'Sora', 'Syne', 'Quicksand', 'Urbanist', 'Rubik', 'Lexend', 'IBM Plex Sans', 'Figtree', 'Barlow', 'Unbounded', 'Chakra Petch', 'Libre Franklin', 'Nunito', 'Bricolage Grotesque', 'Archivo', 'Baloo 2'];
+const SERIF = ['Playfair Display', 'Lora', 'Cormorant Garamond', 'Fraunces', 'Bitter', 'Bodoni Moda', 'EB Garamond', 'Libre Baskerville', 'Amiri'];
+const MONO = ['JetBrains Mono', 'IBM Plex Mono'];
+const FONTS = [...SANS.map((f) => `'${f}', system-ui, sans-serif`), ...SERIF.map((f) => `'${f}', Georgia, serif`), ...MONO.map((f) => `'${f}', ui-monospace, monospace`)];
+const RADII = [{ value: 'sharp', label: 'Sharp' }, { value: 'soft', label: 'Soft' }, { value: 'round', label: 'Round' }];
+// [key, editor label, default heading on the card]; order = default order on the card
+const SECTIONS = [['about', 'About', 'About'], ['contact', 'Contact details', 'Contact'], ['social', 'Social icons', 'Social'], ['links', 'Custom links', 'Links'], ['services', 'Services', 'Services'], ['products', 'Products', 'Products'], ['appointments', 'Appointments', 'Book an Appointment'], ['gallery', 'Gallery', 'Gallery'], ['testimonials', 'Testimonials', 'Testimonials'], ['payments', 'Payment links', 'Pay Me'], ['blog', 'Blog', 'Blog'], ['embeds', 'Embeds', 'Videos'], ['map', 'Map', 'Location'], ['hours', 'Business hours', 'Business Hours'], ['qr', 'QR code', 'QR Code'], ['enquiry', 'Enquiry form', 'Get in touch']];
 const PALETTES = [['#6d5dfc', '#b44cf5'], ['#0ea5e9', '#22c55e'], ['#f43f5e', '#f59e0b'], ['#111827', '#d4af37'], ['#0f766e', '#84cc16'], ['#db2777', '#8b5cf6']];
 const CODE_PLACEHOLDER = `<!doctype html>
 <html>
@@ -57,7 +64,7 @@ export default function VcardEditor() {
 
   const load = async () => {
     const [{ data: d }, { data: t }] = await Promise.all([api.get(`/user/vcards/${id}`), api.get('/user/vcards/templates')]);
-    const v = { ...d.data, password: '', theme: d.data.theme || {}, social_links: d.data.social_links || {}, custom_links: d.data.custom_links || [], business_hours: d.data.business_hours || {}, sections: d.data.sections || {}, iframes: d.data.iframes || [], payment_links: d.data.payment_links || [], qr_settings: d.data.qr_settings || {}, appointment_settings: d.data.appointment_settings || {} };
+    const v = { ...d.data, password: '', theme: d.data.theme || {}, social_links: d.data.social_links || {}, custom_links: d.data.custom_links || [], business_hours: d.data.business_hours || {}, sections: d.data.sections || {}, section_order: d.data.section_order || [], section_titles: d.data.section_titles || {}, iframes: d.data.iframes || [], payment_links: d.data.payment_links || [], qr_settings: d.data.qr_settings || {}, appointment_settings: d.data.appointment_settings || {} };
     setData(d.data); setFeatures(d.features); setTemplates(t.data); form.setValues(v); setSnapshot(JSON.stringify(v));
   };
   useEffect(() => { load(); }, [id]); // eslint-disable-line
@@ -75,7 +82,7 @@ export default function VcardEditor() {
 
   const save = async () => {
     setSaving(true);
-    const fields = ['name', 'url_alias', 'occupation', 'description', 'first_name', 'last_name', 'email', 'region_code', 'phone', 'alternative_email', 'alternative_phone', 'location', 'location_url', 'company', 'job_title', 'dob', 'default_language', 'template_id', 'theme', 'social_links', 'custom_links', 'business_hours', 'sections', 'status', 'enable_enquiry_form', 'show_qr_code', 'hide_branding', 'custom_css', 'site_title', 'meta_keyword', 'meta_description', 'google_analytics', 'cover_type', 'youtube_link', 'instagram_embed', 'linkedin_embed', 'iframes', 'location_embed', 'payment_links', 'terms_conditions', 'privacy_policy', 'sticky_bar', 'newsletter_popup', 'ask_before_contact', 'enquiry_attachment', 'pwa_enable', 'business_directory', 'week_format', 'qr_settings', 'appointment_settings', 'custom_domain', 'custom_code', 'custom_code_enabled'];
+    const fields = ['name', 'url_alias', 'occupation', 'description', 'first_name', 'last_name', 'email', 'region_code', 'phone', 'alternative_email', 'alternative_phone', 'location', 'location_url', 'company', 'job_title', 'dob', 'default_language', 'template_id', 'theme', 'social_links', 'custom_links', 'business_hours', 'sections', 'section_order', 'section_titles', 'status', 'enable_enquiry_form', 'show_qr_code', 'hide_branding', 'custom_css', 'site_title', 'meta_keyword', 'meta_description', 'google_analytics', 'cover_type', 'youtube_link', 'instagram_embed', 'linkedin_embed', 'iframes', 'location_embed', 'payment_links', 'terms_conditions', 'privacy_policy', 'sticky_bar', 'newsletter_popup', 'ask_before_contact', 'enquiry_attachment', 'pwa_enable', 'business_directory', 'week_format', 'qr_settings', 'appointment_settings', 'custom_domain', 'custom_code', 'custom_code_enabled'];
     const payload = {};
     for (const f of fields) payload[f] = typeof v[f] === 'boolean' ? (v[f] ? '1' : '0') : v[f] ?? '';
     if (v.password || v.remove_password) payload.password = v.remove_password ? '' : v.password;
@@ -178,14 +185,16 @@ export default function VcardEditor() {
                     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                       {[['primary', 'Primary'], ['secondary', 'Secondary'], ['background', 'Background'], ['text', 'Text']].map(([k, l]) => <ColorInput key={k} label={l} value={v.theme[k]} onChange={(x) => setIn('theme', k, x)} />)}
                     </div>
-                    <Field label="Font"><Select value={v.theme.font} onChange={(x) => setIn('theme', 'font', x)} allowEmpty placeholder="Template default" options={FONTS.map((f) => ({ value: f, label: f.split(',')[0].replace(/'/g, '') }))} /></Field>
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <Field label="Font"><Select value={v.theme.font} onChange={(x) => setIn('theme', 'font', x)} allowEmpty placeholder="Template default" options={FONTS.map((f) => ({ value: f, label: f.split(',')[0].replace(/'/g, '') }))} /></Field>
+                      <Field label="Corners"><Select value={v.theme.radius} onChange={(x) => setIn('theme', 'radius', x)} allowEmpty placeholder="Template default" options={RADII} /></Field>
+                    </div>
                   </CardBody>
                 </Card>)}
                 <Card>
-                  <CardHeader title="Sections" description="Show or hide parts of your card" />
-                  <CardBody className="grid gap-3 sm:grid-cols-2">
-                    {SECTIONS.map(([k, l]) => <SwitchRow key={k} id={`sec-${k}`} title={l} checked={v.sections[k] !== false} onChange={(x) => setIn('sections', k, x)} />)}
-                  </CardBody>
+                  <CardHeader title="Sections" description="Drag to reorder, rename the headings, and show or hide each part of your card"
+                    actions={<Button size="sm" variant="ghost" onClick={() => { form.set('section_order', []); form.set('section_titles', {}); }}><RotateCcw />Reset</Button>} />
+                  <CardBody><SectionsEditor v={v} form={form} /></CardBody>
                 </Card>
                 {lk('template_id', <Card>
                   <CardHeader title={ll('Template', 'template_id')} description="Your content stays when you switch" />
@@ -372,6 +381,40 @@ export default function VcardEditor() {
 }
 
 /** Services / testimonials / gallery with dialog form */
+/** Drag-and-drop list of card sections: order (section_order), heading (section_titles) and visibility (sections) */
+function SectionsEditor({ v, form }) {
+  const keys = SECTIONS.map(([k]) => k);
+  const order = [...new Set([...(v.section_order || []).filter((k) => keys.includes(k)), ...keys])];
+  const setOrder = (o) => form.set('section_order', o);
+  const move = (i, d) => { const o = [...order]; const j = i + d; if (j < 0 || j >= o.length) return; [o[i], o[j]] = [o[j], o[i]]; setOrder(o); };
+  return (
+    <Reorder.Group axis="y" values={order} onReorder={setOrder} className="space-y-2">
+      {order.map((k, i) => <SectionRow key={k} k={k} i={i} last={i === order.length - 1} v={v} form={form} move={move} />)}
+    </Reorder.Group>
+  );
+}
+function SectionRow({ k, i, last, v, form, move }) {
+  const controls = useDragControls();
+  const [, label, heading] = SECTIONS.find(([x]) => x === k);
+  const on = v.sections[k] !== false;
+  return (
+    <Reorder.Item value={k} dragListener={false} dragControls={controls} className={cn('flex items-center gap-2 rounded-2xl border border-border bg-card p-2 pr-3 shadow-xs', !on && 'opacity-60')}
+      whileDrag={{ scale: 1.02, boxShadow: '0 18px 40px -18px rgba(0,0,0,.35)' }}>
+      <button type="button" onPointerDown={(e) => { e.preventDefault(); controls.start(e); }} className="grid size-9 shrink-0 cursor-grab touch-none place-items-center rounded-xl text-muted-foreground hover:bg-muted active:cursor-grabbing" aria-label={`Drag ${label}`}><GripVertical className="size-4" /></button>
+      <div className="min-w-0 flex-1">
+        <p className="mb-1 text-xs font-medium text-muted-foreground">{label}</p>
+        <Input value={v.section_titles?.[k] || ''} placeholder={heading} maxLength={60} className="h-9" onChange={(e) => form.set('section_titles', { ...v.section_titles, [k]: e.target.value })} aria-label={`${label} heading`} />
+      </div>
+      <div className="flex shrink-0 flex-col">
+        <button type="button" disabled={i === 0} onClick={() => move(i, -1)} className="grid size-6 cursor-pointer place-items-center rounded-md text-muted-foreground hover:bg-muted disabled:opacity-30" aria-label="Move up"><ArrowUp className="size-3.5" /></button>
+        <button type="button" disabled={last} onClick={() => move(i, 1)} className="grid size-6 cursor-pointer place-items-center rounded-md text-muted-foreground hover:bg-muted disabled:opacity-30" aria-label="Move down"><ArrowDown className="size-3.5" /></button>
+      </div>
+      <span className="hidden text-muted-foreground sm:block">{on ? <Eye className="size-4" /> : <EyeOff className="size-4" />}</span>
+      <Switch id={`sec-${k}`} checked={on} onChange={(x) => form.set('sections', { ...v.sections, [k]: x })} />
+    </Reorder.Item>
+  );
+}
+
 function SubItems({ vcardId, kind, title, icon, items, onChange, fields, imageRequired }) {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState(null);
