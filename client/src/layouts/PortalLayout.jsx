@@ -148,7 +148,7 @@ export default function PortalLayout({ area }) {
   const menu = useMemo(() => (area === 'admin' ? adminMenu(user) : userMenu(user)), [area, user]);
   const items = useMemo(() => flatten(menu), [menu]);
   const home = area === 'admin' ? '/admin/dashboard' : '/user/dashboard';
-  const appName = settings.app_name || 'InfyVCards';
+  const appName = settings.app_name || 'NFC Profile';
 
   useEffect(() => { try { localStorage.setItem('sidebar', collapsed ? 'collapsed' : 'open'); } catch { /* ignore */ } }, [collapsed]);
   useEffect(() => { setMobile(false); window.scrollTo({ top: 0 }); }, [pathname]);

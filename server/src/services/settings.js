@@ -3,7 +3,7 @@ const { Setting } = require('../models');
 /** Every configurable key with its default value. Secrets are never sent to the browser in public payloads. */
 const DEFAULTS = {
   // general
-  app_name: 'InfyVCards', email: 'support@example.com', phone: '', region_code: '1', address: '',
+  app_name: 'NFC Profile', email: 'support@example.com', phone: '', region_code: '1', address: '',
   app_logo: '/brand/logo-mark.svg', dashboard_logo: '/brand/logo-mark.svg',
   favicon: '/brand/favicon.svg', default_country_code: 'us', default_language: 'en',
   default_currency_id: '', affiliation_amount: '10', affiliation_amount_type: 'fixed', min_withdrawal_amount: '50',
@@ -25,7 +25,7 @@ const DEFAULTS = {
   // legal
   terms_conditions: '<p>Terms &amp; Conditions.</p>', privacy_policy: '<p>Privacy Policy.</p>',
   // google / seo
-  site_title: 'InfyVCards', meta_keyword: 'vcard, nfc, digital business card', meta_description: 'Digital business card builder',
+  site_title: 'NFC Profile', meta_keyword: 'vcard, nfc, digital business card', meta_description: 'Digital business card builder',
   google_analytics: '',
   // more payment gateways
   mercadopago_enable: '0', mercadopago_public_key: '', mercadopago_access_token: '',

@@ -30,7 +30,7 @@ module.exports = {
     secure: env.MAIL_SECURE === 'true',
     user: env.MAIL_USER,
     password: env.MAIL_PASSWORD,
-    from: env.MAIL_FROM || 'InfyVCards <no-reply@example.com>',
+    from: env.MAIL_FROM || 'NFC Profile <no-reply@example.com>',
   },
   // on Railway point UPLOAD_DIR at a mounted volume so uploads survive redeploys
   uploadDir: env.UPLOAD_DIR ? path.resolve(env.UPLOAD_DIR) : path.join(__dirname, '..', 'uploads'),

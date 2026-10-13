@@ -255,7 +255,7 @@ r.post('/2fa/setup', requireAuth, wrap(async (req, res) => {
   if (req.user.two_factor_enabled) fail(422, 'Two-factor authentication is already enabled');
   const secret = totp.generateSecret();
   await req.user.update({ two_factor_secret: secret });
-  const url = totp.otpauthUrl(secret, req.user.email, (await settings.get('app_name')) || 'InfyVCards');
+  const url = totp.otpauthUrl(secret, req.user.email, (await settings.get('app_name')) || 'NFC Profile');
   res.json({ secret, qr: await QRCode.toDataURL(url, { margin: 1, width: 240 }) });
 }));
 r.post('/2fa/enable', requireAuth, codeLimiter, wrap(async (req, res) => {

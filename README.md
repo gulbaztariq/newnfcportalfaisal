@@ -1,4 +1,4 @@
-# NFC vCards (InfyVCards rebuild): Node + React + MySQL
+# NFC Profile: Node + React + MySQL
 
 This rebuilds the InfyVCards **Super Admin** feature set (https://infyom.com/docs/infy-vcards/super-admin.html) on:
 

@@ -33,7 +33,7 @@ export function Navbar({ settings, home = true }) {
     <header className="fixed inset-x-0 top-3 z-50 px-3">
       <motion.nav initial={{ y: -30, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
         className={cn('mx-auto flex h-14 max-w-6xl items-center gap-2 rounded-2xl sm:gap-4 px-3 pl-4 transition-all duration-500', scrolled ? 'glass border border-border shadow-lift' : 'border border-transparent')}>
-        <Link to="/" className="min-w-0 shrink"><Logo name={settings.app_name || 'InfyVCards'} mark="size-8 shrink-0" className="max-w-full min-w-0" textClass="truncate" /></Link>
+        <Link to="/" className="min-w-0 shrink"><Logo name={settings.app_name || 'NFC Profile'} mark="size-8 shrink-0" className="max-w-full min-w-0" textClass="truncate" /></Link>
         <div className="mx-auto hidden items-center gap-1 lg:flex">
           {NAV.map(([id, l]) => <a key={id} href={href(id)} className="rounded-xl px-3.5 py-2 text-sm font-medium text-muted-foreground transition hover:bg-muted hover:text-foreground">{l}</a>)}
           {shop && <Link to="/shop" className="rounded-xl px-3.5 py-2 text-sm font-medium text-muted-foreground transition hover:bg-muted hover:text-foreground">Shop</Link>}
@@ -83,7 +83,7 @@ export function Footer({ settings }) {
     <footer className="relative overflow-hidden border-t border-border bg-card">
       <div className="mx-auto grid max-w-6xl gap-12 px-6 py-16 md:grid-cols-12">
         <div className="md:col-span-5">
-          <Logo name={settings.app_name || 'InfyVCards'} />
+          <Logo name={settings.app_name || 'NFC Profile'} />
           <p className="mt-4 max-w-sm text-sm leading-relaxed text-muted-foreground">{settings.home_sub_text}</p>
           <form onSubmit={subscribe} className="mt-6 flex max-w-sm gap-2 rounded-2xl border border-border bg-background p-1.5 focus-within:border-primary">
             <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Your e-mail for updates" className="min-w-0 flex-1 bg-transparent px-3 text-sm outline-none" />
@@ -127,8 +127,8 @@ export function Footer({ settings }) {
           )}
         </div>
       </div>
-      <div className="border-t border-border py-6 text-center text-xs text-muted-foreground">© {new Date().getFullYear()} {settings.app_name || 'InfyVCards'}. All rights reserved.</div>
-      <p aria-hidden className="pointer-events-none -mb-8 text-center font-display text-[18vw] leading-none font-extrabold tracking-tighter text-foreground/[0.035] select-none">{settings.app_name || 'InfyVCards'}</p>
+      <div className="border-t border-border py-6 text-center text-xs text-muted-foreground">© {new Date().getFullYear()} {settings.app_name || 'NFC Profile'}. All rights reserved.</div>
+      <p aria-hidden className="pointer-events-none -mb-8 text-center font-display text-[18vw] leading-none font-extrabold tracking-tighter text-foreground/[0.035] select-none">{settings.app_name || 'NFC Profile'}</p>
     </footer>
   );
 }

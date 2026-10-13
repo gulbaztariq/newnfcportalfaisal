@@ -15,7 +15,7 @@ export function LogoMark({ className }) {
   );
 }
 
-export default function Logo({ name = 'InfyVCards', className, mark, textClass }) {
+export default function Logo({ name = 'NFC Profile', className, mark, textClass }) {
   return (
     <span className={cn('inline-flex items-center gap-2.5', className)}>
       <LogoMark className={mark} />

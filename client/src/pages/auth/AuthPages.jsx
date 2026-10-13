@@ -70,7 +70,7 @@ function Shell({ title, subtitle, children, footer }) {
             {footer && <div className="mt-8 text-center text-sm text-muted-foreground">{footer}</div>}
           </motion.div>
         </div>
-        <p className="text-xs text-muted-foreground">© {new Date().getFullYear()} InfyVCards · <Link to="/privacy-policy" className="hover:text-foreground">Privacy</Link> · <Link to="/terms-conditions" className="hover:text-foreground">Terms</Link></p>
+        <p className="text-xs text-muted-foreground">© {new Date().getFullYear()} NFC Profile · <Link to="/privacy-policy" className="hover:text-foreground">Privacy</Link> · <Link to="/terms-conditions" className="hover:text-foreground">Terms</Link></p>
       </div>
       <Showcase />
     </div>

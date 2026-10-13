@@ -18,7 +18,7 @@ function pdfToBuffer(build) {
 
 function header(doc, s, title, sub) {
   doc.rect(0, 0, doc.page.width, 110).fill('#6d5dfc');
-  doc.fillColor('#ffffff').fontSize(22).font('Helvetica-Bold').text(s.app_name || 'InfyVCards', 48, 36);
+  doc.fillColor('#ffffff').fontSize(22).font('Helvetica-Bold').text(s.app_name || 'NFC Profile', 48, 36);
   doc.fontSize(10).font('Helvetica').text([s.email, s.phone && `+${s.region_code} ${s.phone}`, s.address].filter(Boolean).join('  ·  '), 48, 66, { width: 330 });
   doc.fontSize(20).font('Helvetica-Bold').text(title, 360, 36, { width: 190, align: 'right' });
   if (sub) doc.fontSize(10).font('Helvetica').text(sub, 360, 66, { width: 190, align: 'right' });
