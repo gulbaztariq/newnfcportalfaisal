@@ -378,6 +378,92 @@ pages.get('/s/:alias/:page', wrap(async (req, res, next) => {
   res.send(renderStorePage({ st, title: { terms: 'Terms & Conditions', privacy: 'Privacy Policy', refund: 'Refund & Cancellation', shipping: 'Shipping & Delivery' }[req.params.page], html: st[key] }));
 }));
 
+/* ------------------------------------------------------- contact tags (/tag/{code}): reach the owner without seeing their number */
+const contactTags = require('../services/contacttags');
+const { renderTag, renderInactive, renderManage } = require('../views/tag');
+const tagLimiter = rateLimit({ windowMs: 10 * 60 * 1000, limit: 8, standardHeaders: true, legacyHeaders: false, message: { message: 'Too many messages from this device, please try again later.' } });
+const tagScans = new Map(); // ip+tag -> timestamp (one scan counted per minute)
+const tagOf = async (code) => (/^[A-Z2-9]{6,12}$/.test(String(code).toUpperCase()) ? M.ContactTag.findOne({ where: { code: String(code).toUpperCase() } }) : null);
+const tagHeaders = (res) => { res.set('X-Robots-Tag', 'noindex, nofollow'); res.set('Cache-Control', 'no-store'); setCsp(res); };
+
+pages.get('/tag/:code', wrap(async (req, res) => {
+  const [tag, app] = [await tagOf(req.params.code), await settings.all()];
+  tagHeaders(res);
+  if (!tag || !tag.status) return res.status(404).send(renderInactive({ app, appUrl }));
+  const key = `${req.ip}|${tag.id}`;
+  if (!BOT.test(req.get('user-agent') || '') && Date.now() - (tagScans.get(key) || 0) > 60000) { tagScans.set(key, Date.now()); if (tagScans.size > 5000) tagScans.clear(); M.ContactTag.increment('scans', { where: { id: tag.id } }).catch(() => {}); }
+  res.send(renderTag({ tag, app, appUrl, nonce: res.locals.nonce }));
+}));
+
+pages.get('/tag/:code/qr.png', wrap(async (req, res) => {
+  const tag = await tagOf(req.params.code);
+  if (!tag) return res.status(404).end();
+  const png = await QRCode.toBuffer(contactTags.url(tag), { width: 640, margin: 2, errorCorrectionLevel: 'M' });
+  res.set('Content-Type', 'image/png').set('Cache-Control', 'public, max-age=86400').send(png);
+}));
+
+/** a visitor's message or call-back request: stored, then relayed to the owner (the number is never returned) */
+pages.post('/tag/:code/send', tagLimiter, async (req, res, next) => {
+  // errors here are JSON (the tag page's script reads them), not the HTML error page
+  try { await sendToTagOwner(req, res); } catch (e) { if (e && e.status) return res.status(e.status).json({ message: e.message }); next(e); }
+});
+const sendToTagOwner = async (req, res) => {
+  const tag = await tagOf(req.params.code);
+  if (!tag || !tag.status) fail(404, 'This tag is not active');
+  const b = req.body || {};
+  if (b.website) return res.json({ message: 'Sent.' }); // honeypot
+  const type = b.type === 'callback' ? 'callback' : 'message';
+  const phone = contactTags.cleanPhone(b.phone);
+  const text = String(b.text || '').trim().slice(0, 500);
+  const name = String(b.name || '').trim().slice(0, 80);
+  if (type === 'callback' && !contactTags.validPhone(phone)) fail(422, 'Please enter your phone number so the owner can call you back.');
+  if (type === 'message' && !text) fail(422, 'Please write a short message.');
+  if (phone && !contactTags.validPhone(phone)) fail(422, 'That phone number does not look right.');
+  const recent = await M.ContactTagMessage.count({ where: { contact_tag_id: tag.id, created_at: { [Op.gte]: new Date(Date.now() - 3600 * 1000) } } });
+  if (recent >= 10) fail(429, 'This tag has received many messages in the last hour. Please try again later.');
+  const to_role = b.to_role === 'emergency' && tag.emergency_phone ? 'emergency' : 'owner';
+  const msg = await M.ContactTagMessage.create({ contact_tag_id: tag.id, to_role, type, name: name || null, phone: phone || null, text: text || null, ip: req.ip });
+  const { delivery } = await contactTags.notify(tag, { to_role, type, name, phone, text });
+  await msg.update({ delivery });
+  const alerted = Object.values(delivery).includes('sent');
+  res.json({ delivered: alerted, message: alerted ? (type === 'callback' ? 'Done. The owner has been asked to call you back.' : 'Sent. The owner has been notified.') : 'Your message was saved, but we could not alert the owner right now. Please try again in a little while.' });
+};
+
+/* the owner's secret page */
+const manageTag = async (req, res) => {
+  const tag = await tagOf(req.params.code);
+  const k = req.method === 'POST' ? req.body?.k : req.query.k;
+  if (!tag || !contactTags.sameToken(k, tag.manage_token)) { tagHeaders(res); return res.status(404).send(renderInactive({ app: await settings.all(), appUrl })); }
+  return tag;
+};
+pages.get('/tag/:code/manage', wrap(async (req, res) => {
+  const tag = await manageTag(req, res); if (!tag || res.headersSent) return;
+  tagHeaders(res);
+  const messages = await M.ContactTagMessage.findAll({ where: { contact_tag_id: tag.id }, order: [['id', 'DESC']], limit: 20 });
+  res.send(renderManage({ tag, messages, app: await settings.all(), appUrl, nonce: res.locals.nonce, saved: req.query.saved === '1' }));
+}));
+pages.post('/tag/:code/manage', formLimiter, wrap(async (req, res) => {
+  const tag = await manageTag(req, res); if (!tag || res.headersSent) return;
+  const b = req.body; const str = (v, n) => String(v || '').trim().slice(0, n) || null;
+  const phone = contactTags.cleanPhone(b.owner_phone); const ephone = contactTags.cleanPhone(b.emergency_phone);
+  const email = str(b.owner_email, 191);
+  let error = null;
+  if (!phone && !email) error = 'Add your phone number or your e-mail, so people can reach you.';
+  else if (phone && !contactTags.validPhone(phone)) error = 'Your phone number does not look right.';
+  else if (ephone && !contactTags.validPhone(ephone)) error = 'The emergency phone number does not look right.';
+  else if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) error = 'Enter a valid e-mail address.';
+  if (error) {
+    tagHeaders(res);
+    const messages = await M.ContactTagMessage.findAll({ where: { contact_tag_id: tag.id }, order: [['id', 'DESC']], limit: 20 });
+    return res.status(422).send(renderManage({ tag, messages, app: await settings.all(), appUrl, nonce: res.locals.nonce, error }));
+  }
+  await tag.update({
+    label: str(b.label, 80), kind: contactTags.KINDS.includes(b.kind) ? b.kind : 'other', public_note: str(b.public_note, 300), owner_name: str(b.owner_name, 120), owner_phone: phone || null, owner_email: email,
+    emergency_name: str(b.emergency_name, 120), emergency_phone: ephone || null, notify_whatsapp: b.notify_whatsapp === '1', notify_sms: b.notify_sms === '1', notify_email: b.notify_email === '1', status: b.status === '1',
+  });
+  res.redirect(303, `/tag/${tag.code}/manage?k=${tag.manage_token}&saved=1`);
+}));
+
 pages.get('/:alias', wrap(async (req, res, next) => {
   const v = await findVcard(req.params.alias);
   if (!v) return next();

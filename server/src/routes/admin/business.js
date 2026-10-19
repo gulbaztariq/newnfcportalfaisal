@@ -30,6 +30,7 @@ const bcrypt = require('bcryptjs');
 const subs = require('../../services/subscription');
 const onboarding = require('../../services/onboarding');
 const productsync = require('../../services/productsync');
+const contacttags = require('../../services/contacttags');
 
 const r = express.Router();
 const r2 = (n) => Math.round(Number(n || 0) * 100) / 100;
@@ -45,7 +46,7 @@ r.delete('/security/bans/:ip', (req, res) => { security.unban(req.params.ip); re
 
 /* ============================================================== products (shop) */
 const PRODUCT_FIELDS = ['name', 'description', 'price', 'status', 'slug', 'category', 'sku', 'short_description', 'compare_price', 'customization_price', 'size_label', 'variants', 'featured', 'show_in_shop', 'sort', 'weight_grams', 'extra_cost', 'track_stock', 'plan_id', 'product_kind', 'discount_type', 'discount_value', 'sample_price', 'wholesale_tiers', 'no_wholesale_tiers', 'order_source_id'];
-const PRODUCT_KINDS = ['blank_card', 'nfc_profile', 'social_static', 'social_dynamic', 'social_profile', 'printing', 'digital'];
+const PRODUCT_KINDS = ['contact_tag', 'blank_card', 'nfc_profile', 'social_static', 'social_dynamic', 'social_profile', 'printing', 'digital'];
 const slugify = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 140);
 r.get('/nfc-cards/:id/components', wrap(async (req, res) => {
   const rows = await M.ProductComponent.findAll({ where: { nfc_card_id: req.params.id }, include: [{ model: M.InventoryItem, as: 'item' }] });
@@ -194,6 +195,7 @@ r.post('/orders', wrap(async (req, res) => {
   const source = b.order_source_id ? await M.OrderSource.findByPk(b.order_source_id) : null;
   if (b.order_source_id && !source) fail(422, 'Validation failed', { order_source_id: 'Unknown order source' });
   if (b.order_type && !orders.ORDER_TYPES[b.order_type]) fail(422, 'Validation failed', { order_type: 'Unknown order type' });
+  if (b.order_type === 'contact_tag' && !contacttags.validPhone(contacttags.cleanPhone(b.phone))) fail(422, 'Validation failed', { phone: 'A contact tag needs the owner\'s phone number: that is who gets the messages' });
   const sampleOf = (await sampleCreditFor(b)).order;
   if (['renewal', 'upgrade'].includes(b.order_type)) {
     // renewals and upgrades change the plan of an existing customer
@@ -268,9 +270,10 @@ r.post('/orders', wrap(async (req, res) => {
   }, q);
   if (vcard) await M.ShortLink.create({ code: await shortlinks.uniqueCode(M), title: `Order ${o.order_number}`, target_type: 'vcard', vcard_id: vcard.id, user_id: user.id, nfc_order_id: o.id });
   // organisation orders appear in the organisation journey (services/organisation.js timeline) with the contact and the staff member
+  const tags = b.order_type === 'contact_tag' ? await contacttags.createForOrder(o, o.quantity, { userId: user?.id }) : null; // one tag per piece, owner = the customer
   const renewed = await orders.applyRenewal(o); // paid renewals extend the subscription right away
   security.audit(req, 'order.create', 'nfc_order', o.id, { type, account: account?.created || undefined, renewed: renewed ? renewed.ends_at : undefined });
-  res.status(201).json({ data: o, account, renewed: renewed ? { ends_at: renewed.ends_at } : null, guest: guest ? { id: guest.id, name: guest.name } : null, message: `Order ${o.order_number} created${renewed ? `. Plan renewed until ${dayjs(renewed.ends_at).format('DD MMM YYYY')}` : ''}` });
+  res.status(201).json({ data: o, account, tags: tags ? tags.map((t) => ({ id: t.id, code: t.code, url: contacttags.url(t), manage_url: contacttags.manageUrl(t) })) : null, renewed: renewed ? { ends_at: renewed.ends_at } : null, guest: guest ? { id: guest.id, name: guest.name } : null, message: `Order ${o.order_number} created${renewed ? `. Plan renewed until ${dayjs(renewed.ends_at).format('DD MMM YYYY')}` : ''}` });
 }));
 
 /* customer search for the order wizard: name, e-mail or phone in one box */
@@ -337,6 +340,51 @@ r.put('/guest-customers/:id', wrap(async (req, res) => {
   if (data.phone !== undefined) data.phone_key = phoneKey(data.phone);
   await g.update(data);
   res.json({ data: g, message: 'Guest customer saved' });
+}));
+
+/* contact tags (Sales > Contact tags): every tag made by a contact-tag order */
+const tagJson = (t, counts = {}) => ({ ...t.toJSON(), manage_token: undefined, url: contacttags.url(t), manage_url: contacttags.manageUrl(t), messages: counts.total || 0, new_messages: counts.fresh || 0, order_number: t.order?.order_number || null });
+r.get('/contact-tags/export', wrap(async (req, res) => {
+  const where = req.query.order_id ? { nfc_order_id: Number(req.query.order_id) } : {};
+  const rows = await M.ContactTag.findAll({ where, order: [['id', 'ASC']], limit: 5000 });
+  const q = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  res.set('Content-Type', 'text/csv').set('Content-Disposition', 'attachment; filename="contact-tags.csv"')
+    .send(['code,tag_link,qr_image,owner,manage_link', ...rows.map((t) => [t.code, contacttags.url(t), `${contacttags.url(t)}/qr.png`, t.owner_name, contacttags.manageUrl(t)].map(q).join(','))].join('\r\n'));
+}));
+r.get('/contact-tags', wrap(async (req, res) => {
+  const p = paginate(req, 20);
+  const q = String(req.query.search || '').trim();
+  const where = {};
+  if (q) where[Op.or] = ['code', 'label', 'owner_name', 'owner_phone'].map((f) => ({ [f]: { [Op.like]: `%${q}%` } }));
+  if (req.query.order_id) where.nfc_order_id = Number(req.query.order_id);
+  if (req.query.status !== undefined && req.query.status !== '') where.status = req.query.status === '1';
+  const { rows, count } = await M.ContactTag.findAndCountAll({ where, include: [{ model: M.NfcOrder, as: 'order', attributes: ['order_number'] }], order: [['id', 'DESC']], limit: p.limit, offset: p.offset });
+  const stats = rows.length ? await M.ContactTagMessage.findAll({ where: { contact_tag_id: rows.map((t) => t.id) }, attributes: ['contact_tag_id', 'status', [M.sequelize.fn('count', M.sequelize.col('id')), 'n']], group: ['contact_tag_id', 'status'], raw: true }) : [];
+  const by = {}; for (const x of stats) { const c = (by[x.contact_tag_id] ||= { total: 0, fresh: 0 }); c.total += Number(x.n); if (x.status === 'new') c.fresh += Number(x.n); }
+  res.json(paged(rows.map((t) => tagJson(t, by[t.id])), count, p));
+}));
+r.get('/contact-tags/:id/messages', wrap(async (req, res) => {
+  const t = await M.ContactTag.findByPk(req.params.id);
+  if (!t) fail(404, 'Not found');
+  res.json({ data: await M.ContactTagMessage.findAll({ where: { contact_tag_id: t.id }, order: [['id', 'DESC']], limit: 100 }) });
+}));
+r.patch('/contact-tags/messages/:mid', wrap(async (req, res) => {
+  const m = await M.ContactTagMessage.findByPk(req.params.mid);
+  if (!m) fail(404, 'Not found');
+  await m.update({ status: req.body.status === 'new' ? 'new' : 'handled' });
+  res.json({ data: m });
+}));
+r.patch('/contact-tags/:id', wrap(async (req, res) => {
+  const t = await M.ContactTag.findByPk(req.params.id);
+  if (!t) fail(404, 'Not found');
+  const b = req.body; const data = {};
+  if (b.status !== undefined) data.status = toBool(b.status);
+  if (b.label !== undefined) data.label = String(b.label || '').slice(0, 80) || null;
+  if (b.owner_name !== undefined) data.owner_name = String(b.owner_name || '').slice(0, 120) || null;
+  if (b.owner_phone !== undefined) { const ph = contacttags.cleanPhone(b.owner_phone); if (ph && !contacttags.validPhone(ph)) fail(422, 'Validation failed', { owner_phone: 'Enter a valid phone number' }); data.owner_phone = ph || null; }
+  if (toBool(b.reset_link)) data.manage_token = require('crypto').randomBytes(18).toString('hex'); // the old owner link stops working
+  await t.update(data);
+  res.json({ data: tagJson(t), message: 'Tag updated' });
 }));
 
 /* order sources (Orders > Order sources): each website gets its own product list and price list */

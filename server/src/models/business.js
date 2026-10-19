@@ -254,7 +254,39 @@ module.exports = function defineBusiness(sequelize, json, M) {
   }, { updatedAt: false });
   ActivityLog.belongsTo(User, { foreignKey: 'user_id' });
 
+  /* ------------------------------------------------ contact tags: QR / NFC tags that reach the owner without showing their number */
+  const ContactTag = sequelize.define('contact_tag', {
+    code: { type: T.STRING(12), allowNull: false, unique: true }, // public: /tag/{code}
+    manage_token: { type: T.STRING(40), allowNull: false }, // secret of the owner's manage link
+    label: T.STRING(80), // e.g. the vehicle number
+    kind: { type: T.STRING(20), defaultValue: 'vehicle' }, // vehicle | bag | keys | pet | door | other
+    public_note: T.STRING(300),
+    owner_name: T.STRING(120),
+    owner_phone: T.STRING(30), // PRIVATE: never rendered or returned by a public page
+    owner_email: T.STRING(191),
+    emergency_name: T.STRING(120),
+    emergency_phone: T.STRING(30), // PRIVATE
+    notify_whatsapp: { type: T.BOOLEAN, defaultValue: true },
+    notify_sms: { type: T.BOOLEAN, defaultValue: false },
+    notify_email: { type: T.BOOLEAN, defaultValue: true },
+    status: { type: T.BOOLEAN, defaultValue: true },
+    scans: { type: T.INTEGER, defaultValue: 0 },
+    nfc_order_id: T.INTEGER,
+    user_id: T.INTEGER,
+  });
+  const ContactTagMessage = sequelize.define('contact_tag_message', {
+    to_role: { type: T.STRING(10), defaultValue: 'owner' }, // owner | emergency
+    type: { type: T.STRING(10), defaultValue: 'message' }, // message | callback
+    name: T.STRING(80), phone: T.STRING(30), text: T.STRING(600), ip: T.STRING(64),
+    status: { type: T.STRING(10), defaultValue: 'new' }, // new | handled
+    delivery: json('delivery', {}), // { whatsapp: 'sent', sms: 'skipped', email: 'failed' }
+  });
+  ContactTag.hasMany(ContactTagMessage, { as: 'messages', foreignKey: 'contact_tag_id', onDelete: 'CASCADE' });
+  ContactTagMessage.belongsTo(ContactTag, { foreignKey: 'contact_tag_id' });
+  ContactTag.belongsTo(NfcOrder, { as: 'order', foreignKey: 'nfc_order_id', constraints: false });
+
   return {
+    ContactTag, ContactTagMessage,
     NfcOrderItem, ShortLink, ShortLinkClick, Invoice, InvoicePayment, FinanceAccount, Partner, FinanceCategory, FinanceEntry,
     Vendor, InventoryItem, ProductComponent, Purchase, StockMovement, VendorBill, VendorPayment, CourierSettlement,
     GuestCustomer, OrganisationEvent,

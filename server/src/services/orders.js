@@ -60,6 +60,7 @@ const ORDER_TYPES = {
   digital: { label: 'Digital profile only', physical: false },
   renewal: { label: 'Plan renewal', physical: false },
   upgrade: { label: 'Plan upgrade', physical: false },
+  contact_tag: { label: 'Contact tag (number hidden)', physical: true },
 };
 const NO_SHIP_TYPES = ['digital', 'renewal', 'upgrade']; // nothing is delivered: no delivery or COD charge
 

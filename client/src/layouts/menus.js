@@ -22,6 +22,7 @@ export const adminMenu = (user) => filterMenu([
     group: 'Sales', items: [
       { label: 'Orders', icon: ShoppingBag, to: '/admin/orders', perm: 'orders' },
       { label: 'Products', icon: Nfc, to: '/admin/products', perm: 'orders' },
+      { label: 'Contact tags', icon: ShieldCheck, to: '/admin/contact-tags', perm: 'orders' },
       { label: 'Guest customers', icon: UserRound, to: '/admin/guest-customers', perm: 'orders' },
       { label: 'Order sources', icon: Globe2, to: '/admin/order-sources', perm: 'orders' },
       { label: 'Invoices', icon: FileText, to: '/admin/invoices', perm: 'invoices' },

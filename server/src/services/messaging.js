@@ -95,14 +95,16 @@ async function log(entry) { try { await require('../models').MessageLog.create(e
 async function deliver(channel, rawTo, text, meta = {}) {
   const s = await settings.all();
   const to = normalizePhone(rawTo, s.phone_default_region || '92');
-  if (!to) return;
+  if (!to) return 'skipped';
   const enabled = channel === 'whatsapp' ? s.whatsapp_enable === '1' : s.sms_enable === '1';
-  if (!enabled) return log({ channel, to, event: meta.event, body: text, status: 'skipped', error: `${channel} disabled`, nfc_order_id: meta.orderId });
+  if (!enabled) { await log({ channel, to, event: meta.event, body: text, status: 'skipped', error: `${channel} disabled`, nfc_order_id: meta.orderId }); return 'skipped'; }
   try {
     if (channel === 'whatsapp') await sendWhatsapp(to, text, meta); else await sendSms(to, text);
     await log({ channel, to, event: meta.event, body: text, status: 'sent', nfc_order_id: meta.orderId });
+    return 'sent';
   } catch (e) {
     await log({ channel, to, event: meta.event, body: text, status: 'failed', error: String(e.message).slice(0, 480), nfc_order_id: meta.orderId });
+    return 'failed';
   }
 }
 

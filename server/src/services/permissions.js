@@ -76,7 +76,7 @@ const clean = (list, company) => {
 /* admin API path prefix -> module */
 const ADMIN_PATHS = [
   [/^\/dashboard/, 'dashboard'], [/^\/(users|admins)/, 'users'], [/^\/(vcards|templates)/, 'vcards'], [/^\/short-links/, 'shortlinks'],
-  [/^\/custom-domains/, 'domains'], [/^\/whatsapp-stores/, 'stores'], [/^\/(nfc-cards|nfc-orders|orders|orders-meta|order-sources|products|customers|organisations|guest-customers)/, 'orders'],
+  [/^\/custom-domains/, 'domains'], [/^\/whatsapp-stores/, 'stores'], [/^\/(nfc-cards|nfc-orders|orders|orders-meta|order-sources|products|customers|organisations|guest-customers|contact-tags)/, 'orders'],
   [/^\/invoices/, 'invoices'], [/^\/(finance|expenses|partners|accounts|courier-settlements)/, 'finance'],
   [/^\/(inventory|vendors|purchases|stock)/, 'inventory'], [/^\/analytics/, 'analytics'],
   [/^\/(plans|subscriptions)/, 'plans'], [/^\/(transactions|cash-payments)/, 'payments'], [/^\/coupon-codes/, 'coupons'],
