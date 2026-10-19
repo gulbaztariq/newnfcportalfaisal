@@ -45,8 +45,8 @@ r.get('/security/bans', (_req, res) => res.json({ data: security.bannedList() })
 r.delete('/security/bans/:ip', (req, res) => { security.unban(req.params.ip); res.json({ message: 'IP unbanned' }); });
 
 /* ============================================================== products (shop) */
-const PRODUCT_FIELDS = ['name', 'description', 'price', 'status', 'slug', 'category', 'sku', 'short_description', 'compare_price', 'customization_price', 'size_label', 'variants', 'featured', 'show_in_shop', 'sort', 'weight_grams', 'extra_cost', 'track_stock', 'plan_id', 'product_kind', 'discount_type', 'discount_value', 'sample_price', 'wholesale_tiers', 'no_wholesale_tiers', 'order_source_id'];
-const PRODUCT_KINDS = ['contact_tag', 'blank_card', 'nfc_profile', 'social_static', 'social_dynamic', 'social_profile', 'printing', 'digital'];
+const PRODUCT_FIELDS = ['name', 'description', 'price', 'status', 'slug', 'category', 'sku', 'short_description', 'compare_price', 'customization_price', 'size_label', 'variants', 'featured', 'show_in_shop', 'sort', 'weight_grams', 'extra_cost', 'track_stock', 'plan_id', 'product_kind', 'discount_type', 'discount_value', 'sample_price', 'wholesale_tiers', 'no_wholesale_tiers', 'tags_per_unit', 'order_source_id'];
+const PRODUCT_KINDS = ['airport_tag', 'contact_tag', 'blank_card', 'nfc_profile', 'social_static', 'social_dynamic', 'social_profile', 'printing', 'digital'];
 const slugify = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 140);
 r.get('/nfc-cards/:id/components', wrap(async (req, res) => {
   const rows = await M.ProductComponent.findAll({ where: { nfc_card_id: req.params.id }, include: [{ model: M.InventoryItem, as: 'item' }] });
@@ -72,6 +72,7 @@ r.use('/nfc-cards', crud(M.NfcCard, {
     if (data.discount_type !== undefined) data.discount_type = ['fixed', 'percent'].includes(data.discount_type) ? data.discount_type : null;
     if (data.discount_value !== undefined) data.discount_value = Math.max(0, r2(data.discount_value));
     if (data.discount_type === 'percent' && Number(data.discount_value) > 100) data.discount_value = 100;
+    if (data.tags_per_unit !== undefined) data.tags_per_unit = Math.min(50, Math.max(1, parseInt(data.tags_per_unit, 10) || 1));
     if (data.sample_price !== undefined) data.sample_price = data.sample_price === '' || data.sample_price === null ? null : Math.max(0, r2(data.sample_price));
     if (data.wholesale_tiers !== undefined) { const t = orders.parseTiers(data.wholesale_tiers); data.wholesale_tiers = t.length ? t : null; } // empty = use the global tiers
     if (row?.order_source_id && data.price !== undefined && r2(data.price) !== r2(row.price)) data.price_locked = true; // hand-edited price: the sync keeps it
@@ -158,7 +159,7 @@ r.get('/orders-meta', wrap(async (_req, res) => {
   const s = await settings.all();
   const [sources, products, plans] = await Promise.all([
     M.OrderSource.findAll({ where: { status: true }, attributes: ['id', 'name', 'url', 'last_synced_at', 'platform'], order: [['name', 'ASC']] }),
-    M.NfcCard.findAll({ where: { status: true }, attributes: ['id', 'name', 'category', 'source_price', 'sku', 'images', 'price', 'variants', 'customization_price', 'plan_id', 'front_image', 'product_kind', 'order_source_id', 'discount_type', 'discount_value', 'sample_price', 'wholesale_tiers', 'no_wholesale_tiers'], include: [{ model: M.Plan, as: 'plan', attributes: ['id', 'name', 'price', 'frequency'] }], order: [['sort', 'ASC'], ['id', 'ASC']] }),
+    M.NfcCard.findAll({ where: { status: true }, attributes: ['id', 'name', 'category', 'source_price', 'sku', 'images', 'price', 'variants', 'customization_price', 'plan_id', 'front_image', 'product_kind', 'order_source_id', 'discount_type', 'discount_value', 'sample_price', 'wholesale_tiers', 'no_wholesale_tiers', 'tags_per_unit'], include: [{ model: M.Plan, as: 'plan', attributes: ['id', 'name', 'price', 'frequency'] }], order: [['sort', 'ASC'], ['id', 'ASC']] }),
     M.Plan.findAll({ where: { status: true }, attributes: ['id', 'name'] }),
   ]);
   res.json({
@@ -184,6 +185,7 @@ r.post('/orders/quote', wrap(async (req, res) => {
  * customer_type: existing (a registered customer, user_id) | new (creates an account + vCard) |
  * organisation (organisation_id = owner, contact_id = the person who placed it) | guest (no account: Guest customers)
  */
+const TAG_TYPES = ['contact_tag', 'airport_tag']; // order types that make contact tags
 const phoneKey = (p) => String(p || '').replace(/\D/g, '').slice(-10) || null;
 r.post('/orders', wrap(async (req, res) => {
   const b = req.body;
@@ -195,7 +197,7 @@ r.post('/orders', wrap(async (req, res) => {
   const source = b.order_source_id ? await M.OrderSource.findByPk(b.order_source_id) : null;
   if (b.order_source_id && !source) fail(422, 'Validation failed', { order_source_id: 'Unknown order source' });
   if (b.order_type && !orders.ORDER_TYPES[b.order_type]) fail(422, 'Validation failed', { order_type: 'Unknown order type' });
-  if (b.order_type === 'contact_tag' && !contacttags.validPhone(contacttags.cleanPhone(b.phone))) fail(422, 'Validation failed', { phone: 'A contact tag needs the owner\'s phone number: that is who gets the messages' });
+  if (TAG_TYPES.includes(b.order_type) && !contacttags.validPhone(contacttags.cleanPhone(b.phone))) fail(422, 'Validation failed', { phone: 'A tag needs the owner\'s phone number: that is who gets the messages' });
   const sampleOf = (await sampleCreditFor(b)).order;
   if (['renewal', 'upgrade'].includes(b.order_type)) {
     // renewals and upgrades change the plan of an existing customer
@@ -270,7 +272,8 @@ r.post('/orders', wrap(async (req, res) => {
   }, q);
   if (vcard) await M.ShortLink.create({ code: await shortlinks.uniqueCode(M), title: `Order ${o.order_number}`, target_type: 'vcard', vcard_id: vcard.id, user_id: user.id, nfc_order_id: o.id });
   // organisation orders appear in the organisation journey (services/organisation.js timeline) with the contact and the staff member
-  const tags = b.order_type === 'contact_tag' ? await contacttags.createForOrder(o, o.quantity, { userId: user?.id }) : null; // one tag per piece, owner = the customer
+  // one tag per piece (a pack of 2 makes 2), owner = the customer
+  const tags = TAG_TYPES.includes(b.order_type) ? await contacttags.createForOrder(o, q.lines.reduce((a, l) => a + l.quantity * Math.max(1, Number(l.product.tags_per_unit) || 1), 0), { userId: user?.id, kind: b.order_type === 'airport_tag' ? 'luggage' : 'vehicle' }) : null;
   const renewed = await orders.applyRenewal(o); // paid renewals extend the subscription right away
   security.audit(req, 'order.create', 'nfc_order', o.id, { type, account: account?.created || undefined, renewed: renewed ? renewed.ends_at : undefined });
   res.status(201).json({ data: o, account, tags: tags ? tags.map((t) => ({ id: t.id, code: t.code, url: contacttags.url(t), manage_url: contacttags.manageUrl(t) })) : null, renewed: renewed ? { ends_at: renewed.ends_at } : null, guest: guest ? { id: guest.id, name: guest.name } : null, message: `Order ${o.order_number} created${renewed ? `. Plan renewed until ${dayjs(renewed.ends_at).format('DD MMM YYYY')}` : ''}` });

@@ -6,7 +6,7 @@ import { toast } from 'sonner';
 import {
   ArrowLeft, ArrowRight, Check, User, Package, Truck, ClipboardCheck, Plus, Trash2, Store, Wand2, IdCard, Copy, ExternalLink,
   BadgePercent, Banknote, ShoppingBag, Settings2, Sparkles, UserCheck, UserPlus, UserRound, Building2, Repeat,
-  Share2, Boxes, FlaskConical, Printer, Smartphone, Layers, CreditCard, CalendarClock, TrendingUp, RefreshCw, ShieldCheck,
+  Share2, Boxes, FlaskConical, Printer, Smartphone, Layers, CreditCard, CalendarClock, TrendingUp, RefreshCw, ShieldCheck, Plane,
 } from 'lucide-react';
 import api from '@/lib/api';
 import SearchSelect from '@/components/SearchSelect';
@@ -31,7 +31,9 @@ const ORDER_TYPES = [
   { key: 'renewal', title: 'Renewal', text: 'Extend an existing customer\'s plan', icon: CalendarClock },
   { key: 'upgrade', title: 'Upgrade plan', text: 'Move a customer to a higher plan, unused time credited', icon: TrendingUp },
   { key: 'contact_tag', title: 'Contact tag', text: 'QR / NFC tag that reaches the owner without showing their number', icon: ShieldCheck },
+  { key: 'airport_tag', title: 'Airport tag', text: 'Luggage tag: a finder can reach the owner, number hidden', icon: Plane },
 ];
+const TAG_TYPES = ['contact_tag', 'airport_tag'];
 const NO_SHIP = ['digital', 'renewal', 'upgrade'];
 const PLAN_CHANGE = ['renewal', 'upgrade']; // nothing is delivered
 const noShip = (t) => NO_SHIP.includes(t);
@@ -39,7 +41,7 @@ const TYPE_TITLE = Object.fromEntries(ORDER_TYPES.map((t) => [t.key, t.title]));
 const SOCIAL_VARIANTS = [{ value: 'static', label: 'Static link', kind: 'social_static' }, { value: 'dynamic', label: 'Dynamic link', kind: 'social_dynamic' }, { value: 'profile', label: 'All-in-one social profile', kind: 'social_profile' }];
 /** which product kinds an order type offers (an untagged product counts as a normal NFC product) */
 const kindsFor = (type, variant) => ({
-  nfc_profile: ['nfc_profile', null], printing: ['printing', null], card_printing: ['blank_card', 'printing', null], digital: ['digital', null], renewal: ['__plan'], upgrade: ['__plan'], contact_tag: ['contact_tag'],
+  nfc_profile: ['nfc_profile', null], printing: ['printing', null], card_printing: ['blank_card', 'printing', null], digital: ['digital', null], renewal: ['__plan'], upgrade: ['__plan'], contact_tag: ['contact_tag'], airport_tag: ['airport_tag'],
   social: [SOCIAL_VARIANTS.find((v) => v.value === variant)?.kind].filter(Boolean).concat(variant ? [] : ['social_static', 'social_dynamic', 'social_profile']),
 }[type] || null); // null = every product (wholesale, samples)
 const afterDisc = (price, t, v) => Math.max(0, t === 'percent' ? price * (1 - Math.min(100, Number(v) || 0) / 100) : t === 'fixed' ? price - (Number(v) || 0) : price);
@@ -242,6 +244,7 @@ function Catalog({ meta, offered, lines, setLines, quote, valid, form, cur, samp
                   {ql?.tier_percent > 0 && <Badge tone="success">Wholesale tier {ql.tier_percent}% off</Badge>}
                   {form.order_type === 'sample' && <Badge tone="warning">Sample price</Badge>}
                   {p.plan && <Badge tone="primary"><IdCard className="size-3" />Plan: {p.plan.name}</Badge>}
+                  {Number(p.tags_per_unit) > 1 && <Badge tone="info">{Number(p.tags_per_unit) * qty} tags</Badge>}
                   {Number(p.discount_value) > 0 && form.order_type !== 'sample' && <Badge tone="success">Discount {p.discount_type === 'percent' ? `${Number(p.discount_value)}%` : money(cur, p.discount_value)}</Badge>}
                   {line.unit_price !== '' && ql && Number(line.unit_price) !== Number(ql.list_price) && <span className="text-muted-foreground">Edited from {money(cur, ql.list_price)}</span>}
                   {Number(p.customization_price) > 0 && <Checkbox id={`cz-${p.id}`} checked={!!line.customization} onChange={(v) => upsert(p, { customization: v })} label={`Customisation +${money(cur, p.customization_price)} / pc`} />}
@@ -390,7 +393,7 @@ export default function OrderWizard() {
 
   const checkList = [
     () => { const e = {}; if (form.order_type === 'social' && !form.social_variant) e.social_variant = 'Choose static, dynamic or all-in-one'; return e; },
-    () => { const e = {}; if (form.order_type === 'contact_tag' && String(form.phone).replace(/\D/g, '').length < 7) e.phone = 'The tag owner\'s phone number is needed: messages are sent there'; if (PLAN_CHANGE.includes(form.order_type) && !['existing', 'organisation'].includes(form.customer_type)) e.name = 'A renewal or upgrade is for an existing customer or organisation'; if (form.customer_type === 'existing' && !form.customer) e.user_id = 'Search and choose the customer'; if (form.customer_type === 'organisation' && !form.organisation) e.organisation_id = 'Search and choose the organisation'; if (!form.name.trim()) e.name = 'Enter the customer name'; if (form.customer_type === 'new' && !form.email) e.email = 'An account needs an e-mail. Tick "Dummy e-mail" if the customer has none.'; if (form.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) e.email = 'Enter a valid e-mail address'; return e; },
+    () => { const e = {}; if (TAG_TYPES.includes(form.order_type) && String(form.phone).replace(/\D/g, '').length < 7) e.phone = 'The tag owner\'s phone number is needed: messages are sent there'; if (PLAN_CHANGE.includes(form.order_type) && !['existing', 'organisation'].includes(form.customer_type)) e.name = 'A renewal or upgrade is for an existing customer or organisation'; if (form.customer_type === 'existing' && !form.customer) e.user_id = 'Search and choose the customer'; if (form.customer_type === 'organisation' && !form.organisation) e.organisation_id = 'Search and choose the organisation'; if (!form.name.trim()) e.name = 'Enter the customer name'; if (form.customer_type === 'new' && !form.email) e.email = 'An account needs an e-mail. Tick "Dummy e-mail" if the customer has none.'; if (form.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) e.email = 'Enter a valid e-mail address'; return e; },
     () => { const e = {}; if (!valid.length) e.products = 'Add at least one product'; else if (valid.some((l) => products[l.product_id]?.variants?.length && !l.variant)) e.products = 'Choose an option for every product'; else if (valid.some((l) => l.unit_price !== '' && Number(l.unit_price) < 0)) e.products = 'Prices cannot be negative'; else if (form.order_type === 'sample' && valid.some((l) => Number(l.quantity) > sampleMax)) e.products = `Samples are limited to ${sampleMax} pieces per product`; return e; },
     () => { const e = {}; if (form.discount_type === 'percent' && Number(form.discount_value) > 100) e.discount_value = 'Maximum 100%'; if (Number(form.discount_value) < 0) e.discount_value = 'Cannot be negative'; return e; },
     () => ({}),
@@ -429,7 +432,7 @@ export default function OrderWizard() {
           <h2 className="relative mt-4 font-display text-2xl font-bold">Order {o.order_number} created</h2>
           {result.tags?.length > 0 && (
             <div className="relative mt-6 space-y-2 rounded-2xl border border-border bg-muted/40 p-4 text-left text-sm">
-              <p className="flex items-center gap-2 font-semibold"><ShieldCheck className="size-4 text-primary" />{result.tags.length} contact tag{result.tags.length > 1 ? 's' : ''} created</p>
+              <p className="flex items-center gap-2 font-semibold"><ShieldCheck className="size-4 text-primary" />{result.tags.length} {o.order_type === 'airport_tag' ? 'airport' : 'contact'} tag{result.tags.length > 1 ? 's' : ''} created</p>
               {result.tags.slice(0, 5).map((t) => (
                 <div key={t.id} className="flex items-center justify-between gap-2 rounded-xl bg-card px-3 py-2">
                   <span className="font-mono font-semibold">{t.code}</span>
@@ -498,6 +501,7 @@ export default function OrderWizard() {
                     {form.order_type === 'sample' && <p className="rounded-2xl bg-primary-soft/40 p-3 text-sm text-muted-foreground">Samples are charged at a higher price than normal pieces (up to <b>{sampleMax}</b> per product). When the customer orders in bulk, choose <b>Wholesale</b> and the sample charge is deducted.</p>}
                     {form.order_type === 'card_printing' && <p className="rounded-2xl bg-primary-soft/40 p-3 text-sm text-muted-foreground">The client buys NFC cards and gets them printed with their design. No profile, no plan, no account needed: choose <b>Guest</b> in the next step.</p>}
                     {form.order_type === 'renewal' && <p className="rounded-2xl bg-primary-soft/40 p-3 text-sm text-muted-foreground">Extends an existing customer's plan. The new period starts where the current one ends, and is added as soon as the order is marked <b>Paid</b>. Nothing is shipped.</p>}
+                    {form.order_type === 'airport_tag' && <p className="rounded-2xl bg-primary-soft/40 p-3 text-sm text-muted-foreground">A luggage tag for travellers. Whoever finds the bag scans it and tells the owner where it is, <b>without ever seeing the owner's number</b>. One tag is made for every piece (a pack counts all its tags). Enter the owner's phone in the next step: that is where messages go. The owner can add trip details and a reward note from their private link.</p>}
                     {form.order_type === 'contact_tag' && <p className="rounded-2xl bg-primary-soft/40 p-3 text-sm text-muted-foreground">One tag is made for every piece. Anyone who scans it can send the owner a message or ask for a call back, and <b>the owner's number is never shown</b>. Enter the owner's phone in the next step: that is where messages go. Each tag gets its own link and QR code, and the owner can edit their details from a private link.</p>}
                     {form.order_type === 'upgrade' && <p className="rounded-2xl bg-primary-soft/40 p-3 text-sm text-muted-foreground">Moves an existing customer to a more expensive plan <b>now</b>. What they paid for the unused time of the current plan is deducted from the price (you can change that amount). The new plan starts when the order is marked <b>Paid</b>. Nothing is shipped.</p>}
                     {form.order_type === 'digital' && <p className="rounded-2xl bg-primary-soft/40 p-3 text-sm text-muted-foreground">No delivery charge and no courier: only the profile and its plan are set up.</p>}

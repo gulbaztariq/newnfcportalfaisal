@@ -12,7 +12,7 @@ const { appUrl } = require('../config');
 
 const M = () => require('../models');
 const ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; // no 0/O/1/I/L: easy to read out loud
-const KINDS = ['vehicle', 'bag', 'keys', 'pet', 'door', 'other'];
+const KINDS = ['vehicle', 'luggage', 'bag', 'keys', 'pet', 'door', 'other'];
 
 const randomCode = () => Array.from(crypto.randomBytes(8), (b) => ALPHABET[b % ALPHABET.length]).join('');
 async function uniqueCode() {
@@ -27,13 +27,13 @@ const cleanPhone = (p) => String(p || '').replace(/[^\d+]/g, '').replace(/(?!^)\
 const validPhone = (p) => /^\+?\d{7,15}$/.test(String(p || ''));
 
 /** One tag per piece ordered (capped); the customer is the first owner and can change everything from their manage link */
-async function createForOrder(order, quantity, { userId } = {}) {
+async function createForOrder(order, quantity, { userId, kind = 'vehicle' } = {}) {
   const { ContactTag } = M();
   const tags = [];
   for (let i = 0; i < Math.min(Math.max(1, quantity), 200); i++) {
     tags.push(await ContactTag.create({
       code: await uniqueCode(), manage_token: crypto.randomBytes(18).toString('hex'), owner_name: order.name, owner_phone: cleanPhone(order.phone) || null, owner_email: order.email && !(await require('./orders').isDummyEmail(order.email)) ? order.email : null,
-      nfc_order_id: order.id, user_id: userId || order.user_id || null,
+      kind, nfc_order_id: order.id, user_id: userId || order.user_id || null,
     }));
   }
   return tags;

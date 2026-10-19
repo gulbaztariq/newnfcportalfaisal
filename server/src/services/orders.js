@@ -61,6 +61,7 @@ const ORDER_TYPES = {
   renewal: { label: 'Plan renewal', physical: false },
   upgrade: { label: 'Plan upgrade', physical: false },
   contact_tag: { label: 'Contact tag (number hidden)', physical: true },
+  airport_tag: { label: 'Airport tag (luggage)', physical: true },
 };
 const NO_SHIP_TYPES = ['digital', 'renewal', 'upgrade']; // nothing is delivered: no delivery or COD charge
 

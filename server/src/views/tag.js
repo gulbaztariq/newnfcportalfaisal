@@ -5,8 +5,8 @@
 const { esc } = require('../utils/html');
 const { KINDS } = require('../services/contacttags');
 
-const KIND_LABEL = { vehicle: 'Vehicle', bag: 'Bag', keys: 'Keys', pet: 'Pet', door: 'Door', other: 'Other' };
-const KIND_ICON = { vehicle: 'ri-car-line', bag: 'ri-handbag-line', keys: 'ri-key-2-line', pet: 'ri-bear-smile-line', door: 'ri-door-open-line', other: 'ri-price-tag-3-line' };
+const KIND_LABEL = { vehicle: 'Vehicle', luggage: 'Luggage (airport)', bag: 'Bag', keys: 'Keys', pet: 'Pet', door: 'Door', other: 'Other' };
+const KIND_ICON = { vehicle: 'ri-car-line', luggage: 'ri-suitcase-3-line', bag: 'ri-handbag-line', keys: 'ri-key-2-line', pet: 'ri-bear-smile-line', door: 'ri-door-open-line', other: 'ri-price-tag-3-line' };
 
 const CSS = `
 :root{--bg:#f4f6fb;--card:#fff;--tx:#0f172a;--muted:#64748b;--line:#e2e8f0;--p:#4f46e5;--onp:#fff;--ok:#16a34a;--bad:#dc2626}
@@ -34,16 +34,18 @@ const head = (title, appUrl, favicon) => `<meta charset="utf-8"><meta name="view
 /** the page someone sees after scanning the tag: no phone number anywhere in it */
 function renderTag({ tag, app, appUrl, nonce }) {
   const hasEmergency = !!tag.emergency_phone;
-  const title = tag.label || 'Contact the owner';
+  const lug = tag.kind === 'luggage'; // airport / luggage tag: wording for someone who found a bag
+  const title = tag.label || (lug ? 'Found this bag?' : 'Contact the owner');
+  const hint = lug ? 'e.g. The bag is at Lost & Found, Terminal 1' : 'e.g. Your car is blocking mine';
   return `<!doctype html><html lang="en"><head>${head(title, appUrl, app.favicon)}</head><body><main class="card">
 <div class="shield"><i class="${KIND_ICON[tag.kind] || KIND_ICON.other}" aria-hidden="true"></i></div>
 <h1>${esc(title)}</h1>
-<p class="note">${esc(tag.public_note || 'Need to reach the owner? Send a message or ask for a call back. Their phone number stays private.')}</p>
-<div class="acts" id="acts"><button class="btn pri" type="button" data-t="message"><i class="ri-chat-3-line"></i>Send a message</button><button class="btn" type="button" data-t="callback"><i class="ri-phone-line"></i>Ask for a call back</button></div>
+<p class="note">${esc(tag.public_note || (lug ? 'Thank you for helping. Tell the owner where the bag is and they will get in touch. Their phone number stays private.' : 'Need to reach the owner? Send a message or ask for a call back. Their phone number stays private.'))}</p>
+<div class="acts" id="acts"><button class="btn pri" type="button" data-t="message"><i class="${lug ? 'ri-map-pin-user-line' : 'ri-chat-3-line'}"></i>${lug ? 'I found this bag' : 'Send a message'}</button><button class="btn" type="button" data-t="callback"><i class="ri-phone-line"></i>${lug ? 'Ask the owner to call me' : 'Ask for a call back'}</button></div>
 <form id="f" hidden novalidate>
   ${hasEmergency ? `<div><label for="to">Who do you want to reach?</label><select id="to" name="to_role"><option value="owner">The owner</option><option value="emergency">${esc(tag.emergency_name || 'Emergency contact')} (emergency)</option></select></div>` : '<input type="hidden" name="to_role" value="owner">'}
   <div class="row two"><div><label for="n">Your name</label><input id="n" name="name" maxlength="80" autocomplete="name" placeholder="Optional"></div><div><label for="p" id="pl">Your phone number</label><input id="p" name="phone" maxlength="20" type="tel" inputmode="tel" autocomplete="tel" placeholder="So they can reach you"></div></div>
-  <div><label for="t">Message</label><textarea id="t" name="text" maxlength="500" placeholder="e.g. Your car is blocking mine"></textarea></div>
+  <div><label for="t">Message</label><textarea id="t" name="text" maxlength="500" placeholder="${esc(hint)}"></textarea></div>
   <input class="hp" name="website" tabindex="-1" autocomplete="off" aria-hidden="true">
   <button class="btn pri" type="submit" id="go"><i class="ri-send-plane-line"></i><span>Send</span></button>
   <div id="out" role="status" hidden></div>
@@ -53,7 +55,7 @@ function renderTag({ tag, app, appUrl, nonce }) {
 </main>
 <script nonce="${nonce}">
 (function(){var f=document.getElementById('f'),acts=document.getElementById('acts'),out=document.getElementById('out'),type='message';
-function show(t){type=t;f.hidden=false;document.getElementById('pl').textContent=t==='callback'?'Your phone number (required)':'Your phone number';document.getElementById('t').placeholder=t==='callback'?'When is a good time? (optional)':'e.g. Your car is blocking mine';f.querySelector('#p').focus()}
+function show(t){type=t;f.hidden=false;document.getElementById('pl').textContent=t==='callback'?'Your phone number (required)':'Your phone number';document.getElementById('t').placeholder=t==='callback'?'When is a good time? (optional)':${JSON.stringify(hint)};f.querySelector('#p').focus()}
 acts.addEventListener('click',function(e){var b=e.target.closest('[data-t]');if(b)show(b.getAttribute('data-t'))});
 f.addEventListener('submit',function(e){e.preventDefault();var d=Object.fromEntries(new FormData(f));d.type=type;out.hidden=false;
 if(type==='callback'&&!/^\\+?[0-9 ()-]{7,20}$/.test(d.phone||'')){out.className='msg bad';out.textContent='Please enter your phone number so the owner can call you back.';return}
@@ -79,9 +81,9 @@ function renderManage({ tag, messages = [], app, appUrl, nonce, saved, error }) 
 ${saved ? '<div class="msg ok">Saved.</div>' : ''}${error ? `<div class="msg bad">${esc(error)}</div>` : ''}
 <form method="post" action="/tag/${t.code}/manage" autocomplete="off">
 <input type="hidden" name="k" value="${esc(t.manage_token)}">
-<div class="row two"><div><label>Label (shown on the tag page)</label><input name="label" maxlength="80" value="${esc(t.label)}" placeholder="e.g. LEB-1234 Honda Civic"></div>
+<div class="row two"><div><label>Label (shown on the tag page)</label><input name="label" maxlength="80" value="${esc(t.label)}" placeholder="${t.kind === 'luggage' ? 'e.g. Black Samsonite suitcase' : 'e.g. LEB-1234 Honda Civic'}"></div>
 <div><label>Type</label><select name="kind">${KINDS.map((k) => `<option value="${k}"${t.kind === k ? ' selected' : ''}>${KIND_LABEL[k]}</option>`).join('')}</select></div></div>
-<div><label>Message shown to people who scan</label><input name="public_note" maxlength="300" value="${esc(t.public_note)}" placeholder="Optional"></div>
+<div><label>Message shown to people who scan</label><input name="public_note" maxlength="300" value="${esc(t.public_note)}" placeholder="${t.kind === 'luggage' ? 'e.g. Reward offered. Flying LHE to DXB, back on 14 Nov' : 'Optional'}"></div>
 <div class="row two"><div><label>Your name</label><input name="owner_name" maxlength="120" value="${esc(t.owner_name)}"></div><div><label>Your phone (never shown)</label><input name="owner_phone" maxlength="20" type="tel" value="${esc(t.owner_phone)}"></div></div>
 <div><label>Your e-mail</label><input name="owner_email" type="email" maxlength="191" value="${esc(t.owner_email)}"></div>
 <div class="row two"><div><label>Emergency contact name</label><input name="emergency_name" maxlength="120" value="${esc(t.emergency_name)}" placeholder="Optional"></div><div><label>Emergency phone (never shown)</label><input name="emergency_phone" maxlength="20" type="tel" value="${esc(t.emergency_phone)}"></div></div>

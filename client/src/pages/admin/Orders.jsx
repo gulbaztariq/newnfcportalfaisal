@@ -19,7 +19,7 @@ import {
 
 export const rs = (v, cur = 'Rs') => `${cur} ${Number(v || 0).toLocaleString('en-US', { maximumFractionDigits: 2 })}`;
 const STEP_ICONS = { pending: Clock, confirmed: Check, designing: Palette, printing: Printer, ready: PackageCheck, shipped: Truck, delivered: Home, returned: Undo2, cancelled: XCircle, processing: RefreshCw };
-const ORDER_TYPE_LABEL = { nfc_profile: 'NFC Business Card', social: 'Social / review card', wholesale: 'Wholesale', sample: 'Samples', card_printing: 'Card + printing', printing: 'Printing only', digital: 'Digital profile', renewal: 'Renewal', upgrade: 'Plan upgrade', contact_tag: 'Contact tag' };
+const ORDER_TYPE_LABEL = { nfc_profile: 'NFC Business Card', social: 'Social / review card', wholesale: 'Wholesale', sample: 'Samples', card_printing: 'Card + printing', printing: 'Printing only', digital: 'Digital profile', renewal: 'Renewal', upgrade: 'Plan upgrade', contact_tag: 'Contact tag', airport_tag: 'Airport tag' };
 const SOURCE = { shop: ['Website', 'primary'], portal: ['Portal', 'info'], admin: ['Manual', 'neutral'] };
 /** who created the order: the staff member, otherwise the customer (website / portal) */
 const createdBy = (o) => (o.creator ? `${o.creator.first_name} ${o.creator.last_name}`.trim() : o.source === 'admin' ? 'Staff' : 'Customer');
@@ -427,9 +427,10 @@ function ProductForm({ product, onClose, onSaved }) {
         </Field>
         <Field label="Order type this product is for" className="sm:col-span-2" hint="Decides which order types offer it. A tag that hides the owner's number is a Contact tag.">
           <Select value={v.product_kind} onChange={(x) => form.set('product_kind', x)} allowEmpty placeholder="Not set (offered for normal cards)" options={[
-            { value: 'contact_tag', label: 'Contact tag (number hidden)' }, { value: 'blank_card', label: 'Blank NFC card / tag' }, { value: 'nfc_profile', label: 'NFC Business Card' }, { value: 'social_static', label: 'Social card: static link' },
+            { value: 'airport_tag', label: 'Airport tag (luggage)' }, { value: 'contact_tag', label: 'Contact tag (number hidden)' }, { value: 'blank_card', label: 'Blank NFC card / tag' }, { value: 'nfc_profile', label: 'NFC Business Card' }, { value: 'social_static', label: 'Social card: static link' },
             { value: 'social_dynamic', label: 'Social card: dynamic link' }, { value: 'social_profile', label: 'Social profile (all-in-one)' }, { value: 'printing', label: 'Printing only' }, { value: 'digital', label: 'Digital profile' }]} />
         </Field>
+        {['contact_tag', 'airport_tag'].includes(v.product_kind) && <Field label="Tags per unit" hint="A pack of 2 makes 2 tags when it is ordered"><Input {...form.input('tags_per_unit')} type="number" min="1" max="50" /></Field>}
         <Field label="Short description" className="sm:col-span-2"><Input {...form.input('short_description')} maxLength={500} /></Field>
         <Field label="Description" className="sm:col-span-2"><Textarea {...form.input('description')} rows={3} /></Field>
         <div className="space-y-2 sm:col-span-2">

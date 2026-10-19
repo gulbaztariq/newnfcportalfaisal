@@ -55,7 +55,7 @@ export function ContactTags() {
         <DataTable loading={list.loading} rows={list.rows}
           empty={<EmptyState icon={ShieldCheck} title="No contact tags yet" description="Choose the Contact tag type in New order. One tag is made per piece, each with its own link and QR code." />}
           columns={[
-            { key: 'c', label: 'Tag', render: (t) => <div><p className="font-mono text-sm font-semibold text-primary">{t.code}</p><p className="text-xs text-muted-foreground">{t.label || 'No label yet'}{t.order_number ? ` · ${t.order_number}` : ''}</p></div> },
+            { key: 'c', label: 'Tag', render: (t) => <div><p className="flex items-center gap-2 font-mono text-sm font-semibold text-primary">{t.code}{t.kind === 'luggage' && <Badge tone="info">Luggage</Badge>}</p><p className="text-xs text-muted-foreground">{t.label || 'No label yet'}{t.order_number ? ` · ${t.order_number}` : ''}</p></div> },
             { key: 'o', label: 'Owner', render: (t) => <div className="text-sm"><p>{t.owner_name || '-'}</p><p className="text-xs text-muted-foreground">{t.owner_phone || t.owner_email || ''}</p></div> },
             { key: 's', label: 'Scans', render: (t) => <span className="tabular-nums">{t.scans}</span> },
             { key: 'm', label: 'Messages', render: (t) => <button type="button" onClick={() => setOpen(t)} className="cursor-pointer">{t.messages ? <Badge tone={t.new_messages ? 'primary' : 'neutral'}>{t.messages}{t.new_messages ? ` · ${t.new_messages} new` : ''}</Badge> : <span className="text-muted-foreground">0</span>}</button> },
