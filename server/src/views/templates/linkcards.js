@@ -4,7 +4,25 @@
  * All layouts are in LINK_LAYOUTS (catalog.js); render.js adds the shared `.lk` class and the .hrs chip.
  */
 module.exports = String.raw`
-.hrs{display:none}
+.hrs,.br{display:none}
+
+/* ================================================================== menu / catalogue page viewer */
+.mv{position:fixed;inset:0;z-index:70;background:#07080c;display:none;flex-direction:column;color:#fff}
+.mv.show{display:flex;animation:vc-fade .25s ease}
+.mv-bar{display:flex;align-items:center;gap:12px;padding:12px 16px calc(8px);flex:none}
+.mv-bar b{flex:1;font-size:16px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mv-bar span{font-size:13px;opacity:.75;font-variant-numeric:tabular-nums}
+.mv-x{width:42px;height:42px;border-radius:50%;border:0;background:rgba(255,255,255,.14);color:#fff;font-size:24px;line-height:1;cursor:pointer}
+.mv-track{flex:1;min-height:0;display:flex;overflow-x:auto;overflow-y:hidden;scroll-snap-type:x mandatory;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+.mv-track::-webkit-scrollbar{display:none}
+.mv-s{flex:0 0 100%;min-width:0;scroll-snap-align:center;scroll-snap-stop:always;display:grid;place-items:center;overflow:auto;padding:0 10px 18px}
+.mv-s img{max-width:100%;max-height:100%;object-fit:contain;border-radius:10px;cursor:zoom-in;background:#111;user-select:none}
+.mv-s.z{place-items:start}
+.mv-s.z img{max-width:none;max-height:none;width:230%;cursor:zoom-out}
+.mv-n{position:absolute;top:50%;width:46px;height:46px;margin-top:-23px;border-radius:50%;border:0;background:rgba(255,255,255,.16);color:#fff;font-size:26px;cursor:pointer;display:grid;place-items:center;backdrop-filter:blur(8px)}
+.mv-n.prev{left:12px}.mv-n.next{right:12px}
+@media(hover:none){.mv-n{display:none}}
+.s-menu .links a small{font-weight:500}
 
 /* ================================================================== shared base */
 .lk{--r:22px;background:var(--bg)}
@@ -18,7 +36,8 @@ module.exports = String.raw`
 .lk .name{font-size:31px;font-weight:800;letter-spacing:-.03em}
 .lk .name i{color:var(--p)}
 .lk .role{font-size:17px;margin-top:6px;opacity:.75;color:var(--tx);font-weight:400}
-.lk .meta{flex-direction:column;align-items:center;gap:10px;margin-top:18px}
+.lk .meta{flex-direction:row;flex-wrap:wrap;justify-content:center;align-items:center;gap:10px;margin-top:18px}
+.lk .br{display:block;flex-basis:100%;height:0;margin:-4px 0}
 .lk .company,.lk .loc,.lk .hrs{display:inline-flex;align-items:center;gap:7px;padding:8px 16px;border-radius:999px;background:color-mix(in srgb,var(--tx) 6%,var(--bg));border:1px solid var(--line);color:var(--tx);font-size:14px;font-weight:600;line-height:1.3}
 .lk .company{color:var(--p)}
 .lk .loc i,.lk .hrs i{color:var(--p)}

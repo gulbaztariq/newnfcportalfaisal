@@ -100,10 +100,10 @@ r.get('/vcards/:id', wrap(async (req, res) => {
 const vcardUpload = makeUpload('vcards', { maxMb: 5 }).fields([{ name: 'profile_image', maxCount: 1 }, { name: 'cover_image', maxCount: 1 }]);
 const videoUpload = makeUpload('vcards', { types: { 'video/mp4': '.mp4', 'video/webm': '.webm' }, maxMb: 25 }).single('video');
 const VCARD_FIELDS = ['name', 'occupation', 'description', 'first_name', 'last_name', 'email', 'region_code', 'phone', 'alternative_email', 'alternative_phone',
-  'location', 'location_url', 'company', 'job_title', 'dob', 'site_title', 'meta_keyword', 'meta_description', 'google_analytics', 'default_language', 'custom_css', 'custom_code', 'custom_code_enabled'];
+  'location', 'location_url', 'company', 'job_title', 'dob', 'menu_title', 'menu_desc', 'site_title', 'meta_keyword', 'meta_description', 'google_analytics', 'default_language', 'custom_css', 'custom_code', 'custom_code_enabled'];
 const JSON_FIELDS = ['theme', 'social_links', 'custom_links', 'business_hours', 'sections', 'section_order', 'section_titles', 'iframes', 'payment_links', 'qr_settings', 'appointment_settings'];
 // sections of the public card that can be shown/hidden, reordered and renamed (views/templates/render.js)
-const SECTION_KEYS = ['about', 'contact', 'social', 'links', 'services', 'products', 'appointments', 'gallery', 'testimonials', 'payments', 'blog', 'embeds', 'map', 'hours', 'qr', 'enquiry'];
+const SECTION_KEYS = ['about', 'contact', 'social', 'links', 'menu', 'services', 'products', 'appointments', 'gallery', 'testimonials', 'payments', 'blog', 'embeds', 'map', 'hours', 'qr', 'enquiry'];
 const sanitizeHtml = require('sanitize-html');
 const legalHtml = (h) => sanitizeHtml(String(h || ''), { allowedTags: sanitizeHtml.defaults.allowedTags.concat(['h1', 'h2', 'u', 's']), allowedSchemes: ['http', 'https', 'mailto', 'tel'] });
 const hhmm = (t) => (/^\d{2}:\d{2}$/.test(String(t)) ? t : null);
@@ -248,6 +248,29 @@ r.get('/vcards/:id/qrcode', wrap(async (req, res) => {
   }
   const png = await QRCode.toBuffer(target, opts);
   res.set('Content-Type', 'image/png').set('Content-Disposition', `attachment; filename="${v.url_alias}-qr.png"`).send(png);
+}));
+
+/* multi-page menu / catalogue viewer: pages are images, shown full screen behind the "View Full Menu" card */
+const MENU_MAX = 30;
+const menuUpload = makeUpload('vcards', { maxMb: 8 }).array('pages', 10);
+r.post('/vcards/:id/menu', menuUpload, trackStorage, wrap(async (req, res) => {
+  const v = await ownVcard(req);
+  const files = req.files || [];
+  if (!files.length) fail(422, 'Validation failed', { pages: 'Choose one or more images' });
+  const cur = Array.isArray(v.menu_pages) ? v.menu_pages : [];
+  const added = files.map((f) => fileUrl('vcards', f));
+  if (cur.length + added.length > MENU_MAX) { for (const u of added) removeOwned(req, u); fail(422, 'Validation failed', { pages: `A menu can have up to ${MENU_MAX} pages` }); }
+  const pages = [...cur, ...added];
+  await v.update({ menu_pages: pages });
+  res.json({ data: { menu_pages: pages }, message: `${added.length} page${added.length > 1 ? 's' : ''} added` });
+}));
+r.put('/vcards/:id/menu', wrap(async (req, res) => {
+  const v = await ownVcard(req);
+  const cur = Array.isArray(v.menu_pages) ? v.menu_pages : [];
+  const keep = [...new Set((Array.isArray(req.body.pages) ? req.body.pages : []).filter((u) => cur.includes(u)))]; // reorder / remove only, never add arbitrary URLs
+  for (const u of cur.filter((x) => !keep.includes(x))) removeOwned(req, u);
+  await v.update({ menu_pages: keep });
+  res.json({ data: { menu_pages: keep }, message: 'Menu updated' });
 }));
 
 r.post('/vcards/:id/cover-video', videoUpload, trackStorage, wrap(async (req, res) => {

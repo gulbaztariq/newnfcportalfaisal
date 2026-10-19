@@ -11,7 +11,7 @@ import { PageHeader, Card, CardHeader, CardBody, Button, ButtonLink, Field, Inpu
 import { TemplatePicker } from './Vcards';
 import AiButton from '@/components/AiButton';
 import { MediaTab, PaymentLinksTab, LegalTab, QrTab, AppointmentsTab, ProductsTab, BlogTab, PagesTab, AdvancedExtras } from './EditorExtras';
-import { GripVertical, Eye, EyeOff } from 'lucide-react';
+import { GripVertical, Eye, EyeOff, BookOpen, Upload } from 'lucide-react';
 import { Film, Package, CalendarClock, Newspaper, FileStack, Wallet as WalletIcon, QrCode as QrIcon, Scale, BarChart3 } from 'lucide-react';
 
 const SOCIAL = [
@@ -29,7 +29,7 @@ const FONTS = [...SANS.map((f) => `'${f}', system-ui, sans-serif`), ...SERIF.map
 const LINK_ICONS = [['ri-links-line', 'Link'], ['ri-book-open-line', 'Menu / catalogue'], ['ri-restaurant-2-line', 'Restaurant'], ['ri-shopping-bag-3-line', 'Shop'], ['ri-calendar-event-line', 'Booking'], ['ri-map-pin-2-line', 'Location'], ['ri-phone-line', 'Phone'], ['ri-mail-line', 'E-mail'], ['ri-file-text-line', 'Document'], ['ri-gift-line', 'Offer'], ['ri-star-line', 'Reviews'], ['ri-play-circle-line', 'Video'], ['ri-global-line', 'Website']].map(([value, label]) => ({ value, label }));
 const RADII = [{ value: 'sharp', label: 'Sharp' }, { value: 'soft', label: 'Soft' }, { value: 'round', label: 'Round' }];
 // [key, editor label, default heading on the card]; order = default order on the card
-const SECTIONS = [['about', 'About', 'About'], ['contact', 'Contact details', 'Contact'], ['social', 'Social icons', 'Social'], ['links', 'Custom links', 'Links'], ['services', 'Services', 'Services'], ['products', 'Products', 'Products'], ['appointments', 'Appointments', 'Book an Appointment'], ['gallery', 'Gallery', 'Gallery'], ['testimonials', 'Testimonials', 'Testimonials'], ['payments', 'Payment links', 'Pay Me'], ['blog', 'Blog', 'Blog'], ['embeds', 'Embeds', 'Videos'], ['map', 'Map', 'Location'], ['hours', 'Business hours', 'Business Hours'], ['qr', 'QR code', 'QR Code'], ['enquiry', 'Enquiry form', 'Get in touch']];
+const SECTIONS = [['about', 'About', 'About'], ['contact', 'Contact details', 'Contact'], ['social', 'Social icons', 'Social'], ['links', 'Custom links', 'Links'], ['menu', 'Menu viewer', 'Menu'], ['services', 'Services', 'Services'], ['products', 'Products', 'Products'], ['appointments', 'Appointments', 'Book an Appointment'], ['gallery', 'Gallery', 'Gallery'], ['testimonials', 'Testimonials', 'Testimonials'], ['payments', 'Payment links', 'Pay Me'], ['blog', 'Blog', 'Blog'], ['embeds', 'Embeds', 'Videos'], ['map', 'Map', 'Location'], ['hours', 'Business hours', 'Business Hours'], ['qr', 'QR code', 'QR Code'], ['enquiry', 'Enquiry form', 'Get in touch']];
 const PALETTES = [['#6d5dfc', '#b44cf5'], ['#0ea5e9', '#22c55e'], ['#f43f5e', '#f59e0b'], ['#111827', '#d4af37'], ['#0f766e', '#84cc16'], ['#db2777', '#8b5cf6']];
 const CODE_PLACEHOLDER = `<!doctype html>
 <html>
@@ -43,7 +43,7 @@ const CODE_PLACEHOLDER = `<!doctype html>
 </html>`;
 
 const TABS = [
-  ['basic', IdCard, 'Basic details'], ['design', Palette, 'Design'], ['media', Film, 'Media & embeds'], ['social', Share2, 'Social links'],
+  ['basic', IdCard, 'Basic details'], ['design', Palette, 'Design'], ['menu', BookOpen, 'Menu / catalogue'], ['media', Film, 'Media & embeds'], ['social', Share2, 'Social links'],
   ['links', Link2, 'Custom links'], ['services', Briefcase, 'Services'], ['products', Package, 'Products'], ['gallery', Images, 'Gallery'],
   ['testimonials', MessageSquareQuote, 'Testimonials'], ['appointments', CalendarClock, 'Appointments'], ['blog', Newspaper, 'Blog'],
   ['pages', FileStack, 'Custom pages'], ['payments', WalletIcon, 'Payment links'], ['hours', Clock, 'Business hours'], ['qr', QrIcon, 'QR code'],
@@ -83,7 +83,7 @@ export default function VcardEditor() {
 
   const save = async () => {
     setSaving(true);
-    const fields = ['name', 'url_alias', 'occupation', 'description', 'first_name', 'last_name', 'email', 'region_code', 'phone', 'alternative_email', 'alternative_phone', 'location', 'location_url', 'company', 'job_title', 'dob', 'default_language', 'template_id', 'theme', 'social_links', 'custom_links', 'business_hours', 'sections', 'section_order', 'section_titles', 'status', 'enable_enquiry_form', 'show_qr_code', 'hide_branding', 'custom_css', 'site_title', 'meta_keyword', 'meta_description', 'google_analytics', 'cover_type', 'youtube_link', 'instagram_embed', 'linkedin_embed', 'iframes', 'location_embed', 'payment_links', 'terms_conditions', 'privacy_policy', 'sticky_bar', 'newsletter_popup', 'ask_before_contact', 'enquiry_attachment', 'pwa_enable', 'business_directory', 'week_format', 'qr_settings', 'appointment_settings', 'custom_domain', 'custom_code', 'custom_code_enabled'];
+    const fields = ['name', 'url_alias', 'occupation', 'description', 'first_name', 'last_name', 'email', 'region_code', 'phone', 'alternative_email', 'alternative_phone', 'location', 'location_url', 'company', 'job_title', 'dob', 'menu_title', 'menu_desc', 'default_language', 'template_id', 'theme', 'social_links', 'custom_links', 'business_hours', 'sections', 'section_order', 'section_titles', 'status', 'enable_enquiry_form', 'show_qr_code', 'hide_branding', 'custom_css', 'site_title', 'meta_keyword', 'meta_description', 'google_analytics', 'cover_type', 'youtube_link', 'instagram_embed', 'linkedin_embed', 'iframes', 'location_embed', 'payment_links', 'terms_conditions', 'privacy_policy', 'sticky_bar', 'newsletter_popup', 'ask_before_contact', 'enquiry_attachment', 'pwa_enable', 'business_directory', 'week_format', 'qr_settings', 'appointment_settings', 'custom_domain', 'custom_code', 'custom_code_enabled'];
     const payload = {};
     for (const f of fields) payload[f] = typeof v[f] === 'boolean' ? (v[f] ? '1' : '0') : v[f] ?? '';
     if (v.password || v.remove_password) payload.password = v.remove_password ? '' : v.password;
@@ -291,6 +291,7 @@ export default function VcardEditor() {
               </Card>
             )}
 
+            {tab === 'menu' && <MenuTab v={v} form={form} vcardId={id} pages={data.menu_pages || []} onPages={(pages) => setData((x) => ({ ...x, menu_pages: pages }))} />}
             {tab === 'media' && <MediaTab v={v} form={form} locked={locked} Upgrade={Upgrade} vcardId={id} onVideo={(nd) => { setData((x) => ({ ...x, ...nd })); form.set('cover_video', nd.cover_video); form.set('cover_type', 'video'); setRev((r) => r + 1); }} />}
             {tab === 'products' && <ProductsTab vcardId={id} locked={locked} Upgrade={Upgrade} onChanged={() => setRev((r) => r + 1)} />}
             {tab === 'appointments' && <AppointmentsTab v={v} form={form} locked={locked} Upgrade={Upgrade} />}
@@ -388,6 +389,57 @@ export default function VcardEditor() {
 }
 
 /** Services / testimonials / gallery with dialog form */
+/** Multi-page menu / catalogue: images shown full screen (swipe, zoom) behind the "View Full Menu" card */
+function MenuTab({ v, form, vcardId, pages, onPages }) {
+  const [busy, setBusy] = useState(false);
+  const base = `/user/vcards/${vcardId}/menu`;
+  const upload = async (files) => {
+    if (!files.length) return;
+    setBusy(true);
+    try {
+      for (let i = 0; i < files.length; i += 10) { // the server accepts 10 images per request
+        const fd = new FormData(); files.slice(i, i + 10).forEach((f) => fd.append('pages', f));
+        const d = await run(api.post(base, fd), i + 10 >= files.length ? 'Pages uploaded' : undefined);
+        onPages(d.data.menu_pages);
+      }
+    } catch { /* run() already toasted the error */ } finally { setBusy(false); }
+  };
+  const persist = async (next) => { onPages(next); try { await run(api.put(base, { pages: next })); } catch { /* keep local order, error toasted */ } };
+  return (
+    <>
+      <Card>
+        <CardHeader icon={BookOpen} title="Full menu / catalogue" description="Upload the pages of your menu, price list or brochure. Visitors open them full screen from a button on your card, swipe between pages and tap to zoom." />
+        <CardBody className="grid gap-4 sm:grid-cols-2">
+          <Field label="Button title" hint="Shown on the card"><Input {...form.input('menu_title')} placeholder="View Full Menu" maxLength={80} /></Field>
+          <Field label="Button description"><Input {...form.input('menu_desc')} placeholder="Burgers, pizzas and deals" maxLength={120} /></Field>
+        </CardBody>
+      </Card>
+      <Card>
+        <CardHeader title={`Pages (${pages.length}/30)`} description="Drag to reorder. Changes to pages are saved immediately."
+          actions={<label className={cn('inline-flex h-9 cursor-pointer items-center gap-2 rounded-xl bg-primary px-4 text-sm font-medium text-primary-foreground', busy && 'pointer-events-none opacity-60')}><Upload className="size-4" />{busy ? 'Uploading...' : 'Add pages'}<input type="file" accept="image/jpeg,image/png,image/webp" multiple className="sr-only" disabled={busy || pages.length >= 30} onChange={(e) => { upload([...e.target.files]); e.target.value = ''; }} /></label>} />
+        <CardBody>
+          {!pages.length ? <EmptyState icon={BookOpen} title="No pages yet" description="Add JPG, PNG or WebP images, one per page (up to 8 MB each)." /> : (
+            <Reorder.Group axis="y" values={pages} onReorder={(o) => onPages(o)} className="space-y-2">
+              {pages.map((u, i) => <MenuPage key={u} u={u} i={i} onDrop={() => persist(pages)} onRemove={() => persist(pages.filter((x) => x !== u))} />)}
+            </Reorder.Group>
+          )}
+        </CardBody>
+      </Card>
+    </>
+  );
+}
+function MenuPage({ u, i, onDrop, onRemove }) {
+  const controls = useDragControls();
+  return (
+    <Reorder.Item value={u} dragListener={false} dragControls={controls} onDragEnd={onDrop} className="flex items-center gap-3 rounded-2xl border border-border bg-card p-2 pr-3 shadow-xs" whileDrag={{ scale: 1.02, boxShadow: '0 18px 40px -18px rgba(0,0,0,.35)' }}>
+      <button type="button" onPointerDown={(e) => { e.preventDefault(); controls.start(e); }} className="grid size-9 shrink-0 cursor-grab touch-none place-items-center rounded-xl text-muted-foreground hover:bg-muted active:cursor-grabbing" aria-label={`Drag page ${i + 1}`}><GripVertical className="size-4" /></button>
+      <img src={u} alt="" className="h-16 w-12 shrink-0 rounded-lg border border-border object-cover" />
+      <p className="flex-1 text-sm font-medium">Page {i + 1}</p>
+      <Button variant="danger-soft" size="icon-sm" onClick={onRemove} aria-label={`Remove page ${i + 1}`}><Trash2 /></Button>
+    </Reorder.Item>
+  );
+}
+
 /** Drag-and-drop list of card sections: order (section_order), heading (section_titles) and visibility (sections) */
 function SectionsEditor({ v, form }) {
   const keys = SECTIONS.map(([k]) => k);

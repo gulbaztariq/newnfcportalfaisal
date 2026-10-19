@@ -4,7 +4,7 @@ const bcrypt = require('bcryptjs');
 const rateLimit = require('express-rate-limit');
 const QRCode = require('qrcode');
 const dayjs = require('dayjs');
-const { Op } = require('sequelize');
+const { Op, fn, col } = require('sequelize');
 const M = require('../models');
 const { wrap, fail, validate } = require('../utils/http');
 const settings = require('../services/settings');
@@ -60,20 +60,42 @@ api.get('/blogs/:slug', wrap(async (req, res) => {
   res.json({ data: b });
 }));
 
-/* business directory (vCards + WhatsApp stores that opted in) */
+/* business directory (vCards + WhatsApp stores that opted in): Recent / Popular / Trending / All, type filter, 12 per page */
+const DIR_PER_PAGE = 12;
 api.get('/directory', wrap(async (req, res) => {
-  if ((await settings.get('business_directory_enable')) === '0') return res.json({ data: [], stores: [], templates: [] });
+  const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+  if ((await settings.get('business_directory_enable')) === '0') return res.json({ data: [], meta: { page, per_page: DIR_PER_PAGE, total: 0, pages: 1 }, templates: [] });
   const q = String(req.query.search || '').trim().slice(0, 80);
+  const sort = ['recent', 'popular', 'trending', 'all'].includes(req.query.sort) ? req.query.sort : 'recent';
+  const type = ['all', 'vcard', 'store'].includes(req.query.type) ? req.query.type : 'all';
+  const templateId = Number(req.query.template_id) || 0;
   const where = { business_directory: true, status: true };
   if (q) where[Op.or] = ['name', 'occupation', 'company', 'location', 'first_name', 'last_name'].map((f) => ({ [f]: { [Op.like]: `%${q}%` } }));
-  if (req.query.template_id) where.template_id = Number(req.query.template_id);
-  const [vcards, stores, templates] = await Promise.all([
-    M.Vcard.findAll({ where, attributes: ['id', 'name', 'first_name', 'last_name', 'url_alias', 'occupation', 'company', 'location', 'profile_image', 'cover_image', 'is_verified', 'template_id', 'theme'], include: [{ model: M.Template, attributes: ['name', 'profession'] }, { model: M.User, attributes: ['is_active', 'org_status'], where: { is_active: true, org_status: { [Op.or]: [null, { [Op.ne]: 'blocked' }] } } }], order: [['cover_image', 'DESC'], ['views', 'DESC']], limit: 60 }),
-    req.query.template_id ? [] : M.WhatsappStore.findAll({ where: { business_directory: true, status: true, ...(q ? { name: { [Op.like]: `%${q}%` } } : {}) }, attributes: ['id', 'name', 'url_alias', 'slogan', 'logo', 'cover_image', 'address'], limit: 30 }),
+  if (templateId) where.template_id = templateId;
+  const [vcards, stores, templates, recent] = await Promise.all([
+    type === 'store' ? [] : M.Vcard.findAll({ where, attributes: ['id', 'name', 'first_name', 'last_name', 'url_alias', 'occupation', 'company', 'location', 'description', 'profile_image', 'cover_image', 'is_verified', 'template_id', 'theme', 'views', 'created_at'], include: [{ model: M.Template, attributes: ['name', 'profession'] }, { model: M.User, attributes: ['is_active', 'org_status'], where: { is_active: true, org_status: { [Op.or]: [null, { [Op.ne]: 'blocked' }] } } }], limit: 1000 }),
+    type === 'vcard' || templateId ? [] : M.WhatsappStore.findAll({ where: { business_directory: true, status: true, ...(q ? { name: { [Op.like]: `%${q}%` } } : {}) }, attributes: ['id', 'name', 'url_alias', 'slogan', 'logo', 'cover_image', 'address', 'views', 'created_at'], limit: 1000 }),
     M.Template.findAll({ where: { status: true }, attributes: ['id', 'name', 'profession'], order: [['id', 'ASC']] }),
+    // trending = visits in the last 7 days
+    sort === 'trending' && type !== 'store' ? M.VcardView.findAll({ where: { created_at: { [Op.gte]: new Date(Date.now() - 7 * 864e5) } }, attributes: ['vcard_id', [fn('COUNT', col('id')), 'n']], group: ['vcard_id'], raw: true }) : [],
   ]);
+  const trend = new Map(recent.map((x) => [x.vcard_id, Number(x.n)]));
+  const items = [
+    ...vcards.map((v) => ({
+      type: 'vcard', id: v.id, name: [v.first_name, v.last_name].filter(Boolean).join(' ') || v.name, url: `/${v.url_alias}`, tagline: [v.occupation, v.company].filter(Boolean).join(' · '),
+      description: String(v.description || '').slice(0, 140), location: v.location, cover: v.cover_image, avatar: v.profile_image, verified: v.is_verified, label: v.template?.profession || 'vCard', color: v.theme?.primary || null,
+      views: v.views || 0, trend: trend.get(v.id) || 0, date: v.get('created_at'),
+    })),
+    ...stores.map((st) => ({ type: 'store', id: st.id, name: st.name, url: `/s/${st.url_alias}`, tagline: st.slogan, location: st.address, cover: st.cover_image, avatar: st.logo, label: 'WhatsApp store', views: st.views || 0, trend: 0, date: st.get('created_at') })),
+  ];
+  const byDate = (a, b) => new Date(b.date) - new Date(a.date);
+  items.sort(sort === 'popular' ? (a, b) => b.views - a.views || byDate(a, b)
+    : sort === 'trending' ? (a, b) => b.trend - a.trend || b.views - a.views || byDate(a, b)
+      : sort === 'all' ? (a, b) => a.name.localeCompare(b.name) : byDate);
+  const total = items.length;
+  const pages = Math.max(1, Math.ceil(total / DIR_PER_PAGE));
   res.set('Cache-Control', 'public, max-age=60');
-  res.json({ data: vcards.map((v) => { const j = v.toJSON(); delete j.user; return j; }), stores, templates });
+  res.json({ data: items.slice((Math.min(page, pages) - 1) * DIR_PER_PAGE, Math.min(page, pages) * DIR_PER_PAGE), meta: { page: Math.min(page, pages), per_page: DIR_PER_PAGE, total, pages }, templates });
 }));
 
 async function guardEmail(email) { if (email && (await extras.isBlockedEmail(email))) fail(422, 'Validation failed', { email: 'This e-mail domain is not allowed' }); }
@@ -205,7 +227,7 @@ const SAMPLE = {
   description: 'I design delightful digital products and brand experiences. Let’s build something great together.',
   email: 'alex@example.com', phone: '5550100', region_code: '1', location: 'San Francisco, CA', is_verified: true, show_qr_code: false, enable_enquiry_form: true, sticky_bar: false,
   social_links: { website: 'https://example.com', linkedin: 'https://linkedin.com', instagram: 'https://instagram.com', twitter: 'https://x.com', whatsapp: 'https://wa.me/15550100' },
-  custom_links: [{ label: 'My Portfolio', url: 'https://example.com', desc: 'Selected work and case studies' }, { label: 'View Full Menu', url: 'https://example.com', desc: 'Burgers, pizzas and deals', badge: '8 pages', icon: 'ri-book-open-line', featured: true }],
+  custom_links: [{ label: 'My Portfolio', url: 'https://example.com', desc: 'Selected work and case studies' }, { label: 'Book a table', url: 'https://example.com', desc: 'Reserve in 30 seconds', badge: 'New', icon: 'ri-calendar-event-line', featured: true }],
   business_hours: { mon: { open: true, from: '09:00', to: '17:00' }, tue: { open: true, from: '09:00', to: '17:00' }, wed: { open: true, from: '09:00', to: '17:00' }, thu: { open: true, from: '09:00', to: '17:00' }, fri: { open: true, from: '09:00', to: '15:00' } },
   sections: {}, theme: {},
 };
@@ -222,7 +244,7 @@ pages.get('/t/preview/:slug', wrap(async (req, res) => {
   // ?full=1 shows the quick-action bar and a sample gallery (the picker thumbnails leave them out)
   const full = req.query.full === '1';
   const gallery = full ? Array.from({ length: 6 }, (_, i) => ({ image: '/brand/sample-portrait.svg', caption: `Sample ${i + 1}` })) : [];
-  res.send(render({ v: { ...SAMPLE, sticky_bar: full, social_links: { ...SAMPLE.social_links, telegram: 'https://t.me/example' }, theme: req.query.primary ? { primary: `#${String(req.query.primary).replace(/[^0-9a-f]/gi, '')}` } : {} }, template: tpl, services, gallery, testimonials, app: s, appUrl, nonce: res.locals.nonce }));
+  res.send(render({ v: { ...SAMPLE, sticky_bar: full, menu_pages: full ? ['/brand/sample-portrait.svg', '/brand/sample-portrait.svg', '/brand/sample-portrait.svg'] : [], menu_desc: 'Burgers, pizzas and deals', social_links: { ...SAMPLE.social_links, telegram: 'https://t.me/example' }, theme: req.query.primary ? { primary: `#${String(req.query.primary).replace(/[^0-9a-f]/gi, '')}` } : {} }, template: tpl, services, gallery, testimonials, app: s, appUrl, nonce: res.locals.nonce }));
 }));
 
 const unlockSig = (v) => crypto.createHmac('sha256', jwtSecret).update(`${v.id}:${v.password}`).digest('hex').slice(0, 32);

@@ -219,6 +219,9 @@ const Vcard = sequelize.define('vcard', {
   sections: json('sections', {}), // { services:true, gallery:true, ... } visibility switches
   section_order: json('section_order', []), // ['about','contact',...] owner's drag-and-drop order
   section_titles: json('section_titles', {}), // { services: 'What I do' } custom section headings
+  menu_pages: json('menu_pages', []), // ['/uploads/vcards/..jpg', ...] pages of the full menu / catalogue viewer
+  menu_title: T.STRING(80), // 'View Full Menu'
+  menu_desc: T.STRING(120), // 'Burgers, pizzas and deals'
   password: T.STRING(191),
   custom_css: T.TEXT,
   custom_code: T.TEXT('long'), // own HTML/CSS/JS design, served sandboxed from /c/{alias}

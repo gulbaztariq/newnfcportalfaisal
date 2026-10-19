@@ -175,7 +175,7 @@ function footer(v, app, appUrl, L, pages) {
 function render({ v, template, services = [], gallery = [], testimonials = [], products = [], blogs = [], pages = [], app, appUrl, nonce }) {
   const th = themeOf(v, template, app);
   const { layout, L } = th;
-  const sec = { about: true, contact: true, social: true, services: true, gallery: true, testimonials: true, hours: true, qr: true, enquiry: true, links: true, products: true, appointments: true, blog: true, embeds: true, payments: true, map: true, ...(v.sections || {}) };
+  const sec = { about: true, menu: true, contact: true, social: true, services: true, gallery: true, testimonials: true, hours: true, qr: true, enquiry: true, links: true, products: true, appointments: true, blog: true, embeds: true, payments: true, map: true, ...(v.sections || {}) };
   const link = `${appUrl}/${v.url_alias}`;
   const fullName = [v.first_name, v.last_name].filter(Boolean).join(' ') || v.name;
   const initials = fullName.split(/\s+/).map((w) => w[0]).slice(0, 2).join('').toUpperCase();
@@ -213,7 +213,7 @@ function render({ v, template, services = [], gallery = [], testimonials = [], p
 
   const linkLayout = LINK_LAYOUTS.has(layout);
   const todayHours = hours[today];
-  const hoursChip = linkLayout && hasHours ? `<span class="hrs"><i class="ri-time-line"></i>${todayHours?.open ? `${L.open || 'Open'} ${t12(todayHours.from)} - ${t12(todayHours.to)}` : (L.closed || 'Closed')}</span>` : '';
+  const hoursChip = linkLayout && hasHours ? `<span class="br"></span><span class="hrs"><i class="ri-time-line"></i>${todayHours?.open ? `${L.open || 'Open'} ${t12(todayHours.from)} - ${t12(todayHours.to)}` : (L.closed || 'Closed')}</span>` : '';
   // link-card layouts: socials and custom links become one list of rich cards (icon tile, title, subtitle, chevron)
   const card = (href, icon, color, title, sub, { badge = '', featured = false } = {}) => `<a class="lcard${featured ? ' feat' : ''}" href="${url(href)}" target="_blank" rel="noopener" style="--ic:${color}"><span class="lic"><i class="${icon}"></i></span><span class="ltx"><b>${esc(title)}${badge ? `<em>${esc(badge)}</em>` : ''}</b>${sub ? `<small>${esc(sub)}</small>` : ''}</span><i class="ri-arrow-right-s-line go" aria-hidden="true"></i></a>`;
   const linkCards = linkLayout ? [
@@ -276,8 +276,17 @@ function render({ v, template, services = [], gallery = [], testimonials = [], p
     <button class="btn" type="submit"><i class="ri-send-plane-line"></i>${L.send}</button><div class="msg" id="enq-msg"></div>
   </form></div></section>` : '',
   };
+  // multi-page menu / catalogue: a card (link layouts) or button that opens the full-screen page viewer
+  const menuPages = (Array.isArray(v.menu_pages) ? v.menu_pages : []).filter((u) => /^(\/uploads\/|\/brand\/|https:\/\/)/.test(u));
+  const menuTitle = esc(String(v.menu_title || 'View Full Menu').slice(0, 80));
+  const menuSub = esc(String(v.menu_desc || '').slice(0, 120));
+  const pagesLabel = `${menuPages.length} ${menuPages.length === 1 ? 'page' : 'pages'}`;
+  blocks.menu = sec.menu && menuPages.length ? (linkLayout
+    ? `<section class="sec s-menu">${titles.menu ? H('menu', 'ri-book-open-line', 'Menu') : ''}<div class="lcards"><a class="lcard feat" href="#menu" data-menu style="--ic:var(--p)"><span class="lic"><i class="ri-book-open-line"></i></span><span class="ltx"><b>${menuTitle}<em>${pagesLabel}</em></b>${menuSub ? `<small>${menuSub}</small>` : ''}</span><i class="ri-arrow-right-s-line go" aria-hidden="true"></i></a></div></section>`
+    : `<section class="sec s-menu">${H('menu', 'ri-book-open-line', 'Menu')}<div class="links"><a href="#menu" data-menu><span>${menuTitle}<small style="display:block;font-weight:500;opacity:.7;font-size:12.5px">${menuSub || pagesLabel}</small></span><i class="ri-book-open-line"></i></a></div></section>`) : '';
+  const menuViewer = menuPages.length ? `<div class="mv" id="mv" role="dialog" aria-modal="true" aria-label="${menuTitle}"><div class="mv-bar"><b>${menuTitle}</b><span id="mvc"></span><button class="mv-x" type="button" aria-label="Close">&times;</button></div><div class="mv-track" id="mvt">${menuPages.map((pg, i) => `<div class="mv-s"><img src="${url(pg)}" alt="Page ${i + 1}" loading="lazy" draggable="false"></div>`).join('')}</div><button class="mv-n prev" type="button" aria-label="Previous page"><i class="ri-arrow-left-s-line"></i></button><button class="mv-n next" type="button" aria-label="Next page"><i class="ri-arrow-right-s-line"></i></button></div>` : '';
   // owner's drag-and-drop order; sections it doesn't mention keep their default place at the end
-  const order = [...new Set([...(Array.isArray(v.section_order) ? v.section_order : []).filter((k) => Object.hasOwn(blocks, k)), ...(linkLayout ? ['links'] : []), ...Object.keys(blocks)])];
+  const order = [...new Set([...(Array.isArray(v.section_order) ? v.section_order : []).filter((k) => Object.hasOwn(blocks, k)), ...(linkLayout ? ['links', 'menu'] : []), ...Object.keys(blocks).flatMap((k) => (k === 'menu' ? [] : k === 'links' ? ['links', 'menu'] : [k]))])];
   const ordered = order.map((k) => blocks[k]).filter(Boolean).join('\n');
 
   // quick-action bar. Social layouts get a floating action stack with WhatsApp as the main button; others keep the pill
@@ -331,6 +340,7 @@ ${headTags({ v, th, title, desc: v.meta_description || v.description || v.occupa
 
 ${v.sticky_bar !== false ? stickyBar : ''}
 
+${menuViewer}
 <div class="lb" id="lb"><button class="x" type="button" aria-label="Close">&times;</button><div id="lbc"></div></div>
 ${v.ask_before_contact ? `<div class="modal" id="askm"><div class="sheet"><h4>${L.save}</h4><p>${L.details}</p><form id="ask"><input name="name" placeholder="${L.name}" required maxlength="120"><input name="email" type="email" placeholder="${L.email}" maxlength="191"><input name="phone" placeholder="${L.phone}" maxlength="30"><button class="btn" type="submit">${L.continue}</button></form></div></div>` : ''}
 ${v.newsletter_popup ? `<div class="modal" id="nlm"><div class="sheet"><h4>${L.newsletter}</h4><p>${L.newsletter_text}</p><form id="nl"><input name="email" type="email" placeholder="${L.email}" required maxlength="191"><button class="btn" type="submit">${L.subscribe}</button><div class="msg" id="nl-msg"></div></form></div></div>` : ''}
@@ -372,6 +382,16 @@ ${v.newsletter_popup ? `<div class="modal" id="nlm"><div class="sheet"><h4>${L.n
           j.data.forEach(function(s){var sb=document.createElement('button');sb.type='button';sb.className='slot';sb.textContent=s.from+' - '+s.to;sb.addEventListener('click',function(){$$('.slot').forEach(function(x){x.classList.remove('on')});sb.classList.add('on');sel.slot=s;book.style.display='grid'});slots.appendChild(sb)})})});days.appendChild(b)})(i)}
     book.addEventListener('submit',function(e){e.preventDefault();var d=Object.fromEntries(new FormData(book));if(!d.name||!sel.slot)return;d.date=sel.date;d.from_time=sel.slot.from;d.to_time=sel.slot.to;var bt=book.querySelector('button');bt.disabled=true;
       post(API+'/appointments',d).then(function(x){$('#book-msg').textContent=x.j.message||'';if(x.ok){book.reset();book.style.display='none';slots.innerHTML=''}}).finally(function(){bt.disabled=false})})}
+  /* menu viewer */
+  var mv=$('#mv');if(mv){var mt=$('#mvt'),mc=$('#mvc'),sl=$$('.mv-s'),n=sl.length;
+    var cur=0;function mpos(){cur=Math.round(mt.scrollLeft/Math.max(1,mt.clientWidth));mc.textContent=(cur+1)+' / '+n;return cur}
+    function mgo(i){i=Math.max(0,Math.min(n-1,i));cur=i;mc.textContent=(i+1)+' / '+n;mt.scrollTo({left:i*mt.clientWidth,behavior:'smooth'})}
+    function mclose(){mv.classList.remove('show');document.body.style.overflow='';sl.forEach(function(x){x.classList.remove('z')})}
+    mt.addEventListener('scroll',mpos);
+    $$('[data-menu]').forEach(function(a){a.addEventListener('click',function(e){e.preventDefault();mv.classList.add('show');document.body.style.overflow='hidden';mt.scrollLeft=0;cur=0;mpos()})});
+    $('.mv-x').addEventListener('click',mclose);$('.mv-n.prev').addEventListener('click',function(){mgo(cur-1)});$('.mv-n.next').addEventListener('click',function(){mgo(cur+1)});
+    sl.forEach(function(x){x.addEventListener('click',function(e){if(e.target.tagName==='IMG')x.classList.toggle('z')})});
+    document.addEventListener('keydown',function(e){if(!mv.classList.contains('show'))return;if(e.key==='Escape')mclose();else if(e.key==='ArrowRight')mgo(cur+1);else if(e.key==='ArrowLeft')mgo(cur-1)})}
   /* PWA */
   ${v.pwa_enable ? `if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js').catch(function(){});var dp,ib=$('#install');window.addEventListener('beforeinstallprompt',function(e){e.preventDefault();dp=e;if(ib)ib.style.display='flex'});if(ib)ib.addEventListener('click',function(){if(!dp)return;dp.prompt();dp.userChoice.finally(function(){ib.style.display='none';dp=null})});window.addEventListener('appinstalled',function(){if(ib)ib.style.display='none'});` : ''}
 })();
