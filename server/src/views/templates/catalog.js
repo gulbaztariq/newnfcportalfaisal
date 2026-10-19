@@ -41,15 +41,20 @@ const F = {
   baloo: "'Baloo 2', system-ui, sans-serif",
 };
 
+const SOCIAL_LAYOUTS = new Set(['story', 'beat', 'flash', 'channel', 'xfeed', 'network', 'pinboard', 'groove', 'stream', 'chat', 'plane', 'thread']);
+
 const T = (slug, name, profession, layout, primary, secondary, background, text, font) => ({ slug, name, profession, layout, defaults: { primary, secondary, background, text, font } });
 
 module.exports = {
   FONTS: F,
+  SOCIAL_LAYOUTS,
   LAYOUTS: [
     'classic', 'modern', 'minimal', 'dark', 'card', 'split', 'bold', 'elegant', 'soft', 'corporate',
     'photo', 'glass', 'sidebar', 'editorial', 'brutal', 'mesh', 'mono', 'luxe', 'playful', 'splithero', 'stack', 'neon', 'paper', 'aurora',
     // premium layouts (premium.js)
     'banner', 'wave', 'linkhub', 'breeze', 'cinema', 'metal', 'ticket', 'bento', 'marble', 'swiss', 'duotone', 'monogram', 'timeline', 'retro', 'holo', 'spotlight',
+    // social-media layouts (social.js): these also get the floating WhatsApp / call action stack
+    ...SOCIAL_LAYOUTS,
   ],
   TEMPLATES: [
     T('vcard1', 'Code Craft', 'Developer', 'dark', '#22d3ee', '#a78bfa', '#0b1020', '#e2e8f0', F.space),
@@ -166,5 +171,19 @@ module.exports = {
     T('vcard106', 'Groovy', 'Cafe / Creative Studio', 'retro', '#e4572e', '#f3a712', '#fdf3e1', '#2b1d0e', F.bricolage),
     T('vcard107', 'Prism', 'Tech / Web3 / Creative', 'holo', '#a78bfa', '#22d3ee', '#0d0b1a', '#f1efff', F.space),
     T('vcard108', 'Spotlight', 'Performer / Speaker', 'spotlight', '#fbbf24', '#f97316', '#09090b', '#fafafa', F.playfair),
+
+    /* ---------- social media ---------- */
+    T('vcard109', 'Story', 'Social: Instagram creator', 'story', '#e1306c', '#f58529', '#ffffff', '#171717', F.jakarta),
+    T('vcard110', 'Beat', 'Social: TikTok creator', 'beat', '#25f4ee', '#fe2c55', '#0a0a0c', '#fafafa', F.sora),
+    T('vcard111', 'Flash', 'Social: Snapchat creator', 'flash', '#fffc00', '#111111', '#fffc00', '#111111', F.nunito),
+    T('vcard112', 'Channel', 'Social: YouTube channel', 'channel', '#ff0033', '#111111', '#ffffff', '#0f0f0f', F.archivo),
+    T('vcard113', 'Feed', 'Social: X / Twitter', 'xfeed', '#1d9bf0', '#0f1419', '#ffffff', '#0f1419', F.inter),
+    T('vcard114', 'Network', 'Social: LinkedIn professional', 'network', '#0a66c2', '#378fe9', '#f4f2ee', '#191919', F.figtree),
+    T('vcard115', 'Pinboard', 'Social: Pinterest / Lifestyle', 'pinboard', '#e60023', '#f4c2c2', '#fbf7f4', '#211922', F.urbanist),
+    T('vcard116', 'Groove', 'Social: Musician / Spotify', 'groove', '#1ed760', '#b3b3b3', '#121212', '#ffffff', F.montserrat),
+    T('vcard117', 'Stream', 'Social: Twitch / Gamer', 'stream', '#9146ff', '#00e5a0', '#0e0e10', '#efeff1', F.chakra),
+    T('vcard118', 'Chat', 'Social: WhatsApp business', 'chat', '#128c7e', '#25d366', '#efe7dd', '#111b21', F.dmsans),
+    T('vcard119', 'Paper Plane', 'Social: Telegram channel', 'plane', '#2aabee', '#229ed9', '#eef6fb', '#10202b', F.manrope),
+    T('vcard120', 'Thread', 'Social: Threads / Minimal', 'thread', '#101010', '#8e8e93', '#fafafa', '#101010', F.plex),
   ],
 };

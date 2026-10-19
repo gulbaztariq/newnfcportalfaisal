@@ -219,7 +219,10 @@ pages.get('/t/preview/:slug', wrap(async (req, res) => {
   const testimonials = [{ name: 'Jamie Lee', description: 'Wonderful to work with, delivered beyond expectations.' }];
   res.set('X-Robots-Tag', 'noindex');
   setCsp(res);
-  res.send(render({ v: { ...SAMPLE, theme: req.query.primary ? { primary: `#${String(req.query.primary).replace(/[^0-9a-f]/gi, '')}` } : {} }, template: tpl, services, gallery: [], testimonials, app: s, appUrl, nonce: res.locals.nonce }));
+  // ?full=1 shows the quick-action bar and a sample gallery (the picker thumbnails leave them out)
+  const full = req.query.full === '1';
+  const gallery = full ? Array.from({ length: 6 }, (_, i) => ({ image: '/brand/sample-portrait.svg', caption: `Sample ${i + 1}` })) : [];
+  res.send(render({ v: { ...SAMPLE, sticky_bar: full, social_links: { ...SAMPLE.social_links, telegram: 'https://t.me/example' }, theme: req.query.primary ? { primary: `#${String(req.query.primary).replace(/[^0-9a-f]/gi, '')}` } : {} }, template: tpl, services, gallery, testimonials, app: s, appUrl, nonce: res.locals.nonce }));
 }));
 
 const unlockSig = (v) => crypto.createHmac('sha256', jwtSecret).update(`${v.id}:${v.password}`).digest('hex').slice(0, 32);

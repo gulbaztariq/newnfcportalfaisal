@@ -1,6 +1,6 @@
 const { esc, url, color, nl2br } = require('../../utils/html');
-const { TEMPLATES, LAYOUTS } = require('./catalog');
-const BASE_CSS = require('./styles') + require('./premium');
+const { TEMPLATES, LAYOUTS, SOCIAL_LAYOUTS } = require('./catalog');
+const BASE_CSS = require('./styles') + require('./premium') + require('./social');
 const { t: labelsFor, RTL } = require('./i18n');
 
 const BY_SLUG = Object.fromEntries(TEMPLATES.map((t) => [t.slug, t]));
@@ -256,6 +256,14 @@ function render({ v, template, services = [], gallery = [], testimonials = [], p
   const order = [...new Set([...(Array.isArray(v.section_order) ? v.section_order : []).filter((k) => Object.hasOwn(blocks, k)), ...Object.keys(blocks)])];
   const ordered = order.map((k) => blocks[k]).filter(Boolean).join('\n');
 
+  // quick-action bar. Social layouts get a floating action stack with WhatsApp as the main button; others keep the pill
+  const fab = SOCIAL_LAYOUTS.has(layout);
+  const sl = v.social_links || {};
+  const sBtn = (href, label, icon, cls = '', ext = true) => `<a ${cls ? `class="${cls}" ` : ''}href="${href}"${ext ? ' target="_blank" rel="noopener"' : ''} aria-label="${label}"><i class="${icon}"></i></a>`;
+  const stickyBar = fab
+    ? `<nav class="sticky stk-fab stk-${layout}" aria-label="Quick actions"><a class="main" href="/${alias}/contact.vcf" data-save aria-label="${L.save}"><i class="ri-user-add-fill"></i></a>${sl.instagram ? sBtn(url(sl.instagram), 'Instagram', 'ri-instagram-line', 'ig') : ''}${sl.telegram ? sBtn(url(sl.telegram), 'Telegram', 'ri-telegram-fill', 'tg') : ''}${v.email ? sBtn(`mailto:${esc(v.email)}`, L.email, 'ri-mail-fill', '', false) : ''}${phone ? sBtn(`tel:${esc(phone)}`, L.call, 'ri-phone-fill', '', false) : ''}${wa ? sBtn(url(wa), 'WhatsApp', 'ri-whatsapp-fill', 'wa') : ''}</nav>`
+    : `<nav class="sticky" aria-label="Quick actions">${phone ? `<a href="tel:${esc(phone)}" aria-label="${L.call}"><i class="ri-phone-fill"></i></a>` : ''}${wa ? `<a href="${url(wa)}" target="_blank" rel="noopener" aria-label="WhatsApp"><i class="ri-whatsapp-fill"></i></a>` : ''}<a class="main" href="/${alias}/contact.vcf" data-save aria-label="${L.save}"><i class="ri-user-add-fill"></i></a>${v.email ? `<a href="mailto:${esc(v.email)}" aria-label="${L.email}"><i class="ri-mail-fill"></i></a>` : ''}<button type="button" data-share aria-label="${L.share}"><i class="ri-share-forward-fill"></i></button></nav>`;
+
   const html = `<!doctype html>
 <html lang="${esc(th.lang)}" dir="${th.dir}">
 <head>
@@ -294,7 +302,7 @@ ${headTags({ v, th, title, desc: v.meta_description || v.description || v.occupa
   ${v.sticky_bar !== false ? '<div style="height:70px"></div>' : ''}
 </main>
 
-${v.sticky_bar !== false ? `<nav class="sticky" aria-label="Quick actions">${phone ? `<a href="tel:${esc(phone)}" aria-label="${L.call}"><i class="ri-phone-fill"></i></a>` : ''}${wa ? `<a href="${url(wa)}" target="_blank" rel="noopener" aria-label="WhatsApp"><i class="ri-whatsapp-fill"></i></a>` : ''}<a class="main" href="/${alias}/contact.vcf" data-save aria-label="${L.save}"><i class="ri-user-add-fill"></i></a>${v.email ? `<a href="mailto:${esc(v.email)}" aria-label="${L.email}"><i class="ri-mail-fill"></i></a>` : ''}<button type="button" data-share aria-label="${L.share}"><i class="ri-share-forward-fill"></i></button></nav>` : ''}
+${v.sticky_bar !== false ? stickyBar : ''}
 
 <div class="lb" id="lb"><button class="x" type="button" aria-label="Close">&times;</button><div id="lbc"></div></div>
 ${v.ask_before_contact ? `<div class="modal" id="askm"><div class="sheet"><h4>${L.save}</h4><p>${L.details}</p><form id="ask"><input name="name" placeholder="${L.name}" required maxlength="120"><input name="email" type="email" placeholder="${L.email}" maxlength="191"><input name="phone" placeholder="${L.phone}" maxlength="30"><button class="btn" type="submit">${L.continue}</button></form></div></div>` : ''}
