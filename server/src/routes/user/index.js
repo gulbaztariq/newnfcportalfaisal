@@ -144,7 +144,7 @@ r.put('/vcards/:id', vcardUpload, trackStorage, wrap(async (req, res) => {
     data.theme = { ...(v.theme || {}), ...t };
   }
   if (b.social_links) data.social_links = Object.fromEntries(Object.entries(b.social_links).filter(([, u]) => u).map(([k, u]) => [k, safeUrl(String(u).slice(0, 500))]));
-  if (b.custom_links && features.custom_links) data.custom_links = (Array.isArray(b.custom_links) ? b.custom_links : []).slice(0, 20).map((l) => ({ label: String(l.label || '').slice(0, 80), url: safeUrl(String(l.url || '').slice(0, 500)) })).filter((l) => l.label && l.url);
+  if (b.custom_links && features.custom_links) data.custom_links = (Array.isArray(b.custom_links) ? b.custom_links : []).slice(0, 20).map((l) => ({ label: String(l.label || '').slice(0, 80), url: safeUrl(String(l.url || '').slice(0, 500)), desc: String(l.desc || '').slice(0, 90), badge: String(l.badge || '').slice(0, 20), featured: l.featured === true || l.featured === 'true', icon: /^ri-[a-z0-9-]{2,40}$/.test(l.icon || '') ? l.icon : '' })).filter((l) => l.label && l.url);
   if (b.business_hours) data.business_hours = b.business_hours;
   if (b.sections) data.sections = Object.fromEntries(Object.entries(b.sections).filter(([k]) => SECTION_KEYS.includes(k)).map(([k, val]) => [k, toBool(val)]));
   if (Array.isArray(b.section_order)) data.section_order = [...new Set(b.section_order.filter((k) => SECTION_KEYS.includes(k)))];

@@ -205,7 +205,7 @@ const SAMPLE = {
   description: 'I design delightful digital products and brand experiences. Let’s build something great together.',
   email: 'alex@example.com', phone: '5550100', region_code: '1', location: 'San Francisco, CA', is_verified: true, show_qr_code: false, enable_enquiry_form: true, sticky_bar: false,
   social_links: { website: 'https://example.com', linkedin: 'https://linkedin.com', instagram: 'https://instagram.com', twitter: 'https://x.com', whatsapp: 'https://wa.me/15550100' },
-  custom_links: [{ label: 'My Portfolio', url: 'https://example.com' }, { label: 'Book a meeting', url: 'https://example.com' }],
+  custom_links: [{ label: 'My Portfolio', url: 'https://example.com', desc: 'Selected work and case studies' }, { label: 'View Full Menu', url: 'https://example.com', desc: 'Burgers, pizzas and deals', badge: '8 pages', icon: 'ri-book-open-line', featured: true }],
   business_hours: { mon: { open: true, from: '09:00', to: '17:00' }, tue: { open: true, from: '09:00', to: '17:00' }, wed: { open: true, from: '09:00', to: '17:00' }, thu: { open: true, from: '09:00', to: '17:00' }, fri: { open: true, from: '09:00', to: '15:00' } },
   sections: {}, theme: {},
 };

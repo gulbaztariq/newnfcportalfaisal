@@ -1,6 +1,6 @@
 const { esc, url, color, nl2br } = require('../../utils/html');
-const { TEMPLATES, LAYOUTS, SOCIAL_LAYOUTS, BAR_LAYOUTS } = require('./catalog');
-const BASE_CSS = require('./styles') + require('./premium') + require('./social') + require('./business');
+const { TEMPLATES, LAYOUTS, SOCIAL_LAYOUTS, BAR_LAYOUTS, LINK_LAYOUTS } = require('./catalog');
+const BASE_CSS = require('./styles') + require('./premium') + require('./social') + require('./business') + require('./linkcards');
 const { t: labelsFor, RTL } = require('./i18n');
 
 const BY_SLUG = Object.fromEntries(TEMPLATES.map((t) => [t.slug, t]));
@@ -52,6 +52,20 @@ const GOOGLE_FONTS = {
   'Libre Baskerville': 'Libre+Baskerville:wght@400;700',
   Amiri: 'Amiri:wght@400;700',
 };
+/* brand colour per network, used for the icon tile of the link-card layouts */
+const BRAND = { whatsapp: '#25d366', instagram: '#e1306c', tiktok: '#25f4ee', facebook: '#1877f2', youtube: '#ff0033', linkedin: '#0a66c2', twitter: '#1d9bf0', telegram: '#2aabee', snapchat: '#fffc00', pinterest: '#e60023', github: '#a371f7', reddit: '#ff4500', dribbble: '#ea4c89', behance: '#1769ff', discord: '#5865f2', website: '#f59e0b' };
+const SOCIAL_CTA = { whatsapp: 'Chat with us', instagram: 'Follow', tiktok: 'Videos', facebook: 'Official page', youtube: 'Watch', linkedin: 'Connect', twitter: 'Follow', telegram: 'Message', snapchat: 'Add us', pinterest: 'Ideas', github: 'Code', reddit: 'Community', dribbble: 'Portfolio', behance: 'Portfolio', discord: 'Join', website: 'Visit our website' };
+/** "@handle" from a profile URL (last path segment), or the host for websites */
+function handleOf(key, u) {
+  try {
+    const x = new URL(u);
+    if (key === 'website') return x.hostname.replace(/^www\./, '');
+    if (key === 'whatsapp') return (x.pathname.match(/\d{6,}/) || [''])[0] ? `+${x.pathname.match(/\d{6,}/)[0]}` : '';
+    const seg = x.pathname.split('/').filter(Boolean).pop() || '';
+    return /^[\w.@-]{2,40}$/.test(seg) && !/^(profile|pages?|channel|in|company|u|user)$/i.test(seg) ? `@${seg.replace(/^@/, '')}` : '';
+  } catch { return ''; }
+}
+const t12 = (t) => { const m = /^(\d{1,2}):(\d{2})$/.exec(String(t || '')); if (!m) return esc(t || ''); const h = +m[1]; return `${((h + 11) % 12) + 1}${m[2] === '00' ? '' : `:${m[2]}`} ${h < 12 ? 'AM' : 'PM'}`; };
 const PAY_ICONS = { paypal: 'ri-paypal-fill', upi: 'ri-qr-scan-2-line', bank: 'ri-bank-line', crypto: 'ri-bit-coin-line', link: 'ri-secure-payment-line' };
 
 function fontParts(font) {
@@ -197,6 +211,16 @@ function render({ v, template, services = [], gallery = [], testimonials = [], p
   const apptOn = sec.appointments && appt.enabled && Object.values(appt.slots || {}).some((x) => x?.length);
   const currencyOf = (pr) => pr.currency_code || '';
 
+  const linkLayout = LINK_LAYOUTS.has(layout);
+  const todayHours = hours[today];
+  const hoursChip = linkLayout && hasHours ? `<span class="hrs"><i class="ri-time-line"></i>${todayHours?.open ? `${L.open || 'Open'} ${t12(todayHours.from)} - ${t12(todayHours.to)}` : (L.closed || 'Closed')}</span>` : '';
+  // link-card layouts: socials and custom links become one list of rich cards (icon tile, title, subtitle, chevron)
+  const card = (href, icon, color, title, sub, { badge = '', featured = false } = {}) => `<a class="lcard${featured ? ' feat' : ''}" href="${url(href)}" target="_blank" rel="noopener" style="--ic:${color}"><span class="lic"><i class="${icon}"></i></span><span class="ltx"><b>${esc(title)}${badge ? `<em>${esc(badge)}</em>` : ''}</b>${sub ? `<small>${esc(sub)}</small>` : ''}</span><i class="ri-arrow-right-s-line go" aria-hidden="true"></i></a>`;
+  const linkCards = linkLayout ? [
+    ...(sec.social ? socials.map(([k, u]) => card(u, SOCIAL[k][0], BRAND[k] || '#f59e0b', SOCIAL[k][1], [handleOf(k, u), SOCIAL_CTA[k]].filter(Boolean).join(' \u2022 '))) : []),
+    ...(sec.links ? (v.custom_links || []).map((l) => card(l.url, /^ri-[a-z0-9-]+$/.test(l.icon || '') ? l.icon : 'ri-links-line', '#f59e0b', l.label, l.desc, { badge: l.badge, featured: l.featured })) : []),
+  ] : [];
+
   const productsHtml = sec.products && products.length ? `<section class="sec s-products">${H('products', 'ri-shopping-bag-3-line', L.products)}<div class="prods">${products.map((pr) => {
     const img = (pr.images || [])[0];
     return `<div class="prod"><div class="img">${img ? `<img src="${url(img)}" alt="${esc(pr.name)}" loading="lazy" data-lb="${url(img)}">` : ''}${(pr.images || []).length > 1 ? `<div class="dots">${pr.images.map(() => '<span></span>').join('')}</div>` : ''}</div>
@@ -220,8 +244,8 @@ function render({ v, template, services = [], gallery = [], testimonials = [], p
   const blocks = {
     about: sec.about && v.description ? `<section class="sec s-about">${H('about', 'ri-user-3-line', L.about)}<div class="box about">${nl2br(v.description)}</div></section>` : '',
     contact: sec.contact && contactRows.length ? `<section class="sec s-contact">${H('contact', 'ri-contacts-book-2-line', L.contact)}<div class="box list">${contactRows.map(([i, l, val, h]) => `${h ? `<a class="row" href="${url(h)}"${h.startsWith('http') ? ' target="_blank" rel="noopener"' : ''}>` : '<div class="row">'}<i class="${i}"></i><div><small>${l}</small><span>${esc(val)}</span></div>${h ? '<i class="ri-arrow-right-s-line go" aria-hidden="true"></i></a>' : '</div>'}`).join('')}</div></section>` : '',
-    social: sec.social && socials.length ? `<section class="sec s-social">${H('social', 'ri-share-circle-line', L.social)}<div class="social">${socials.map(([k, u]) => `<a href="${url(u)}" target="_blank" rel="noopener" aria-label="${SOCIAL[k][1]}" title="${SOCIAL[k][1]}"><i class="${SOCIAL[k][0]}"></i></a>`).join('')}</div></section>` : '',
-    links: sec.links && (v.custom_links || []).length ? `<section class="sec s-links">${H('links', 'ri-links-line', L.links)}<div class="links">${v.custom_links.map((l) => `<a href="${url(l.url)}" target="_blank" rel="noopener"><span>${esc(l.label)}</span><i class="ri-arrow-right-up-line"></i></a>`).join('')}</div></section>` : '',
+    social: linkLayout ? '' : sec.social && socials.length ? `<section class="sec s-social">${H('social', 'ri-share-circle-line', L.social)}<div class="social">${socials.map(([k, u]) => `<a href="${url(u)}" target="_blank" rel="noopener" aria-label="${SOCIAL[k][1]}" title="${SOCIAL[k][1]}"><i class="${SOCIAL[k][0]}"></i></a>`).join('')}</div></section>` : '',
+    links: linkLayout ? (linkCards.length ? `<section class="sec s-links">${titles.links ? H('links', 'ri-links-line', L.links) : ''}<div class="lcards">${linkCards.join('')}</div></section>` : '') : sec.links && (v.custom_links || []).length ? `<section class="sec s-links">${H('links', 'ri-links-line', L.links)}<div class="links">${v.custom_links.map((l) => `<a href="${url(l.url)}" target="_blank" rel="noopener"><span>${esc(l.label)}</span><i class="ri-arrow-right-up-line"></i></a>`).join('')}</div></section>` : '',
     services: sec.services && services.length ? `<section class="sec s-services">${H('services', 'ri-briefcase-4-line', L.services)}<div class="box svc">${services.map((x) => `<div class="item">${x.image ? `<img src="${url(x.image)}" alt="" loading="lazy">` : '<span class="ic" aria-hidden="true"><i class="ri-star-line"></i></span>'}<div><b>${esc(x.name)}</b>${x.description ? `<p>${esc(x.description)}</p>` : ''}${x.service_url ? `<a class="more" href="${url(x.service_url)}" target="_blank" rel="noopener">${L.readmore} &rarr;</a>` : ''}${v.enable_enquiry_form ? ` <a class="more" href="#enq" data-enq="${esc(x.name)}">${L.enquire}</a>` : ''}</div></div>`).join('')}</div></section>` : '',
     products: productsHtml,
     appointments: apptOn ? `<section class="sec s-appointments" id="appt-sec">${H('appointments', 'ri-calendar-event-line', L.appointment)}<div class="box appt" id="appt">
@@ -253,7 +277,7 @@ function render({ v, template, services = [], gallery = [], testimonials = [], p
   </form></div></section>` : '',
   };
   // owner's drag-and-drop order; sections it doesn't mention keep their default place at the end
-  const order = [...new Set([...(Array.isArray(v.section_order) ? v.section_order : []).filter((k) => Object.hasOwn(blocks, k)), ...Object.keys(blocks)])];
+  const order = [...new Set([...(Array.isArray(v.section_order) ? v.section_order : []).filter((k) => Object.hasOwn(blocks, k)), ...(linkLayout ? ['links'] : []), ...Object.keys(blocks)])];
   const ordered = order.map((k) => blocks[k]).filter(Boolean).join('\n');
 
   // quick-action bar. Social layouts get a floating action stack with WhatsApp as the main button; others keep the pill
@@ -273,7 +297,7 @@ function render({ v, template, services = [], gallery = [], testimonials = [], p
 ${headTags({ v, th, title, desc: v.meta_description || v.description || v.occupation, link, appUrl, nonce })}
 </head>
 <body>
-<main class="wrap l-${layout} ${th.dark ? 'is-dark' : 'is-light'}${th.lowp ? ' lowp' : ''} ${v.profile_image ? 'has-av' : 'no-av'}"${th.radius ? ` style="--r:${th.radius}"` : ''}>
+<main class="wrap l-${layout}${linkLayout ? ' lk' : ''} ${th.dark ? 'is-dark' : 'is-light'}${th.lowp ? ' lowp' : ''} ${v.profile_image ? 'has-av' : 'no-av'}"${th.radius ? ` style="--r:${th.radius}"` : ''}>
   <header class="hero">
     ${cover}
     <div class="deco" aria-hidden="true"><span>${esc(initials)}</span></div>
@@ -283,7 +307,7 @@ ${headTags({ v, th, title, desc: v.meta_description || v.description || v.occupa
         <div class="id-text">
           <h1 class="name">${esc(fullName)}${v.is_verified ? '<i class="ri-checkbox-circle-fill" title="Verified"></i>' : ''}</h1>
           ${v.occupation || v.job_title ? `<p class="role">${esc(v.job_title || v.occupation)}</p>` : ''}
-          ${v.company || v.location ? `<div class="meta">${v.company ? `<span class="company"><i class="ri-building-line"></i>${esc(v.company)}</span>` : ''}${v.location ? `<span class="loc"><i class="ri-map-pin-line"></i>${esc(v.location)}</span>` : ''}</div>` : ''}
+          ${v.company || v.location || (hasHours && linkLayout) ? `<div class="meta">${v.company ? `<span class="company"><i class="ri-building-line"></i>${esc(v.company)}</span>` : ''}${v.location ? `<span class="loc"><i class="ri-map-pin-line"></i>${esc(v.location)}</span>` : ''}${hoursChip}</div>` : ''}
         </div>
       </div>
     </div>

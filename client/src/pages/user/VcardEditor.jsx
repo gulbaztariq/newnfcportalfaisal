@@ -26,6 +26,7 @@ const SANS = ['Inter', 'Poppins', 'Montserrat', 'Space Grotesk', 'Roboto', 'Open
 const SERIF = ['Playfair Display', 'Lora', 'Cormorant Garamond', 'Fraunces', 'Bitter', 'Bodoni Moda', 'EB Garamond', 'Libre Baskerville', 'Amiri'];
 const MONO = ['JetBrains Mono', 'IBM Plex Mono'];
 const FONTS = [...SANS.map((f) => `'${f}', system-ui, sans-serif`), ...SERIF.map((f) => `'${f}', Georgia, serif`), ...MONO.map((f) => `'${f}', ui-monospace, monospace`)];
+const LINK_ICONS = [['ri-links-line', 'Link'], ['ri-book-open-line', 'Menu / catalogue'], ['ri-restaurant-2-line', 'Restaurant'], ['ri-shopping-bag-3-line', 'Shop'], ['ri-calendar-event-line', 'Booking'], ['ri-map-pin-2-line', 'Location'], ['ri-phone-line', 'Phone'], ['ri-mail-line', 'E-mail'], ['ri-file-text-line', 'Document'], ['ri-gift-line', 'Offer'], ['ri-star-line', 'Reviews'], ['ri-play-circle-line', 'Video'], ['ri-global-line', 'Website']].map(([value, label]) => ({ value, label }));
 const RADII = [{ value: 'sharp', label: 'Sharp' }, { value: 'soft', label: 'Soft' }, { value: 'round', label: 'Round' }];
 // [key, editor label, default heading on the card]; order = default order on the card
 const SECTIONS = [['about', 'About', 'About'], ['contact', 'Contact details', 'Contact'], ['social', 'Social icons', 'Social'], ['links', 'Custom links', 'Links'], ['services', 'Services', 'Services'], ['products', 'Products', 'Products'], ['appointments', 'Appointments', 'Book an Appointment'], ['gallery', 'Gallery', 'Gallery'], ['testimonials', 'Testimonials', 'Testimonials'], ['payments', 'Payment links', 'Pay Me'], ['blog', 'Blog', 'Blog'], ['embeds', 'Embeds', 'Videos'], ['map', 'Map', 'Location'], ['hours', 'Business hours', 'Business Hours'], ['qr', 'QR code', 'QR Code'], ['enquiry', 'Enquiry form', 'Get in touch']];
@@ -224,7 +225,7 @@ export default function VcardEditor() {
             {tab === 'links' && lk('custom_links',
               <Card>
                 <CardHeader icon={Link2} title={ll('Custom links', 'custom_links')} description="Big buttons, e.g. Portfolio, Book a meeting, Menu"
-                  actions={!locked('custom_links') && <Button size="sm" onClick={() => form.set('custom_links', [...v.custom_links, { label: '', url: '' }])}><Plus />Add link</Button>} />
+                  actions={!locked('custom_links') && <Button size="sm" onClick={() => form.set('custom_links', [...v.custom_links, { label: '', url: '', desc: '', badge: '', icon: '', featured: false }])}><Plus />Add link</Button>} />
                 <CardBody>
                   {locked('custom_links') ? <Upgrade what="Custom links" /> : !v.custom_links.length ? <EmptyState icon={Link2} title="No links yet" /> : (
                     <div className="space-y-3">
@@ -236,6 +237,12 @@ export default function VcardEditor() {
                             <motion.div key={i} layout initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="flex flex-wrap items-center gap-2 rounded-2xl border border-border p-3">
                               <Input className="min-w-40 flex-1" placeholder="Button text" value={l.label} onChange={(e) => upd({ label: e.target.value })} />
                               <Input className="min-w-56 flex-[2]" placeholder="https://" value={l.url} onChange={(e) => upd({ url: e.target.value })} />
+                              <div className="flex w-full flex-wrap items-center gap-2">
+                                <Input className="min-w-48 flex-[2]" placeholder="Description (shown under the title on card designs)" maxLength={90} value={l.desc || ''} onChange={(e) => upd({ desc: e.target.value })} />
+                                <Input className="w-28" placeholder="Badge" maxLength={20} value={l.badge || ''} onChange={(e) => upd({ badge: e.target.value })} />
+                                <Select className="w-40" value={l.icon} onChange={(x) => upd({ icon: x })} allowEmpty placeholder="Icon: auto" options={LINK_ICONS} />
+                                <label className="flex cursor-pointer items-center gap-2 text-sm text-muted-foreground"><Switch size="sm" checked={!!l.featured} onChange={(x) => upd({ featured: x })} />Highlight</label>
+                              </div>
                               <div className="flex gap-1">
                                 <Button variant="ghost" size="icon-sm" onClick={() => move(-1)} aria-label="Up"><ArrowUp /></Button>
                                 <Button variant="ghost" size="icon-sm" onClick={() => move(1)} aria-label="Down"><ArrowDown /></Button>

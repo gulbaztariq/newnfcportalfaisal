@@ -46,12 +46,16 @@ const SOCIAL_LAYOUTS = new Set(['story', 'beat', 'flash', 'channel', 'xfeed', 'n
 // business layouts that get the labelled Call / WhatsApp / Directions / Save bar at the bottom of the screen
 const BAR_LAYOUTS = new Set(['local', 'shopfront', 'clinic', 'estate', 'bistro', 'boardroom']);
 
+// link-card layouts (linkcards.js): socials and custom links become rich cards, hours chip in the header
+const LINK_LAYOUTS = new Set(['lkember', 'lkmidnight', 'lkglass', 'lkmint', 'lkcream', 'lkneon', 'lkroyal', 'lksunset', 'lkmono', 'lkcandy']);
+
 const T = (slug, name, profession, layout, primary, secondary, background, text, font) => ({ slug, name, profession, layout, defaults: { primary, secondary, background, text, font } });
 
 module.exports = {
   FONTS: F,
   SOCIAL_LAYOUTS,
   BAR_LAYOUTS,
+  LINK_LAYOUTS,
   LAYOUTS: [
     'classic', 'modern', 'minimal', 'dark', 'card', 'split', 'bold', 'elegant', 'soft', 'corporate',
     'photo', 'glass', 'sidebar', 'editorial', 'brutal', 'mesh', 'mono', 'luxe', 'playful', 'splithero', 'stack', 'neon', 'paper', 'aurora',
@@ -60,6 +64,7 @@ module.exports = {
     // social-media layouts (social.js): these also get the floating WhatsApp / call action stack
     ...SOCIAL_LAYOUTS,
     // business layouts (business.js)
+    ...LINK_LAYOUTS,
     'agency', 'letterhead', 'saas', 'bizcard', 'local', 'shopfront', 'clinic', 'estate', 'bistro', 'boardroom',
   ],
   TEMPLATES: [
@@ -203,5 +208,17 @@ module.exports = {
     T('vcard128', 'Estate Pro', 'Business: Real Estate Agency', 'estate', '#0f2742', '#c9a24b', '#ffffff', '#0f172a', F.manrope),
     T('vcard129', 'Table', 'Business: Restaurant / Hotel', 'bistro', '#3b1d12', '#d9a441', '#18110d', '#f6ede0', F.cormorant),
     T('vcard130', 'Boardroom', 'Business: Executive / Director', 'boardroom', '#1f2937', '#c9a24b', '#0f1115', '#eceae4', F.fraunces),
+
+    /* ---------- link cards (link-in-bio with rich cards) ---------- */
+    T('vcard131', 'Ember', 'Link Cards: Restaurant / Food', 'lkember', '#f59e0b', '#ef4444', '#0b0b0d', '#f5f5f5', F.jakarta),
+    T('vcard132', 'Midnight', 'Link Cards: Creator / Brand', 'lkmidnight', '#818cf8', '#38bdf8', '#090b16', '#eef0ff', F.sora),
+    T('vcard133', 'Frost', 'Link Cards: Lifestyle / Beauty', 'lkglass', '#f472b6', '#a78bfa', '#16102b', '#fdf4ff', F.urbanist),
+    T('vcard134', 'Mint', 'Link Cards: Health / Wellness', 'lkmint', '#10b981', '#06b6d4', '#f1faf6', '#0b2a22', F.nunito),
+    T('vcard135', 'Cream', 'Link Cards: Cafe / Bakery', 'lkcream', '#b45309', '#d97706', '#fbf5ea', '#2b1b0e', F.fraunces),
+    T('vcard136', 'Volt', 'Link Cards: Gaming / Tech', 'lkneon', '#a3e635', '#22d3ee', '#050607', '#f4fff0', F.chakra),
+    T('vcard137', 'Royal', 'Link Cards: Luxury / Jewellery', 'lkroyal', '#d4af37', '#f3e5ab', '#0a0a0a', '#f6f0e0', F.cormorant),
+    T('vcard138', 'Dusk', 'Link Cards: Events / Music', 'lksunset', '#fb7185', '#f59e0b', '#2a0f2e', '#fff4f0', F.outfit),
+    T('vcard139', 'Line', 'Link Cards: Consultant / Minimal', 'lkmono', '#111111', '#6b7280', '#ffffff', '#111111', F.inter),
+    T('vcard140', 'Candy', 'Link Cards: Kids / Fun Shop', 'lkcandy', '#ec4899', '#8b5cf6', '#fff5fa', '#3b0a2a', F.baloo),
   ],
 };
