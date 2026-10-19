@@ -363,6 +363,15 @@ const NfcCard = sequelize.define('nfc_card', {
   extra_cost: { type: T.DECIMAL(12, 2), defaultValue: 0 }, // printing / labour per unit on top of inventory components
   track_stock: { type: T.BOOLEAN, defaultValue: true },
   plan_id: T.INTEGER, // subscription plan that comes with this product (null = non-plan product)
+  // order types and sources
+  product_kind: T.STRING(20), // nfc_profile | social_static | social_dynamic | social_profile | printing | digital (drives the order wizard)
+  discount_type: T.STRING(10), discount_value: { type: T.DECIMAL(12, 2), defaultValue: 0 }, // product discount: fixed | percent off the price
+  sample_price: T.DECIMAL(12, 2), // price of ONE sample; empty = price + the sample markup from the settings
+  wholesale_tiers: json('wholesale_tiers', null), // [{min, percent}] overrides the global tiers for this product
+  // synced from an order source (website)
+  order_source_id: T.INTEGER, external_id: T.STRING(80), source_url: T.STRING(500),
+  source_price: T.DECIMAL(12, 2), price_locked: { type: T.BOOLEAN, defaultValue: false }, // locked = edited by hand, sync no longer overwrites the price
+  synced_at: T.DATE,
 });
 const NfcOrder = sequelize.define('nfc_order', {
   order_number: { type: T.STRING(30), unique: true },
@@ -413,6 +422,11 @@ const NfcOrder = sequelize.define('nfc_order', {
   organisation_id: T.INTEGER, // order placed for an organisation (owner user id); user_id is the contact person
   discount_type: T.STRING(10), // fixed | percent
   discount_value: { type: T.DECIMAL(12, 2), defaultValue: 0 },
+  // order type: nfc_profile | social | wholesale | sample | printing | digital
+  order_type: { type: T.STRING(20), defaultValue: 'nfc_profile' },
+  social_variant: T.STRING(20), // static | dynamic | profile (for the social / review card type)
+  parent_order_id: T.INTEGER, // wholesale order placed after this sample order
+  sample_credit: { type: T.DECIMAL(12, 2), defaultValue: 0 }, // sample charge deducted from the bulk order
 });
 NfcOrder.belongsTo(User, { foreignKey: 'user_id' }); User.hasMany(NfcOrder, { foreignKey: 'user_id' });
 NfcOrder.belongsTo(User, { as: 'creator', foreignKey: 'created_by', constraints: false });

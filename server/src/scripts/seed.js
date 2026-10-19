@@ -59,6 +59,13 @@ const all = (keys, v = true) => Object.fromEntries(keys.map((k) => [k, v]));
     if (created) await plan.setTemplates(templates.slice(0, p.tpl));
   }
 
+  // social-profile plan: only the social / link-card templates (price is a placeholder, edit it in Plans)
+  {
+    const socialTpl = templates.filter((t) => TEMPLATES.some((c) => c.slug === t.slug && /^(Social|Link Cards):/.test(c.profession)));
+    const [sp, created] = await M.Plan.findOrCreate({ where: { name: 'Social Profile' }, defaults: { name: 'Social Profile', price: 0, frequency: 'monthly', trial_days: 0, no_of_vcards: 1, storage_limit: 200, features: all(['social_links', 'custom_links', 'enquiry_form', 'analytics', 'payment_links', 'gallery']), currency_id: usd.id, custom_select: true } });
+    if (created) await sp.setTemplates(socialTpl);
+  }
+
   // plans created before new features existed: add the missing feature keys (premium tiers get them on)
   for (const plan of await M.Plan.findAll()) {
     const rich = ['Premium', 'Lifetime'].includes(plan.name);

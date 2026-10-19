@@ -29,6 +29,7 @@ const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
 const subs = require('../../services/subscription');
 const onboarding = require('../../services/onboarding');
+const productsync = require('../../services/productsync');
 
 const r = express.Router();
 const r2 = (n) => Math.round(Number(n || 0) * 100) / 100;
@@ -43,7 +44,8 @@ r.get('/security/bans', (_req, res) => res.json({ data: security.bannedList() })
 r.delete('/security/bans/:ip', (req, res) => { security.unban(req.params.ip); res.json({ message: 'IP unbanned' }); });
 
 /* ============================================================== products (shop) */
-const PRODUCT_FIELDS = ['name', 'description', 'price', 'status', 'slug', 'category', 'sku', 'short_description', 'compare_price', 'customization_price', 'size_label', 'variants', 'featured', 'show_in_shop', 'sort', 'weight_grams', 'extra_cost', 'track_stock', 'plan_id'];
+const PRODUCT_FIELDS = ['name', 'description', 'price', 'status', 'slug', 'category', 'sku', 'short_description', 'compare_price', 'customization_price', 'size_label', 'variants', 'featured', 'show_in_shop', 'sort', 'weight_grams', 'extra_cost', 'track_stock', 'plan_id', 'product_kind', 'discount_type', 'discount_value', 'sample_price', 'wholesale_tiers', 'order_source_id'];
+const PRODUCT_KINDS = ['nfc_profile', 'social_static', 'social_dynamic', 'social_profile', 'printing', 'digital'];
 const slugify = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 140);
 r.get('/nfc-cards/:id/components', wrap(async (req, res) => {
   const rows = await M.ProductComponent.findAll({ where: { nfc_card_id: req.params.id }, include: [{ model: M.InventoryItem, as: 'item' }] });
@@ -64,6 +66,14 @@ r.use('/nfc-cards', crud(M.NfcCard, {
   include: [{ model: M.Plan, as: 'plan', attributes: ['id', 'name', 'frequency'] }],
   beforeSave: async (data, _req, row) => {
     if (data.plan_id !== undefined) data.plan_id = Number(data.plan_id) || null; // empty = non-plan product
+    if (data.order_source_id !== undefined) data.order_source_id = Number(data.order_source_id) || null;
+    if (data.product_kind !== undefined) data.product_kind = PRODUCT_KINDS.includes(data.product_kind) ? data.product_kind : null;
+    if (data.discount_type !== undefined) data.discount_type = ['fixed', 'percent'].includes(data.discount_type) ? data.discount_type : null;
+    if (data.discount_value !== undefined) data.discount_value = Math.max(0, r2(data.discount_value));
+    if (data.discount_type === 'percent' && Number(data.discount_value) > 100) data.discount_value = 100;
+    if (data.sample_price !== undefined) data.sample_price = data.sample_price === '' || data.sample_price === null ? null : Math.max(0, r2(data.sample_price));
+    if (data.wholesale_tiers !== undefined) { const t = orders.parseTiers(data.wholesale_tiers); data.wholesale_tiers = t.length ? t : null; } // empty = use the global tiers
+    if (row?.order_source_id && data.price !== undefined && r2(data.price) !== r2(row.price)) data.price_locked = true; // hand-edited price: the sync keeps it
     if (data.variants !== undefined) data.variants = jsonList(data.variants).filter((v) => v && v.name).map((v) => ({ name: String(v.name).slice(0, 60), price_delta: r2(v.price_delta) }));
     const base = slugify(data.slug || data.name || row?.name) || `product-${Date.now()}`;
     if (!row || (data.slug !== undefined && data.slug !== row.slug) || !row.slug) {
@@ -85,7 +95,7 @@ const ORDER_INCLUDE = () => [
 const listOrders = wrap(async (req, res) => {
   const p = paginate(req);
   const where = {};
-  for (const k of ['order_status', 'payment_status', 'source', 'order_source_id', 'fulfilment', 'created_by']) if (req.query[k]) where[k] = req.query[k];
+  for (const k of ['order_status', 'payment_status', 'source', 'order_source_id', 'fulfilment', 'created_by', 'order_type']) if (req.query[k]) where[k] = req.query[k];
   if (req.query.customer === 'guest') where.guest_customer_id = { [Op.ne]: null };
   if (req.query.customer === 'organisation') where.organisation_id = { [Op.ne]: null };
   if (req.query.customer === 'registered') Object.assign(where, { user_id: { [Op.ne]: null }, organisation_id: null });
@@ -117,10 +127,19 @@ r.get('/orders/:id', wrap(async (req, res) => {
 }));
 
 /* ---------------------------------------------- admin creates an order (wizard: phone / WhatsApp / walk-in / other websites) */
-const adminQuoteOpts = (b) => {
+/** credit for a bulk order that follows a sample order: the sample products' total (never delivery), once per sample order */
+async function sampleCreditFor(b) {
+  if (b.order_type !== 'wholesale' || !b.sample_order_id || (await settings.get('sample_credit_enable')) === '0') return { credit: 0, order: null };
+  const so = await M.NfcOrder.findOne({ where: { id: b.sample_order_id, order_type: 'sample', order_status: { [Op.ne]: 'cancelled' } }, include: [{ model: M.NfcOrderItem, as: 'items' }] });
+  if (!so) fail(422, 'Validation failed', { sample_order_id: 'Choose a sample order' });
+  const used = await M.NfcOrder.count({ where: { parent_order_id: so.id, order_status: { [Op.ne]: 'cancelled' } } });
+  if (used) fail(422, 'Validation failed', { sample_order_id: 'This sample order was already credited to a bulk order' });
+  return { credit: r2((so.items || []).reduce((a, i) => a + Number(i.total), 0)), order: so };
+}
+const adminQuoteOpts = async (b) => {
   const collection = b.fulfilment === 'collection';
   return {
-    is_cod: !collection && toBool(b.is_cod), collection, priceOverride: true,
+    is_cod: !collection && b.order_type !== 'digital' && toBool(b.is_cod), collection, priceOverride: true, orderType: b.order_type || 'nfc_profile', sampleCredit: (await sampleCreditFor(b)).credit,
     discountType: b.discount_type === 'percent' ? 'percent' : 'fixed', discountValue: b.discount_value,
     delivery: b.delivery_charges === undefined || b.delivery_charges === null || b.delivery_charges === '' ? undefined : b.delivery_charges,
   };
@@ -130,17 +149,27 @@ const quoteJson = (q) => ({ ...q, lines: q.lines.map(({ product, ...l }) => ({ .
 r.get('/orders-meta', wrap(async (_req, res) => {
   const s = await settings.all();
   const [sources, products, plans] = await Promise.all([
-    M.OrderSource.findAll({ where: { status: true }, attributes: ['id', 'name'], order: [['name', 'ASC']] }),
-    M.NfcCard.findAll({ where: { status: true }, attributes: ['id', 'name', 'price', 'variants', 'customization_price', 'plan_id', 'front_image'], include: [{ model: M.Plan, as: 'plan', attributes: ['id', 'name'] }], order: [['sort', 'ASC'], ['id', 'ASC']] }),
+    M.OrderSource.findAll({ where: { status: true }, attributes: ['id', 'name', 'url'], order: [['name', 'ASC']] }),
+    M.NfcCard.findAll({ where: { status: true }, attributes: ['id', 'name', 'price', 'variants', 'customization_price', 'plan_id', 'front_image', 'product_kind', 'order_source_id', 'discount_type', 'discount_value', 'sample_price', 'wholesale_tiers'], include: [{ model: M.Plan, as: 'plan', attributes: ['id', 'name'] }], order: [['sort', 'ASC'], ['id', 'ASC']] }),
     M.Plan.findAll({ where: { status: true }, attributes: ['id', 'name'] }),
   ]);
   res.json({
     sources, products, plans, dummy_domain: await orders.dummyDomain(), currency: s.shop_currency_icon || 'Rs',
+    order_types: Object.entries(orders.ORDER_TYPES).map(([key, t]) => ({ key, ...t })), wholesale_tiers: orders.parseTiers(s.wholesale_tiers), sample_markup_percent: Number(s.sample_markup_percent || 0), sample_max_qty: Number(s.sample_max_qty || 5), sample_credit_enable: s.sample_credit_enable !== '0',
     delivery_charges: Number(s.delivery_charges || 0), cod_charges: Number(s.cod_charges || 0), tax_name: s.nfc_tax_name || 'Tax', tax_rate: Number(s.nfc_tax_rate || 0),
   });
 }));
+/* sample orders that can still be credited to a bulk order */
+r.get('/sample-orders', wrap(async (req, res) => {
+  const q = String(req.query.q || '').trim().slice(0, 80);
+  const where = { order_type: 'sample', order_status: { [Op.ne]: 'cancelled' } };
+  if (q) where[Op.or] = ['order_number', 'name', 'phone', 'company_name'].map((f) => ({ [f]: { [Op.like]: `%${q}%` } }));
+  const rows = await M.NfcOrder.findAll({ where, include: [{ model: M.NfcOrderItem, as: 'items' }], order: [['id', 'DESC']], limit: 25 });
+  const used = new Set((await M.NfcOrder.findAll({ where: { parent_order_id: rows.map((o) => o.id), order_status: { [Op.ne]: 'cancelled' } }, attributes: ['parent_order_id'], raw: true })).map((x) => x.parent_order_id));
+  res.json({ data: rows.filter((o) => !used.has(o.id)).map((o) => ({ id: o.id, order_number: o.order_number, name: o.name, company_name: o.company_name, phone: o.phone, status: o.order_status, credit: r2((o.items || []).reduce((a, i) => a + Number(i.total), 0)), created_at: o.created_at })) });
+}));
 r.post('/orders/quote', wrap(async (req, res) => {
-  res.json(quoteJson(await orders.quote(jsonList(req.body.items), adminQuoteOpts(req.body))));
+  res.json(quoteJson(await orders.quote(jsonList(req.body.items), await adminQuoteOpts(req.body))));
 }));
 
 /*
@@ -157,7 +186,9 @@ r.post('/orders', wrap(async (req, res) => {
   if (b.discount_type === 'percent' && Number(b.discount_value) > 100) fail(422, 'Validation failed', { discount_value: 'A percentage cannot be more than 100' });
   const source = b.order_source_id ? await M.OrderSource.findByPk(b.order_source_id) : null;
   if (b.order_source_id && !source) fail(422, 'Validation failed', { order_source_id: 'Unknown order source' });
-  const q = await orders.quote(jsonList(b.items), adminQuoteOpts(b));
+  if (b.order_type && !orders.ORDER_TYPES[b.order_type]) fail(422, 'Validation failed', { order_type: 'Unknown order type' });
+  const sampleOf = (await sampleCreditFor(b)).order;
+  const q = await orders.quote(jsonList(b.items), await adminQuoteOpts(b));
   const email = b.email ? String(b.email).toLowerCase().trim() : null;
   const dummy = email ? await orders.isDummyEmail(email) : false;
 
@@ -204,11 +235,12 @@ r.post('/orders', wrap(async (req, res) => {
     if (vcard && account) account.vcard_url = `${appUrl}/${vcard.url_alias}`;
   }
 
-  const isCod = !collection && toBool(b.is_cod);
+  const isCod = !collection && b.order_type !== 'digital' && toBool(b.is_cod);
   const o = await orders.create({
     ...pick(b, ['name', 'phone', 'address', 'city', 'courier_city_id', 'company_name', 'designation', 'customer_note', 'admin_note']),
     email, user_id: user?.id || null, vcard_id: vcard?.id || null, guest_customer_id: guest?.id || null, organisation_id: orgOwner?.id || null,
-    fulfilment: collection ? 'collection' : 'delivery', is_cod: isCod,
+    fulfilment: collection ? 'collection' : b.order_type === 'digital' ? 'digital' : 'delivery', is_cod: isCod,
+    social_variant: ['static', 'dynamic', 'profile'].includes(b.social_variant) ? b.social_variant : null, parent_order_id: sampleOf?.id || null,
     payment_type: isCod ? 'cod' : collection && b.payment_status !== 'paid' ? 'collection' : (b.payment_type || 'manual'),
     payment_status: b.payment_status === 'paid' ? 'paid' : 'pending', source: 'admin', design_type: 'standard',
     order_source_id: source?.id || null, created_by: req.user.id,
@@ -276,6 +308,56 @@ r.put('/guest-customers/:id', wrap(async (req, res) => {
   if (data.phone !== undefined) data.phone_key = phoneKey(data.phone);
   await g.update(data);
   res.json({ data: g, message: 'Guest customer saved' });
+}));
+
+/* order sources (Orders > Order sources): each website gets its own product list and price list */
+const sourceOr404 = async (id) => { const src = await M.OrderSource.findByPk(id); if (!src) fail(404, 'Not found'); return src; };
+r.get('/order-sources/summary', wrap(async (_req, res) => {
+  const rows = await M.NfcCard.findAll({ where: { order_source_id: { [Op.ne]: null } }, attributes: ['order_source_id', [M.sequelize.fn('count', M.sequelize.col('id')), 'n']], group: ['order_source_id'], raw: true });
+  res.json({ data: Object.fromEntries(rows.map((x) => [x.order_source_id, Number(x.n)])) });
+}));
+r.post('/order-sources/:id/sync', wrap(async (req, res) => {
+  const src = await sourceOr404(req.params.id);
+  const out = await productsync.syncSource(src);
+  security.audit(req, 'order_source.sync', 'order_source', src.id, out);
+  res.json({ data: out, message: `${out.total} products read from ${src.name} (${out.created} new, ${out.updated} updated)` });
+}));
+r.post('/order-sources/:id/import', wrap(async (req, res) => {
+  const src = await sourceOr404(req.params.id);
+  const out = await productsync.importPasted(src, req.body.text);
+  if (!out.total) fail(422, 'Validation failed', { text: 'Write one product per line, like: Blue NFC card, 1500' });
+  res.json({ data: out, message: `${out.total} products saved (${out.created} new, ${out.updated} updated)` });
+}));
+const PRICE_COLS = ['id', 'name', 'sku', 'front_image', 'images', 'price', 'source_price', 'price_locked', 'discount_type', 'discount_value', 'sample_price', 'wholesale_tiers', 'product_kind', 'status', 'source_url', 'variants', 'synced_at'];
+r.get('/order-sources/:id/products', wrap(async (req, res) => {
+  const src = await sourceOr404(req.params.id);
+  const rows = await M.NfcCard.findAll({ where: { order_source_id: src.id }, attributes: PRICE_COLS, order: [['name', 'ASC']] });
+  res.json({ source: src, data: rows });
+}));
+r.put('/order-sources/:id/products', wrap(async (req, res) => {
+  const src = await sourceOr404(req.params.id);
+  const list = jsonList(req.body.products).slice(0, 1000);
+  let n = 0;
+  for (const x of list) {
+    const row = await M.NfcCard.findOne({ where: { id: x.id, order_source_id: src.id } });
+    if (!row) continue;
+    const data = {};
+    if (x.price !== undefined && x.price !== '') { const price = Math.max(0, r2(x.price)); data.price = price; data.price_locked = row.source_price !== null && price !== r2(row.source_price); }
+    if (x.discount_type !== undefined) data.discount_type = ['fixed', 'percent'].includes(x.discount_type) ? x.discount_type : null;
+    if (x.discount_value !== undefined) data.discount_value = Math.max(0, Math.min(x.discount_type === 'percent' ? 100 : 1e9, r2(x.discount_value)));
+    if (x.sample_price !== undefined) data.sample_price = x.sample_price === '' || x.sample_price === null ? null : Math.max(0, r2(x.sample_price));
+    if (x.product_kind !== undefined) data.product_kind = PRODUCT_KINDS.includes(x.product_kind) ? x.product_kind : null;
+    if (x.status !== undefined) data.status = toBool(x.status);
+    if (Object.keys(data).length) { await row.update(data); n++; }
+  }
+  res.json({ message: `${n} product${n === 1 ? '' : 's'} saved` });
+}));
+r.post('/nfc-cards/:id/reset-price', wrap(async (req, res) => {
+  const p = await M.NfcCard.findByPk(req.params.id);
+  if (!p) fail(404, 'Not found');
+  if (p.source_price === null || p.source_price === undefined) fail(422, 'This product has no website price to go back to');
+  await p.update({ price: p.source_price, price_locked: false });
+  res.json({ data: p, message: 'Price reset to the website price' });
 }));
 
 /* order sources (Orders > Order sources) */

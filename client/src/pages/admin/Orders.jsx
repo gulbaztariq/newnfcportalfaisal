@@ -19,6 +19,7 @@ import {
 
 export const rs = (v, cur = 'Rs') => `${cur} ${Number(v || 0).toLocaleString('en-US', { maximumFractionDigits: 2 })}`;
 const STEP_ICONS = { pending: Clock, confirmed: Check, designing: Palette, printing: Printer, ready: PackageCheck, shipped: Truck, delivered: Home, returned: Undo2, cancelled: XCircle, processing: RefreshCw };
+const ORDER_TYPE_LABEL = { nfc_profile: 'NFC card + profile', social: 'Social / review card', wholesale: 'Wholesale', sample: 'Samples', printing: 'Printing only', digital: 'Digital profile' };
 const SOURCE = { shop: ['Website', 'primary'], portal: ['Portal', 'info'], admin: ['Manual', 'neutral'] };
 /** who created the order: the staff member, otherwise the customer (website / portal) */
 const createdBy = (o) => (o.creator ? `${o.creator.first_name} ${o.creator.last_name}`.trim() : o.source === 'admin' ? 'Staff' : 'Customer');
@@ -55,13 +56,14 @@ export function Orders() {
         <FilterSelect value={list.params.source} onChange={(v) => list.set({ source: v })} placeholder="All channels" options={[{ value: 'shop', label: 'Website shop' }, { value: 'portal', label: 'User portal' }, { value: 'admin', label: 'Manual (staff)' }]} />
         {sources.length > 0 && <FilterSelect value={list.params.order_source_id} onChange={(v) => list.set({ order_source_id: v })} placeholder="All order sources" options={sources.map((x) => ({ value: x.id, label: x.name }))} />}
         <FilterSelect value={list.params.customer} onChange={(v) => list.set({ customer: v })} placeholder="All customers" options={[{ value: 'registered', label: 'Registered customers' }, { value: 'organisation', label: 'Organisations' }, { value: 'guest', label: 'Guests' }]} />
+        <FilterSelect value={list.params.order_type} onChange={(v) => list.set({ order_type: v })} placeholder="All order types" options={Object.entries(ORDER_TYPE_LABEL).map(([value, label]) => ({ value, label }))} />
         <FilterSelect value={list.params.fulfilment} onChange={(v) => list.set({ fulfilment: v })} placeholder="Delivery / collection" options={[{ value: 'delivery', label: 'Courier delivery' }, { value: 'collection', label: 'Office collection' }]} />
         <FilterSelect value={list.params.is_cod} onChange={(v) => list.set({ is_cod: v })} placeholder="COD / prepaid" options={[{ value: '1', label: 'Cash on delivery' }, { value: '0', label: 'Prepaid / online' }]} />
         <FilterSelect value={list.params.payment_status} onChange={(v) => list.set({ payment_status: v })} placeholder="Payment" options={[{ value: 'pending', label: 'Pending' }, { value: 'paid', label: 'Paid' }, { value: 'rejected', label: 'Rejected' }]} />
         <SearchInput value={list.params.search} onChange={(search) => list.set({ search })} placeholder="Order, name, phone, tracking..." />
       </>}>
         <DataTable loading={list.loading} rows={list.rows} onRowClick={(o) => navigate(`/admin/orders/${o.id}`)} empty={<EmptyState icon={ShoppingBag} title="No orders yet" description="Orders from the website shop and the user portal appear here." />} columns={[
-          { key: 'no', label: 'Order', render: (o) => <div><p className="font-mono text-xs font-semibold text-primary">{o.order_number}</p><p className="text-xs text-muted-foreground">{fmtDateTime(o.created_at)}</p></div> },
+          { key: 'no', label: 'Order', render: (o) => <div><p className="font-mono text-xs font-semibold text-primary">{o.order_number}</p><p className="text-xs text-muted-foreground">{fmtDateTime(o.created_at)}</p>{o.order_type && o.order_type !== 'nfc_profile' && <Badge tone={o.order_type === 'wholesale' ? 'success' : o.order_type === 'sample' ? 'warning' : 'info'} className="mt-1">{ORDER_TYPE_LABEL[o.order_type]}</Badge>}</div> },
           { key: 'cust', label: 'Customer', render: (o) => <div><p className="font-medium">{o.name}</p><p className="text-xs text-muted-foreground">{o.phone}{o.city ? ` · ${o.city}` : ''}</p>{o.organisation_id ? <Badge tone="primary" className="mt-0.5"><Building2 className="size-3" />{o.organisation?.organisation?.name || 'Organisation'}</Badge> : o.guest_customer_id ? <Badge tone="info" className="mt-0.5"><UserRound className="size-3" />Guest</Badge> : null}</div> },
           { key: 'items', label: 'Items', render: (o) => <div className="max-w-56"><p className="truncate">{(o.items?.length ? o.items : [{ name: o.nfc_card?.name, quantity: o.quantity }]).map((i) => `${i.quantity}x ${i.name}`).join(', ')}</p><p className="text-xs text-muted-foreground">{o.design_type !== 'standard' ? `${label(o.design_type)} design` : 'Standard design'}</p></div> },
           { key: 'amt', label: 'Total', render: (o) => <div><p className="font-semibold">{rs(o.amount)}</p><p className="flex flex-wrap gap-1 text-xs">{o.is_cod ? <Badge tone="warning">COD</Badge> : <StatusBadge value={o.payment_status} />}{o.fulfilment === 'collection' && <Badge tone="info"><Store className="size-3" />Collection</Badge>}</p></div> },
@@ -114,7 +116,7 @@ export function OrderDetail() {
   return (
     <>
       <Link to="/admin/orders" className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" />All orders</Link>
-      <PageHeader eyebrow={`${SOURCE[o.source]?.[0] || 'Portal'} order${o.order_source ? ` · ${o.order_source.name}` : ''} · ${fmtDateTime(o.created_at)} · by ${createdBy(o)}`} title={o.order_number} description={`${o.name} · ${rs(o.amount)} · ${paymentLabel(o)}${o.fulfilment === 'collection' ? ' · Office collection' : ''}`}>
+      <PageHeader eyebrow={`${SOURCE[o.source]?.[0] || 'Portal'} order${o.order_source ? ` · ${o.order_source.name}` : ''}${o.order_type && o.order_type !== 'nfc_profile' ? ` · ${ORDER_TYPE_LABEL[o.order_type]}` : ''}${Number(o.sample_credit) > 0 ? ` · sample credit ${Number(o.sample_credit)}` : ''} · ${fmtDateTime(o.created_at)} · by ${createdBy(o)}`} title={o.order_number} description={`${o.name} · ${rs(o.amount)} · ${paymentLabel(o)}${o.fulfilment === 'collection' ? ' · Office collection' : ''}`}>
         <Tip content="Same items and prices, straight to review"><ButtonLink as={Link} to={`/admin/orders/new?reorder=${o.id}`} variant="outline"><Repeat />Reorder</ButtonLink></Tip>
         <Tip content="Start from this order and change products, quantities or prices"><ButtonLink as={Link} to={`/admin/orders/new?reorder=${o.id}&edit=1`} variant="outline"><Wand2 />Reorder &amp; customise</ButtonLink></Tip>
         <Tip content="Copy the customer's tracking link"><Button variant="outline" onClick={() => copy(d.track_url, 'Tracking link copied')}><Copy />Tracking link</Button></Tip>
@@ -487,13 +489,5 @@ function ProductCosting({ product, onClose, onSaved }) {
 }
 
 
-/* ================================================================ order sources */
-export const OrderSources = () => (
-  <CrudPage title="Order sources" description="Where orders come from: your websites, marketplaces, social pages, walk-in... Choose one when you create an order." endpoint="/admin/order-sources" singular="Order source" icon={Globe}
-    columns={[
-      { key: 'name', label: 'Source', render: (r) => <div className="flex items-center gap-3"><span className="grid size-9 place-items-center rounded-xl bg-primary-soft text-primary"><Globe className="size-4" /></span><span className="font-medium">{r.name}</span></div> },
-      { key: 'url', label: 'Website', render: (r) => (r.url ? <a href={r.url} target="_blank" rel="noreferrer" className="text-primary hover:underline">{r.url.replace(/^https?:\/\//, '')}</a> : <span className="text-muted-foreground">-</span>) },
-      { key: 'status', label: 'Status', render: (r) => <StatusBadge value={r.status ? 'active' : 'inactive'} /> },
-    ]}
-    fields={[{ name: 'name', label: 'Name', required: true, placeholder: 'e.g. cardshop.pk, Daraz, Instagram, Walk-in' }, { name: 'url', label: 'Website (optional)', type: 'url', placeholder: 'https://' }, { name: 'status', label: 'Active', type: 'switch' }]} />
-);
+/* ================================================================ order sources: see OrderSources.jsx */
+export { OrderSources } from './OrderSources';

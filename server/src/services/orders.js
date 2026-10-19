@@ -36,8 +36,36 @@ const orderNumber = () => `ORD-${dayjs().format('YYMMDD')}-${crypto.randomBytes(
  * Admin-only options (never passed by the website shop): priceOverride (use each line's unit_price), discountType + discountValue
  * (fixed amount or percent), delivery (manual delivery charges) and collection (customer collects at the office: no delivery / COD fee).
  */
-async function quote(lines, { is_cod = false, discount = 0, discountType, discountValue, delivery: deliveryOverride, collection = false, priceOverride = false } = {}) {
+/** Wholesale tiers: [{min, percent}] sorted by min. A product can override the global tiers from the settings. */
+function parseTiers(raw) {
+  let t = raw;
+  if (typeof t === 'string') { try { t = JSON.parse(t); } catch { t = []; } }
+  return (Array.isArray(t) ? t : []).map((x) => ({ min: Math.max(1, parseInt(x?.min, 10) || 0), percent: Math.min(100, Math.max(0, Number(x?.percent) || 0)) })).filter((x) => x.min > 0).sort((a, b) => a.min - b.min);
+}
+const tierFor = (tiers, qty) => tiers.filter((x) => x.min <= qty).at(-1) || null;
+/** Product price after its own discount (fixed or percent) */
+const afterDiscount = (price, type, value) => {
+  const v = Math.max(0, Number(value) || 0);
+  return Math.max(0, r2(type === 'percent' ? price * (1 - Math.min(100, v) / 100) : price - (type === 'fixed' ? v : 0)));
+};
+
+/** Order types: what each one needs. Used by the order wizard and by quote(). */
+const ORDER_TYPES = {
+  nfc_profile: { label: 'NFC business card + cloud profile', physical: true },
+  social: { label: 'Social / review card', physical: true },
+  wholesale: { label: 'Wholesale (bulk)', physical: true },
+  sample: { label: 'Samples before bulk', physical: true },
+  printing: { label: 'Printing only', physical: true },
+  digital: { label: 'Digital profile only', physical: false },
+};
+
+async function quote(lines, { is_cod = false, discount = 0, discountType, discountValue, delivery: deliveryOverride, collection = false, priceOverride = false, orderType = 'nfc_profile', sampleCredit = 0 } = {}) {
   const s = await settings.all();
+  const type = ORDER_TYPES[orderType] ? orderType : 'nfc_profile';
+  const globalTiers = parseTiers(s.wholesale_tiers);
+  const sampleMarkup = Math.max(0, Number(s.sample_markup_percent) || 0);
+  const sampleMax = Math.max(1, parseInt(s.sample_max_qty, 10) || 5);
+  const warnings = [];
   const { NfcCard, Plan } = M();
   const out = [];
   for (const l of (Array.isArray(lines) ? lines : []).slice(0, 50)) {
@@ -46,28 +74,44 @@ async function quote(lines, { is_cod = false, discount = 0, discountType, discou
     const qty = Math.min(1000, Math.max(1, parseInt(l.quantity, 10) || 1));
     const variant = (p.variants || []).find((v) => v.name === l.variant) || null;
     if ((p.variants || []).length && !variant) throw new HttpError(422, `Choose an option for ${p.name}`);
-    const listPrice = r2(Number(p.price) + Number(variant?.price_delta || 0));
+    const basePrice = r2(Number(p.price) + Number(variant?.price_delta || 0));
+    const discounted = afterDiscount(basePrice, p.discount_type, p.discount_value); // the product's own discount
+    let listPrice = discounted; let tierPercent = 0;
+    if (type === 'sample') {
+      if (qty > sampleMax) throw new HttpError(422, `Samples are limited to ${sampleMax} pieces per product (${p.name})`);
+      // a sample costs more than a normal piece: its own price, or the normal price plus the sample markup
+      listPrice = Number(p.sample_price) > 0 ? r2(Number(p.sample_price) + Number(variant?.price_delta || 0)) : r2(basePrice * (1 + sampleMarkup / 100));
+    } else if (type === 'wholesale') {
+      const tiers = parseTiers(p.wholesale_tiers).length ? parseTiers(p.wholesale_tiers) : globalTiers;
+      const tier = tierFor(tiers, qty);
+      tierPercent = tier?.percent || 0;
+      listPrice = r2(discounted * (1 - tierPercent / 100));
+      if (tiers.length && qty < tiers[0].min) warnings.push(`${p.name}: wholesale pricing starts at ${tiers[0].min} pieces`);
+    }
     const own = priceOverride && l.unit_price !== undefined && l.unit_price !== null && l.unit_price !== '' ? r2(l.unit_price) : null;
     if (own !== null && (Number.isNaN(own) || own < 0)) throw new HttpError(422, `Enter a valid price for ${p.name}`);
     const unit = own ?? listPrice;
     const custom = !!l.customization && Number(p.customization_price) > 0;
     const cPrice = custom ? r2(p.customization_price) : 0;
-    out.push({ product: p, name: p.name, variant: variant?.name || null, quantity: qty, list_price: listPrice, unit_price: unit, customization: custom, customization_price: cPrice, total: r2((unit + cPrice) * qty), plan: p.plan ? { id: p.plan.id, name: p.plan.name } : null });
+    out.push({ product: p, name: p.name, variant: variant?.name || null, quantity: qty, list_price: listPrice, base_price: basePrice, tier_percent: tierPercent, unit_price: unit, customization: custom, customization_price: cPrice, total: r2((unit + cPrice) * qty), plan: p.plan ? { id: p.plan.id, name: p.plan.name } : null });
   }
   if (!out.length) throw new HttpError(422, 'Your cart is empty');
   const subtotal = r2(out.reduce((a, l) => a + l.total, 0));
   const dVal = Math.max(0, r2(discountValue ?? discount));
   const dType = discountType === 'percent' ? 'percent' : 'fixed';
   const disc = Math.min(subtotal, dType === 'percent' ? r2((subtotal * Math.min(100, dVal)) / 100) : dVal);
-  const tax = r2(((subtotal - disc) * Number(s.nfc_tax_rate || 0)) / 100);
+  // sample credit: what the customer paid for samples is deducted from the bulk order
+  const credit = type === 'wholesale' ? Math.min(Math.max(0, r2(sampleCredit)), r2(subtotal - disc)) : 0;
+  const tax = r2(((subtotal - disc - credit) * Number(s.nfc_tax_rate || 0)) / 100);
   const freeAbove = Number(s.free_delivery_above || 0);
   const autoDelivery = freeAbove > 0 && subtotal - disc >= freeAbove ? 0 : r2(s.delivery_charges || 0);
   const manual = deliveryOverride !== undefined && deliveryOverride !== null && deliveryOverride !== '' ? Math.max(0, r2(deliveryOverride)) : null;
-  const delivery = collection ? 0 : manual ?? autoDelivery;
-  const cod = is_cod && !collection ? r2(s.cod_charges || 0) : 0;
+  const noShip = collection || !ORDER_TYPES[type].physical; // digital profiles ship nothing
+  const delivery = noShip ? 0 : manual ?? autoDelivery;
+  const cod = is_cod && !noShip ? r2(s.cod_charges || 0) : 0;
   return {
-    lines: out, subtotal, discount: disc, discount_type: dType, discount_value: dVal, tax, delivery, delivery_default: autoDelivery, cod,
-    total: r2(subtotal - disc + tax + delivery + cod), tax_name: s.nfc_tax_name || 'Tax', tax_rate: Number(s.nfc_tax_rate || 0),
+    lines: out, order_type: type, sample_credit: credit, warnings, subtotal, discount: disc, discount_type: dType, discount_value: dVal, tax, delivery, delivery_default: autoDelivery, cod,
+    total: r2(subtotal - disc - credit + tax + delivery + cod), tax_name: s.nfc_tax_name || 'Tax', tax_rate: Number(s.nfc_tax_rate || 0),
   };
 }
 
@@ -80,7 +124,7 @@ async function create(data, q) {
       ...data,
       order_number: orderNumber(), access_token: crypto.randomBytes(16).toString('hex'),
       nfc_card_id: first.product.id, quantity: q.lines.reduce((a, l) => a + l.quantity, 0), unit_price: first.unit_price,
-      subtotal: q.subtotal, discount: q.discount, discount_type: q.discount ? q.discount_type : null, discount_value: q.discount ? q.discount_value : 0, tax_amount: q.tax, delivery_charges: q.delivery, cod_charges: q.cod, amount: q.total,
+      order_type: q.order_type || 'nfc_profile', sample_credit: q.sample_credit || 0, subtotal: q.subtotal, discount: q.discount, discount_type: q.discount ? q.discount_type : null, discount_value: q.discount ? q.discount_value : 0, tax_amount: q.tax, delivery_charges: q.delivery, cod_charges: q.cod, amount: q.total,
       status_history: [{ status: 'pending', at: new Date(), by: data.source === 'shop' ? 'customer' : 'system' }],
     }, { transaction: t });
     for (const l of q.lines) {
@@ -120,4 +164,4 @@ async function setStatus(order, status, { actor, note, vendorId } = {}) {
 /** Revenue-recognised orders (for analytics): delivered, or paid and not cancelled/returned */
 const revenueWhere = () => ({ [Op.or]: [{ order_status: 'delivered' }, { payment_status: 'paid', order_status: { [Op.notIn]: ['cancelled', 'returned'] } }] });
 
-module.exports = { STEPS, ALL_STATUSES, LABELS, quote, create, setStatus, revenueWhere, orderNumber, dummyDomain, isDummyEmail };
+module.exports = { ORDER_TYPES, parseTiers, tierFor, afterDiscount, STEPS, ALL_STATUSES, LABELS, quote, create, setStatus, revenueWhere, orderNumber, dummyDomain, isDummyEmail };

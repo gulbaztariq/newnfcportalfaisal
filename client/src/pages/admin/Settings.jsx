@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, useState } from 'react';
 import { NavLink, useParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { Settings2, CreditCard, FileText, Search, Save, Image as ImageIcon, Palette, Megaphone, Smartphone, Share2, Home, Sun, Moon, Globe, Banknote, ExternalLink, Mail, Send, ShieldCheck, Bot, Hash, KeyRound, Clock, Percent, RotateCcw, MessageCircle, Code2, ShoppingBag, Truck, FileText as InvoiceIcon, Lock, IdCard } from 'lucide-react';
+import { Plus as PlusIcon, Trash2 as TrashIcon, Package as PackageIcon } from 'lucide-react';
 import { toast } from 'sonner';
 import api, { toFormData } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
@@ -367,8 +368,47 @@ function Integrations({ st }) {
   );
 }
 
+/** Wholesale quantity tiers and sample rules: used by the Wholesale and Samples order types */
+function WholesaleSettings({ st }) {
+  let tiers = [];
+  try { tiers = JSON.parse(st.s?.wholesale_tiers || '[]'); } catch { tiers = []; }
+  if (!Array.isArray(tiers)) tiers = [];
+  const setTiers = (t) => st.set('wholesale_tiers', JSON.stringify(t));
+  const upd = (i, patch) => setTiers(tiers.map((x, j) => (j === i ? { ...x, ...patch } : x)));
+  return (
+    <Card>
+      <CardHeader icon={PackageIcon} title="Wholesale & samples" description="Used by the Wholesale and Samples order types. A product can override these tiers in its price list."
+        actions={<Button size="sm" variant="outline" onClick={() => setTiers([...tiers, { min: (Number(tiers.at(-1)?.min) || 0) + 50, percent: (Number(tiers.at(-1)?.percent) || 0) + 5 }])}><PlusIcon />Add tier</Button>} />
+      <CardBody className="space-y-5">
+        <div>
+          <p className="mb-2 text-sm font-medium">Quantity tiers (per product, per order)</p>
+          {!tiers.length ? <p className="text-sm text-muted-foreground">No tiers: wholesale orders get the normal price.</p> : (
+            <div className="space-y-2">
+              {tiers.map((t, i) => (
+                <div key={i} className="flex flex-wrap items-center gap-2 rounded-2xl border border-border p-2.5">
+                  <span className="text-sm text-muted-foreground">From</span>
+                  <Input className="w-24" type="number" min="1" aria-label="Minimum quantity" value={t.min ?? ''} onChange={(e) => upd(i, { min: e.target.value })} />
+                  <span className="text-sm text-muted-foreground">pieces:</span>
+                  <Input className="w-24" type="number" min="0" max="100" step="0.5" aria-label="Discount percent" value={t.percent ?? ''} onChange={(e) => upd(i, { percent: e.target.value })} />
+                  <span className="flex-1 text-sm text-muted-foreground">% off</span>
+                  <Button variant="danger-soft" size="icon-sm" onClick={() => setTiers(tiers.filter((_, j) => j !== i))} aria-label="Remove tier"><TrashIcon /></Button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="Sample markup (%)" hint="A sample costs the normal price plus this much, unless the product has its own sample price"><Input {...st.input('sample_markup_percent')} type="number" min="0" /></Field>
+          <Field label="Max samples per product" hint="Samples are limited per product in one order"><Input {...st.input('sample_max_qty')} type="number" min="1" /></Field>
+        </div>
+        <SwitchRow title="Credit samples to the bulk order" description="When a customer orders in bulk after samples, what they paid for the samples is deducted (delivery is not)" {...st.flag('sample_credit_enable')} />
+      </CardBody>
+    </Card>
+  );
+}
+
 function ShopSettings({ st }) {
-  const keys = ['shop_enable', 'shop_currency_code', 'shop_currency_icon', 'delivery_charges', 'free_delivery_above', 'cod_enable', 'cod_charges', 'online_payment_enable', 'shop_min_order', 'shop_ai_design_enable', 'shop_upload_design_enable', 'nfc_tax_name', 'nfc_tax_rate', 'dummy_email_domain'];
+  const keys = ['shop_enable', 'shop_currency_code', 'shop_currency_icon', 'delivery_charges', 'free_delivery_above', 'cod_enable', 'cod_charges', 'online_payment_enable', 'shop_min_order', 'shop_ai_design_enable', 'shop_upload_design_enable', 'nfc_tax_name', 'nfc_tax_rate', 'dummy_email_domain', 'wholesale_tiers', 'sample_markup_percent', 'sample_max_qty', 'sample_credit_enable'];
   return (
     <div className="space-y-6">
       <Card>
@@ -399,6 +439,7 @@ function ShopSettings({ st }) {
           </div>
         </CardBody>
       </Card>
+      <WholesaleSettings st={st} />
       <Card>
         <CardHeader icon={Palette} title="Customer designs" />
         <CardBody className="space-y-4">

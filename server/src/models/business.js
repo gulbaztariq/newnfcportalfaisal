@@ -27,6 +27,9 @@ module.exports = function defineBusiness(sequelize, json, M) {
     name: { type: T.STRING(100), allowNull: false },
     url: T.STRING(255),
     status: { type: T.BOOLEAN, defaultValue: true },
+    platform: T.STRING(20), // detected on the first sync: woocommerce | shopify
+    last_synced_at: T.DATE,
+    sync_message: T.STRING(255),
   });
   NfcOrder.belongsTo(OrderSource, { as: 'order_source', foreignKey: 'order_source_id', constraints: false });
 

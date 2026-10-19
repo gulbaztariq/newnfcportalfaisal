@@ -48,8 +48,11 @@ const DEFAULTS = {
   // front site extras
   home_custom_css: '', home_whatsapp_number: '', newsletter_popup_enable: '0', business_directory_enable: '1', front_blog_enable: '1',
   // shop / checkout
-  shop_enable: '1', shop_currency_code: 'PKR', shop_currency_icon: 'Rs', delivery_charges: '250', free_delivery_above: '0', dummy_email_domain: '',
+  shop_enable: '1', shop_currency_code: 'PKR', shop_currency_icon: 'Rs', delivery_charges: '149', free_delivery_above: '0', dummy_email_domain: '',
   cod_enable: '1', cod_charges: '0', online_payment_enable: '1', shop_min_order: '0', shop_ai_design_enable: '1', shop_upload_design_enable: '1',
+  // wholesale + samples
+  wholesale_tiers: '[{"min":25,"percent":10},{"min":50,"percent":15},{"min":100,"percent":20},{"min":250,"percent":25}]',
+  sample_markup_percent: '50', sample_max_qty: '5', sample_credit_enable: '1',
   // courier: Leopards
   leopards_enable: '0', leopards_mode: 'production', leopards_base_url: '', leopards_api_key: '', leopards_api_password: '',
   leopards_origin_city: 'self', leopards_shipper_id: '', leopards_shipper_name: '', leopards_shipper_phone: '', leopards_shipper_email: '',
