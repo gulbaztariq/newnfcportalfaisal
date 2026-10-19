@@ -59,10 +59,11 @@ const ORDER_TYPES = {
   printing: { label: 'Printing only', physical: true },
   digital: { label: 'Digital profile only', physical: false },
   renewal: { label: 'Plan renewal', physical: false },
+  upgrade: { label: 'Plan upgrade', physical: false },
 };
-const NO_SHIP_TYPES = ['digital', 'renewal']; // nothing is delivered: no delivery or COD charge
+const NO_SHIP_TYPES = ['digital', 'renewal', 'upgrade']; // nothing is delivered: no delivery or COD charge
 
-async function quote(lines, { is_cod = false, discount = 0, discountType, discountValue, delivery: deliveryOverride, collection = false, priceOverride = false, orderType = 'nfc_profile', sampleCredit = 0 } = {}) {
+async function quote(lines, { is_cod = false, discount = 0, discountType, discountValue, delivery: deliveryOverride, collection = false, priceOverride = false, orderType = 'nfc_profile', sampleCredit = 0, planCredit = 0 } = {}) {
   const s = await settings.all();
   const type = ORDER_TYPES[orderType] ? orderType : 'nfc_profile';
   const globalTiers = parseTiers(s.wholesale_tiers);
@@ -105,7 +106,9 @@ async function quote(lines, { is_cod = false, discount = 0, discountType, discou
   const disc = Math.min(subtotal, dType === 'percent' ? r2((subtotal * Math.min(100, dVal)) / 100) : dVal);
   // sample credit: what the customer paid for samples is deducted from the bulk order
   const credit = type === 'wholesale' ? Math.min(Math.max(0, r2(sampleCredit)), r2(subtotal - disc)) : 0;
-  const tax = r2(((subtotal - disc - credit) * Number(s.nfc_tax_rate || 0)) / 100);
+  // plan upgrade: the unused time of the current plan comes off the price
+  const pcredit = type === 'upgrade' ? Math.min(Math.max(0, r2(planCredit)), r2(subtotal - disc)) : 0;
+  const tax = r2(((subtotal - disc - credit - pcredit) * Number(s.nfc_tax_rate || 0)) / 100);
   const freeAbove = Number(s.free_delivery_above || 0);
   const autoDelivery = freeAbove > 0 && subtotal - disc >= freeAbove ? 0 : r2(s.delivery_charges || 0);
   const manual = deliveryOverride !== undefined && deliveryOverride !== null && deliveryOverride !== '' ? Math.max(0, r2(deliveryOverride)) : null;
@@ -113,8 +116,8 @@ async function quote(lines, { is_cod = false, discount = 0, discountType, discou
   const delivery = noShip ? 0 : manual ?? autoDelivery;
   const cod = is_cod && !noShip ? r2(s.cod_charges || 0) : 0;
   return {
-    lines: out, order_type: type, sample_credit: credit, warnings, subtotal, discount: disc, discount_type: dType, discount_value: dVal, tax, delivery, delivery_default: autoDelivery, cod,
-    total: r2(subtotal - disc - credit + tax + delivery + cod), tax_name: s.nfc_tax_name || 'Tax', tax_rate: Number(s.nfc_tax_rate || 0),
+    lines: out, order_type: type, sample_credit: credit, plan_credit: pcredit, warnings, subtotal, discount: disc, discount_type: dType, discount_value: dVal, tax, delivery, delivery_default: autoDelivery, cod,
+    total: r2(subtotal - disc - credit - pcredit + tax + delivery + cod), tax_name: s.nfc_tax_name || 'Tax', tax_rate: Number(s.nfc_tax_rate || 0),
   };
 }
 
@@ -127,7 +130,7 @@ async function create(data, q) {
       ...data,
       order_number: orderNumber(), access_token: crypto.randomBytes(16).toString('hex'),
       nfc_card_id: first.product.id, quantity: q.lines.reduce((a, l) => a + l.quantity, 0), unit_price: first.unit_price,
-      order_type: q.order_type || 'nfc_profile', sample_credit: q.sample_credit || 0, subtotal: q.subtotal, discount: q.discount, discount_type: q.discount ? q.discount_type : null, discount_value: q.discount ? q.discount_value : 0, tax_amount: q.tax, delivery_charges: q.delivery, cod_charges: q.cod, amount: q.total,
+      order_type: q.order_type || 'nfc_profile', sample_credit: q.sample_credit || 0, plan_credit: q.plan_credit || 0, subtotal: q.subtotal, discount: q.discount, discount_type: q.discount ? q.discount_type : null, discount_value: q.discount ? q.discount_value : 0, tax_amount: q.tax, delivery_charges: q.delivery, cod_charges: q.cod, amount: q.total,
       status_history: [{ status: 'pending', at: new Date(), by: data.source === 'shop' ? 'customer' : 'system' }],
     }, { transaction: t });
     for (const l of q.lines) {
@@ -169,13 +172,17 @@ async function setStatus(order, status, { actor, note, vendorId } = {}) {
  * Called when an order is created as paid and whenever its payment status changes to paid.
  */
 async function applyRenewal(order) {
-  if (!order || order.order_type !== 'renewal' || order.plan_applied_at || order.payment_status !== 'paid' || !order.user_id) return null;
+  if (!order || !['renewal', 'upgrade'].includes(order.order_type) || order.plan_applied_at || order.payment_status !== 'paid' || !order.user_id) return null;
   const { NfcOrderItem, NfcCard, Plan } = M();
   const item = await NfcOrderItem.findOne({ where: { nfc_order_id: order.id }, include: [{ model: NfcCard, as: 'product' }] });
   const planId = item?.product?.plan_id;
   const plan = planId ? await Plan.findByPk(planId) : null;
   if (!plan) return null;
-  const sub = await require('./subscription').renew(order.user_id, plan, { amount: order.amount, paymentType: order.payment_type || 'renewal' });
+  const subs = require('./subscription');
+  // renewal: the new period follows the current one. upgrade: the new plan starts now, the unused time was credited in the price
+  const sub = order.order_type === 'upgrade'
+    ? await subs.activate(order.user_id, plan, { amount: order.amount, paymentType: order.payment_type || 'upgrade' })
+    : await subs.renew(order.user_id, plan, { amount: order.amount, paymentType: order.payment_type || 'renewal' });
   await order.update({ plan_applied_at: new Date() });
   return sub;
 }

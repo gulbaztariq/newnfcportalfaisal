@@ -35,6 +35,16 @@ async function renew(userId, plan, opts = {}) {
   });
 }
 
+/** What an upgrade credits: the part of the current period the customer already paid for and has not used. */
+async function upgradeCredit(userId) {
+  const sub = await Subscription.findOne({ where: { user_id: userId, status: 'active' }, include: [Plan], order: [['id', 'DESC']] });
+  if (!sub) return { sub: null, credit: 0 };
+  const start = new Date(sub.starts_at).getTime(); const end = new Date(sub.ends_at).getTime(); const now = Date.now();
+  const paid = Number(sub.payable_amount || 0);
+  const left = end > now && end > start ? Math.min(1, (end - now) / (end - start)) : 0;
+  return { sub, credit: Math.round(paid * left * 100) / 100, paid, left };
+}
+
 async function current(userId) {
   return Subscription.findOne({ where: { user_id: userId, status: 'active' }, include: [{ model: Plan, include: [Template] }], order: [['id', 'DESC']] });
 }
@@ -84,4 +94,4 @@ async function consumeCoupon(meta) {
   if (c && c.coupon_limit) await c.update({ coupon_limit_left: Math.max(0, (c.coupon_limit_left ?? c.coupon_limit) - 1) });
 }
 
-module.exports = { renew, activate, current, assignDefaultPlan, canCreateVcard, applyCoupon, consumeCoupon, endDate, isExpired };
+module.exports = { upgradeCredit, renew, activate, current, assignDefaultPlan, canCreateVcard, applyCoupon, consumeCoupon, endDate, isExpired };

@@ -136,10 +136,17 @@ async function sampleCreditFor(b) {
   if (used) fail(422, 'Validation failed', { sample_order_id: 'This sample order was already credited to a bulk order' });
   return { credit: r2((so.items || []).reduce((a, i) => a + Number(i.total), 0)), order: so };
 }
+/** upgrade: credit for the unused time of the current plan (an admin can type another amount) */
+async function planCreditFor(b) {
+  if (b.order_type !== 'upgrade') return 0;
+  if (b.plan_credit !== undefined && b.plan_credit !== null && b.plan_credit !== '') return Math.max(0, r2(b.plan_credit));
+  const uid = b.user_id || b.contact_id || b.organisation_id;
+  return uid ? (await subs.upgradeCredit(uid)).credit : 0;
+}
 const adminQuoteOpts = async (b) => {
   const collection = b.fulfilment === 'collection';
   return {
-    is_cod: !collection && !orders.NO_SHIP_TYPES.includes(b.order_type) && toBool(b.is_cod), collection, priceOverride: true, orderType: b.order_type || 'nfc_profile', sampleCredit: (await sampleCreditFor(b)).credit,
+    is_cod: !collection && !orders.NO_SHIP_TYPES.includes(b.order_type) && toBool(b.is_cod), collection, priceOverride: true, orderType: b.order_type || 'nfc_profile', sampleCredit: (await sampleCreditFor(b)).credit, planCredit: await planCreditFor(b),
     discountType: b.discount_type === 'percent' ? 'percent' : 'fixed', discountValue: b.discount_value,
     delivery: b.delivery_charges === undefined || b.delivery_charges === null || b.delivery_charges === '' ? undefined : b.delivery_charges,
   };
@@ -150,7 +157,7 @@ r.get('/orders-meta', wrap(async (_req, res) => {
   const s = await settings.all();
   const [sources, products, plans] = await Promise.all([
     M.OrderSource.findAll({ where: { status: true }, attributes: ['id', 'name', 'url'], order: [['name', 'ASC']] }),
-    M.NfcCard.findAll({ where: { status: true }, attributes: ['id', 'name', 'price', 'variants', 'customization_price', 'plan_id', 'front_image', 'product_kind', 'order_source_id', 'discount_type', 'discount_value', 'sample_price', 'wholesale_tiers'], include: [{ model: M.Plan, as: 'plan', attributes: ['id', 'name'] }], order: [['sort', 'ASC'], ['id', 'ASC']] }),
+    M.NfcCard.findAll({ where: { status: true }, attributes: ['id', 'name', 'price', 'variants', 'customization_price', 'plan_id', 'front_image', 'product_kind', 'order_source_id', 'discount_type', 'discount_value', 'sample_price', 'wholesale_tiers'], include: [{ model: M.Plan, as: 'plan', attributes: ['id', 'name', 'price', 'frequency'] }], order: [['sort', 'ASC'], ['id', 'ASC']] }),
     M.Plan.findAll({ where: { status: true }, attributes: ['id', 'name'] }),
   ]);
   res.json({
@@ -188,12 +195,13 @@ r.post('/orders', wrap(async (req, res) => {
   if (b.order_source_id && !source) fail(422, 'Validation failed', { order_source_id: 'Unknown order source' });
   if (b.order_type && !orders.ORDER_TYPES[b.order_type]) fail(422, 'Validation failed', { order_type: 'Unknown order type' });
   const sampleOf = (await sampleCreditFor(b)).order;
-  if (b.order_type === 'renewal') {
-    // a renewal adds a plan to an existing customer's subscription
+  if (['renewal', 'upgrade'].includes(b.order_type)) {
+    // renewals and upgrades change the plan of an existing customer
     if (!['existing', 'organisation'].includes(type)) fail(422, 'Validation failed', { user_id: 'Choose the customer whose plan is being renewed' });
   }
   const q = await orders.quote(jsonList(b.items), await adminQuoteOpts(b));
-  if (b.order_type === 'renewal' && !q.lines.every((l) => l.product.plan_id)) fail(422, 'Validation failed', { items: 'A renewal needs a plan product' });
+  if (['renewal', 'upgrade'].includes(b.order_type) && !q.lines.every((l) => l.product.plan_id)) fail(422, 'Validation failed', { items: `A ${b.order_type} needs a plan product` });
+  if (b.order_type === 'upgrade' && q.lines.length !== 1) fail(422, 'Validation failed', { items: 'Choose one plan to upgrade to' });
   const email = b.email ? String(b.email).toLowerCase().trim() : null;
   const dummy = email ? await orders.isDummyEmail(email) : false;
 
@@ -240,6 +248,14 @@ r.post('/orders', wrap(async (req, res) => {
     if (vcard && account) account.vcard_url = `${appUrl}/${vcard.url_alias}`;
   }
 
+  if (b.order_type === 'upgrade') {
+    // the customer needs a running plan, and the new one must be a different, more expensive plan
+    const cur = await subs.current(user.id);
+    const target = await M.Plan.findByPk(q.lines[0].product.plan_id);
+    if (!cur || new Date(cur.ends_at) < new Date()) fail(422, 'Validation failed', { user_id: 'This customer has no running plan to upgrade. Use Renewal instead.' });
+    if (cur.plan_id === target.id) fail(422, 'Validation failed', { items: 'The customer is already on this plan. Use Renewal to extend it.' });
+    if (Number(target.price) <= Number(cur.plan_amount || 0)) fail(422, 'Validation failed', { items: 'That plan costs the same or less than the current one, so it is not an upgrade.' });
+  }
   const isCod = !collection && !orders.NO_SHIP_TYPES.includes(b.order_type) && toBool(b.is_cod);
   const o = await orders.create({
     ...pick(b, ['name', 'phone', 'address', 'city', 'courier_city_id', 'company_name', 'designation', 'customer_note', 'admin_note']),
@@ -288,7 +304,8 @@ r.get('/organisations/:id/people', wrap(async (req, res) => {
 /* a customer's current plan (shown when renewing) */
 r.get('/customers/:id/subscription', wrap(async (req, res) => {
   const sub = await subs.current(req.params.id);
-  res.json({ data: sub ? { plan: sub.plan?.name, plan_id: sub.plan_id, ends_at: sub.ends_at, expired: new Date(sub.ends_at) < new Date(), frequency: sub.plan_frequency } : null });
+  const up = sub ? await subs.upgradeCredit(req.params.id) : null;
+  res.json({ data: sub ? { plan: sub.plan?.name, plan_id: sub.plan_id, plan_price: Number(sub.plan_amount || 0), ends_at: sub.ends_at, expired: new Date(sub.ends_at) < new Date(), frequency: sub.plan_frequency, paid: up.paid, unused_credit: up.credit } : null });
 }));
 
 /* guest customers: everyone who ordered without an account, with their order journey */

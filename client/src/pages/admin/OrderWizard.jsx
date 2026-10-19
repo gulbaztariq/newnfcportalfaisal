@@ -6,7 +6,7 @@ import { toast } from 'sonner';
 import {
   ArrowLeft, ArrowRight, Check, User, Package, Truck, ClipboardCheck, Plus, Trash2, Store, Wand2, IdCard, Copy, ExternalLink,
   BadgePercent, Banknote, ShoppingBag, Settings2, Sparkles, UserCheck, UserPlus, UserRound, Building2, Repeat,
-  Share2, Boxes, FlaskConical, Printer, Smartphone, Layers, CreditCard, CalendarClock,
+  Share2, Boxes, FlaskConical, Printer, Smartphone, Layers, CreditCard, CalendarClock, TrendingUp,
 } from 'lucide-react';
 import api from '@/lib/api';
 import SearchSelect from '@/components/SearchSelect';
@@ -33,14 +33,16 @@ const ORDER_TYPES = [
   { key: 'printing', title: 'Printing only', text: 'Printing service on cards the client already has', icon: Printer },
   { key: 'digital', title: 'Digital profile only', text: 'Profile and plan, nothing shipped', icon: Smartphone },
   { key: 'renewal', title: 'Renewal', text: 'Extend an existing customer\'s plan', icon: CalendarClock },
+  { key: 'upgrade', title: 'Upgrade plan', text: 'Move a customer to a higher plan, unused time credited', icon: TrendingUp },
 ];
-const NO_SHIP = ['digital', 'renewal']; // nothing is delivered
+const NO_SHIP = ['digital', 'renewal', 'upgrade'];
+const PLAN_CHANGE = ['renewal', 'upgrade']; // nothing is delivered
 const noShip = (t) => NO_SHIP.includes(t);
 const TYPE_TITLE = Object.fromEntries(ORDER_TYPES.map((t) => [t.key, t.title]));
 const SOCIAL_VARIANTS = [{ value: 'static', label: 'Static link', kind: 'social_static' }, { value: 'dynamic', label: 'Dynamic link', kind: 'social_dynamic' }, { value: 'profile', label: 'All-in-one social profile', kind: 'social_profile' }];
 /** which product kinds an order type offers (an untagged product counts as a normal NFC product) */
 const kindsFor = (type, variant) => ({
-  nfc_profile: ['nfc_profile', null], printing: ['printing', null], card_printing: ['blank_card', 'printing', null], digital: ['digital', null], renewal: ['__plan'],
+  nfc_profile: ['nfc_profile', null], printing: ['printing', null], card_printing: ['blank_card', 'printing', null], digital: ['digital', null], renewal: ['__plan'], upgrade: ['__plan'],
   social: [SOCIAL_VARIANTS.find((v) => v.value === variant)?.kind].filter(Boolean).concat(variant ? [] : ['social_static', 'social_dynamic', 'social_profile']),
 }[type] || null); // null = every product (wholesale, samples)
 const afterDisc = (price, t, v) => Math.max(0, t === 'percent' ? price * (1 - Math.min(100, Number(v) || 0) / 100) : t === 'fixed' ? price - (Number(v) || 0) : price);
@@ -98,6 +100,7 @@ function Summary({ meta, quote, lines, form, setForm, loading }) {
         <div className="space-y-1.5 border-t border-border pt-3">
           <Row label="Subtotal" value={money(cur, quote?.subtotal)} />
           {quote?.discount > 0 && <Row label={`Discount${quote.discount_type === 'percent' ? ` (${quote.discount_value}%)` : ''}`} value={`- ${money(cur, quote.discount)}`} className="font-medium text-success" />}
+          {quote?.plan_credit > 0 && <Row label="Credit for unused time" value={`- ${money(cur, quote.plan_credit)}`} className="font-medium text-success" />}
           {quote?.sample_credit > 0 && <Row label="Sample credit" value={`- ${money(cur, quote.sample_credit)}`} className="font-medium text-success" />}
           {quote?.tax > 0 && <Row label={`${quote.tax_name} (${quote.tax_rate}%)`} value={money(cur, quote.tax)} />}
           <div className="flex items-center justify-between gap-3">
@@ -155,7 +158,7 @@ export default function OrderWizard() {
     customer_type: 'guest', customer: null, organisation: null, contact_id: '', guest: null,
     name: '', phone: '', email: '', dummy: false, company_name: '', city: '', address: '', order_source_id: '',
     fulfilment: 'delivery', payment: 'cod', delivery_charges: '', discount_type: 'fixed', discount_value: '', admin_note: '',
-    order_type: 'nfc_profile', social_variant: '', sample_order: null,
+    order_type: 'nfc_profile', social_variant: '', sample_order: null, plan_credit: '',
   });
   const [showAll, setShowAll] = useState(false);
   const [subInfo, setSubInfo] = useState(undefined); // current plan of the customer being renewed
@@ -216,16 +219,16 @@ export default function OrderWizard() {
   const sampleMax = meta?.sample_max_qty || 5;
   const renewFor = form.customer?.id || form.organisation?.id;
   useEffect(() => {
-    if (form.order_type !== 'renewal' || !renewFor) { setSubInfo(undefined); return; }
+    if (!PLAN_CHANGE.includes(form.order_type) || !renewFor) { setSubInfo(undefined); return; }
     api.get(`/admin/customers/${renewFor}/subscription`).then(({ data }) => setSubInfo(data.data)).catch(() => setSubInfo(null));
   }, [form.order_type, renewFor]);
   const kinds = kindsFor(form.order_type, form.social_variant);
   const offered = useMemo(() => (meta?.products || []).filter((p) => (!form.order_source_id || !p.order_source_id || String(p.order_source_id) === String(form.order_source_id))
-    && (showAll || !kinds || kinds.includes(p.product_kind || null) || (noShip(form.order_type) && p.plan_id))), [meta, form.order_source_id, form.order_type, form.social_variant, showAll]); // eslint-disable-line
+    && (showAll || !kinds || kinds.includes(p.product_kind || null) || (noShip(form.order_type) && p.plan_id && (form.order_type !== 'upgrade' || !subInfo || (p.plan_id !== subInfo.plan_id && Number(p.plan?.price) > Number(subInfo.plan_price)))))), [meta, subInfo, form.order_source_id, form.order_type, form.social_variant, showAll]); // eslint-disable-line
   const valid = lines.filter((l) => l.product_id);
   const payload = () => ({
     items: valid.map(({ product_id, variant, quantity, unit_price, customization }) => ({ product_id, variant, quantity, unit_price, customization })),
-    order_type: form.order_type, social_variant: form.order_type === 'social' ? form.social_variant : undefined, sample_order_id: form.order_type === 'wholesale' ? form.sample_order?.id : undefined,
+    order_type: form.order_type, social_variant: form.order_type === 'social' ? form.social_variant : undefined, sample_order_id: form.order_type === 'wholesale' ? form.sample_order?.id : undefined, plan_credit: form.order_type === 'upgrade' && form.plan_credit !== '' ? form.plan_credit : undefined,
     fulfilment: noShip(form.order_type) ? 'digital' : form.fulfilment, is_cod: !noShip(form.order_type) && form.fulfilment === 'delivery' && form.payment === 'cod', delivery_charges: form.delivery_charges,
     discount_type: form.discount_type, discount_value: form.discount_value || 0,
   });
@@ -245,7 +248,7 @@ export default function OrderWizard() {
   const pickType = (key) => setValues((f) => {
     const untouched = !f.name && !f.customer && !f.organisation && !f.guest;
     const account = ['nfc_profile', 'digital'].includes(key) || (key === 'social' && f.social_variant === 'profile');
-    const customerType = key === 'renewal' ? 'existing' : account ? 'new' : 'guest';
+    const customerType = PLAN_CHANGE.includes(key) ? 'existing' : account ? 'new' : 'guest';
     return { ...f, order_type: key, social_variant: key === 'social' ? f.social_variant : '', sample_order: key === 'wholesale' ? f.sample_order : null,
       fulfilment: noShip(key) ? 'digital' : f.fulfilment === 'digital' ? 'delivery' : f.fulfilment, payment: noShip(key) ? 'pending' : f.payment === 'pending' && f.fulfilment === 'digital' ? 'cod' : f.payment,
       ...(untouched ? { customer_type: customerType } : {}) };
@@ -259,7 +262,7 @@ export default function OrderWizard() {
 
   const checks = [
     () => { const e = {}; if (form.order_type === 'social' && !form.social_variant) e.social_variant = 'Choose static, dynamic or all-in-one'; return e; },
-    () => { const e = {}; if (form.order_type === 'renewal' && !['existing', 'organisation'].includes(form.customer_type)) e.name = 'A renewal is for an existing customer or organisation'; if (form.customer_type === 'existing' && !form.customer) e.user_id = 'Search and choose the customer'; if (form.customer_type === 'organisation' && !form.organisation) e.organisation_id = 'Search and choose the organisation'; if (!form.name.trim()) e.name = 'Enter the customer name'; if (form.customer_type === 'new' && !form.email) e.email = 'An account needs an e-mail. Tick "Dummy e-mail" if the customer has none.'; if (form.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) e.email = 'Enter a valid e-mail address'; return e; },
+    () => { const e = {}; if (PLAN_CHANGE.includes(form.order_type) && !['existing', 'organisation'].includes(form.customer_type)) e.name = 'A renewal or upgrade is for an existing customer or organisation'; if (form.customer_type === 'existing' && !form.customer) e.user_id = 'Search and choose the customer'; if (form.customer_type === 'organisation' && !form.organisation) e.organisation_id = 'Search and choose the organisation'; if (!form.name.trim()) e.name = 'Enter the customer name'; if (form.customer_type === 'new' && !form.email) e.email = 'An account needs an e-mail. Tick "Dummy e-mail" if the customer has none.'; if (form.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) e.email = 'Enter a valid e-mail address'; return e; },
     () => { const e = {}; if (!valid.length) e.products = 'Add at least one product'; else if (valid.some((l) => products[l.product_id]?.variants?.length && !l.variant)) e.products = 'Choose an option for every product'; else if (valid.some((l) => l.unit_price !== '' && Number(l.unit_price) < 0)) e.products = 'Prices cannot be negative'; else if (form.order_type === 'sample' && valid.some((l) => Number(l.quantity) > sampleMax)) e.products = `Samples are limited to ${sampleMax} pieces per product`; return e; },
     () => { const e = {}; if (form.discount_type === 'percent' && Number(form.discount_value) > 100) e.discount_value = 'Maximum 100%'; if (Number(form.discount_value) < 0) e.discount_value = 'Cannot be negative'; return e; },
     () => ({}),
@@ -295,7 +298,7 @@ export default function OrderWizard() {
           <div className="absolute -top-24 left-1/2 size-72 -translate-x-1/2 rounded-full bg-success/20 blur-3xl" />
           <motion.span initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: 'spring', stiffness: 300, damping: 18 }} className="relative mx-auto grid size-16 place-items-center rounded-2xl bg-success text-white shadow-lift"><Check className="size-8" /></motion.span>
           <h2 className="relative mt-4 font-display text-2xl font-bold">Order {o.order_number} created</h2>
-          {result.renewed && <p className="relative mt-1 font-medium text-success">Plan renewed until {new Date(result.renewed.ends_at).toLocaleDateString()}</p>}
+          {result.renewed && <p className="relative mt-1 font-medium text-success">Plan {o.order_type === 'upgrade' ? 'upgraded, valid until' : 'renewed until'} {new Date(result.renewed.ends_at).toLocaleDateString()}</p>}
           <p className="relative mt-1 text-muted-foreground">{form.name} · {money(cur, o.amount)} · {o.fulfilment === 'digital' ? 'Digital, no shipping' : o.fulfilment === 'collection' ? 'Office collection' : o.is_cod ? 'Cash on delivery' : 'Courier delivery'}</p>
           {acc && (
             <div className="relative mt-6 space-y-2 rounded-2xl border border-border bg-muted/40 p-4 text-left text-sm">
@@ -354,6 +357,7 @@ export default function OrderWizard() {
                     {form.order_type === 'sample' && <p className="rounded-2xl bg-primary-soft/40 p-3 text-sm text-muted-foreground">Samples are charged at a higher price than normal pieces (up to <b>{sampleMax}</b> per product). When the customer orders in bulk, choose <b>Wholesale</b> and the sample charge is deducted.</p>}
                     {form.order_type === 'card_printing' && <p className="rounded-2xl bg-primary-soft/40 p-3 text-sm text-muted-foreground">The client buys NFC cards and gets them printed with their design. No profile, no plan, no account needed: choose <b>Guest</b> in the next step.</p>}
                     {form.order_type === 'renewal' && <p className="rounded-2xl bg-primary-soft/40 p-3 text-sm text-muted-foreground">Extends an existing customer's plan. The new period starts where the current one ends, and is added as soon as the order is marked <b>Paid</b>. Nothing is shipped.</p>}
+                    {form.order_type === 'upgrade' && <p className="rounded-2xl bg-primary-soft/40 p-3 text-sm text-muted-foreground">Moves an existing customer to a more expensive plan <b>now</b>. What they paid for the unused time of the current plan is deducted from the price (you can change that amount). The new plan starts when the order is marked <b>Paid</b>. Nothing is shipped.</p>}
                     {form.order_type === 'digital' && <p className="rounded-2xl bg-primary-soft/40 p-3 text-sm text-muted-foreground">No delivery charge and no courier: only the profile and its plan are set up.</p>}
                     <Field label={<span className="flex w-full items-center justify-between">Which website is this order for?<Link to="/admin/order-sources" className="text-xs font-normal text-primary hover:underline">Manage sources</Link></span>} hint="Products and prices come from this website's price list">
                       <Select value={form.order_source_id} onChange={(v) => set('order_source_id', v)} allowEmpty placeholder={meta.sources.length ? 'Phone / walk-in / other (all products)' : 'No sources yet'} options={meta.sources.map((x) => ({ value: x.id, label: x.name }))} />
@@ -458,10 +462,16 @@ export default function OrderWizard() {
                         {form.sample_order && <button type="button" onClick={() => set('sample_order', null)} className="mt-2 cursor-pointer text-xs text-muted-foreground hover:text-danger">Remove credit</button>}
                       </div>
                     )}
-                    {form.order_type === 'renewal' && (
-                      <div className="rounded-2xl border border-border p-3 text-sm">
-                        {subInfo === undefined ? <p className="text-muted-foreground">Choose the customer first.</p> : subInfo === null ? <p className="text-muted-foreground">This customer has no plan yet: the renewal starts today.</p>
-                          : <p><b>{subInfo.plan}</b> {subInfo.expired ? <span className="text-danger">expired on {new Date(subInfo.ends_at).toLocaleDateString()}</span> : <>runs until <b>{new Date(subInfo.ends_at).toLocaleDateString()}</b></>}. The renewal {subInfo.expired ? 'starts today' : 'starts after that date'}.</p>}
+                    {PLAN_CHANGE.includes(form.order_type) && (
+                      <div className="space-y-3 rounded-2xl border border-border p-3 text-sm">
+                        {subInfo === undefined ? <p className="text-muted-foreground">Choose the customer first.</p> : subInfo === null ? <p className="text-muted-foreground">This customer has no plan yet{form.order_type === 'upgrade' ? ': use Renewal instead.' : ': the renewal starts today.'}</p>
+                          : <p><b>{subInfo.plan}</b> {subInfo.expired ? <span className="text-danger">expired on {new Date(subInfo.ends_at).toLocaleDateString()}</span> : <>runs until <b>{new Date(subInfo.ends_at).toLocaleDateString()}</b></>}.{' '}
+                            {form.order_type === 'renewal' ? <>The renewal {subInfo.expired ? 'starts today' : 'starts after that date'}.</> : subInfo.expired ? <span className="text-danger">It has expired: use Renewal instead.</span> : <>Choose the plan to upgrade to below.</>}</p>}
+                        {form.order_type === 'upgrade' && subInfo && !subInfo.expired && (
+                          <Field label="Credit for the unused time" hint={`Calculated from what they paid (${money(cur, subInfo.paid)}) and the time left. Leave empty to use it.`}>
+                            <Input type="number" min="0" value={form.plan_credit} onChange={(e) => set('plan_credit', e.target.value)} placeholder={String(subInfo.unused_credit)} className="max-w-48" />
+                          </Field>
+                        )}
                       </div>
                     )}
                     {kinds && !showAll && offered.length === 0 && <p className="rounded-xl bg-warning-soft px-3 py-2 text-xs text-warning">No products are tagged for this order type{form.order_source_id ? ' on this website' : ''} yet. Tag them in Order sources &gt; Price list, or show all products.</p>}
@@ -475,7 +485,7 @@ export default function OrderWizard() {
                 {step === 3 && (
                   <div className="space-y-5">
                     {noShip(form.order_type) ? (
-                      <div className="rounded-2xl bg-primary-soft/40 p-4 text-sm"><p className="flex items-center gap-2 font-semibold"><Smartphone className="size-4 text-primary" />{form.order_type === 'renewal' ? 'Renewal' : 'Digital profile'}: nothing to ship</p><p className="mt-1 text-muted-foreground">No delivery or COD charges. Just record the payment.</p></div>
+                      <div className="rounded-2xl bg-primary-soft/40 p-4 text-sm"><p className="flex items-center gap-2 font-semibold"><Smartphone className="size-4 text-primary" />{{ renewal: 'Renewal', upgrade: 'Upgrade' }[form.order_type] || 'Digital profile'}: nothing to ship</p><p className="mt-1 text-muted-foreground">No delivery or COD charges. Just record the payment.</p></div>
                     ) : <div className="grid gap-3 sm:grid-cols-2">
                       <ChoiceCard active={form.fulfilment === 'delivery'} onClick={() => { set('fulfilment', 'delivery'); if (form.payment === 'collection') set('payment', 'cod'); }} icon={Truck} title="Courier delivery" text="Sent by courier to the customer's address" />
                       <ChoiceCard active={form.fulfilment === 'collection'} onClick={() => { set('fulfilment', 'collection'); if (form.payment === 'cod') set('payment', 'collection'); }} icon={Store} title="Office collection" text="Customer collects from the office. No delivery or COD charges." />
@@ -514,6 +524,7 @@ export default function OrderWizard() {
                       ['Fulfilment', noShip(form.order_type) ? 'No shipping' : form.fulfilment === 'collection' ? 'Office collection' : 'Courier delivery'],
                       ['Payment', { cod: 'Cash on delivery', paid: 'Paid', pending: 'Unpaid', collection: 'Pay at collection' }[form.payment]],
                       ['Sample credit', quote?.sample_credit > 0 ? money(cur, quote.sample_credit) : 'None'],
+                      ...(form.order_type === 'upgrade' ? [['Credit for unused time', quote?.plan_credit > 0 ? money(cur, quote.plan_credit) : 'None']] : []),
                       ['Discount', quote?.discount > 0 ? `${money(cur, quote.discount)}${quote.discount_type === 'percent' ? ` (${quote.discount_value}%)` : ''}` : 'None'],
                       ['Note', form.admin_note || '-'],
                     ]} />
