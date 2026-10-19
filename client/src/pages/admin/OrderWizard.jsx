@@ -151,6 +151,7 @@ function estimate(meta, p, variant, qty, type) {
   const disc = afterDisc(base, p.discount_type, p.discount_value);
   if (type === 'sample') return Number(p.sample_price) > 0 ? Number(p.sample_price) + Number((p.variants || []).find((v) => v.name === variant)?.price_delta || 0) : base * (1 + Number(meta.sample_markup_percent || 0) / 100);
   if (type === 'wholesale') {
+    if (p.no_wholesale_tiers) return disc; // already a wholesale price
     const tiers = (Array.isArray(p.wholesale_tiers) && p.wholesale_tiers.length ? p.wholesale_tiers : meta.wholesale_tiers || []).filter((t) => Number(t.min) <= Number(qty || 1)).at(-1);
     return disc * (1 - (tiers?.percent || 0) / 100);
   }

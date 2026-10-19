@@ -86,7 +86,7 @@ async function quote(lines, { is_cod = false, discount = 0, discountType, discou
       // a sample costs more than a normal piece: its own price, or the normal price plus the sample markup
       listPrice = Number(p.sample_price) > 0 ? r2(Number(p.sample_price) + Number(variant?.price_delta || 0)) : r2(basePrice * (1 + sampleMarkup / 100));
     } else if (type === 'wholesale') {
-      const tiers = parseTiers(p.wholesale_tiers).length ? parseTiers(p.wholesale_tiers) : globalTiers;
+      const tiers = p.no_wholesale_tiers ? [] : parseTiers(p.wholesale_tiers).length ? parseTiers(p.wholesale_tiers) : globalTiers; // switched off: the price is already a wholesale price
       const tier = tierFor(tiers, qty);
       tierPercent = tier?.percent || 0;
       listPrice = r2(discounted * (1 - tierPercent / 100));

@@ -442,6 +442,7 @@ function ProductForm({ product, onClose, onSaved }) {
           <SwitchRow title="Featured" {...{ checked: v.featured, onChange: (x) => form.set('featured', x) }} />
           <SwitchRow title="Active" description="Inactive products cannot be ordered" {...{ checked: v.status, onChange: (x) => form.set('status', x) }} />
           <SwitchRow title="Track stock" description="Take components from inventory on dispatch" {...{ checked: v.track_stock, onChange: (x) => form.set('track_stock', x) }} />
+          <SwitchRow title="Already a wholesale price" description="Wholesale orders get no quantity-tier discount on this product" {...{ checked: !!v.no_wholesale_tiers, onChange: (x) => form.set('no_wholesale_tiers', x) }} />
         </div>
       </div>
     </Dialog>

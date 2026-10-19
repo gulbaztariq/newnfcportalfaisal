@@ -368,6 +368,7 @@ const NfcCard = sequelize.define('nfc_card', {
   discount_type: T.STRING(10), discount_value: { type: T.DECIMAL(12, 2), defaultValue: 0 }, // product discount: fixed | percent off the price
   sample_price: T.DECIMAL(12, 2), // price of ONE sample; empty = price + the sample markup from the settings
   wholesale_tiers: json('wholesale_tiers', null), // [{min, percent}] overrides the global tiers for this product
+  no_wholesale_tiers: { type: T.BOOLEAN, defaultValue: false }, // already priced for wholesale: wholesale orders get no tier discount on it
   // synced from an order source (website)
   order_source_id: T.INTEGER, external_id: T.STRING(80), source_url: T.STRING(500),
   source_price: T.DECIMAL(12, 2), price_locked: { type: T.BOOLEAN, defaultValue: false }, // locked = edited by hand, sync no longer overwrites the price

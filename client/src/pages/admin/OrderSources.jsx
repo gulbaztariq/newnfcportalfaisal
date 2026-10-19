@@ -32,7 +32,7 @@ function PriceList({ source, onClose }) {
   const save = async () => {
     setSaving(true);
     try {
-      await run(api.put(`/admin/order-sources/${source.id}/products`, { products: changed.map((p) => ({ id: p.id, price: p.price, discount_type: p.discount_type || '', discount_value: p.discount_value, sample_price: p.sample_price ?? '', product_kind: p.product_kind || '', status: p.status })) }));
+      await run(api.put(`/admin/order-sources/${source.id}/products`, { products: changed.map((p) => ({ id: p.id, price: p.price, discount_type: p.discount_type || '', discount_value: p.discount_value, sample_price: p.sample_price ?? '', product_kind: p.product_kind || '', no_wholesale_tiers: !!p.no_wholesale_tiers, status: p.status })) }));
       await load();
     } catch { /* toasted */ } finally { setSaving(false); }
   };
@@ -43,9 +43,9 @@ function PriceList({ source, onClose }) {
       <div className="mb-4 max-w-sm"><SearchInput value={q} onChange={setQ} placeholder="Search products..." /></div>
       {!rows ? <Skeleton className="h-64 rounded-2xl" /> : !shown.length ? <EmptyState icon={Package} title="No products" description="Sync the website or paste a list from the Order sources page." /> : (
         <div className="overflow-x-auto rounded-2xl border border-border">
-          <table className="w-full min-w-[980px] text-sm">
+          <table className="w-full min-w-[1080px] text-sm">
             <thead className="bg-muted/50 text-left text-xs font-medium text-muted-foreground">
-              <tr><th className="px-3 py-2.5">Product</th><th className="px-3 py-2.5">Website price</th><th className="px-3 py-2.5">Your price</th><th className="px-3 py-2.5">Discount</th><th className="px-3 py-2.5">You sell at</th><th className="px-3 py-2.5">Sample price</th><th className="px-3 py-2.5">Order type</th><th className="px-3 py-2.5">Active</th></tr>
+              <tr><th className="px-3 py-2.5">Product</th><th className="px-3 py-2.5">Website price</th><th className="px-3 py-2.5">Your price</th><th className="px-3 py-2.5">Discount</th><th className="px-3 py-2.5">You sell at</th><th className="px-3 py-2.5">Sample price</th><th className="px-3 py-2.5">Order type</th><th className="px-3 py-2.5" title="Off = already a wholesale price: no quantity-tier discount">Wholesale tiers</th><th className="px-3 py-2.5">Active</th></tr>
             </thead>
             <tbody>
               {shown.map((p) => (
@@ -72,6 +72,7 @@ function PriceList({ source, onClose }) {
                   <td className="px-3 py-2 font-semibold tabular-nums">{money(sellAt(p))}</td>
                   <td className="px-3 py-2"><Input className="h-9 w-28" type="number" min="0" step="0.01" placeholder="Auto" value={p.sample_price ?? ''} onChange={(e) => upd(p.id, { sample_price: e.target.value })} aria-label={`Sample price of ${p.name}`} /></td>
                   <td className="px-3 py-2"><Select className="h-9 w-48" value={p.product_kind} onChange={(x) => upd(p.id, { product_kind: x })} allowEmpty placeholder="Not set" options={KINDS} /></td>
+                  <td className="px-3 py-2"><Switch size="sm" checked={!p.no_wholesale_tiers} onChange={(v) => upd(p.id, { no_wholesale_tiers: !v })} /></td>
                   <td className="px-3 py-2"><Switch size="sm" checked={!!p.status} onChange={(v) => upd(p.id, { status: v })} /></td>
                 </tr>
               ))}
@@ -79,7 +80,7 @@ function PriceList({ source, onClose }) {
           </table>
         </div>
       )}
-      <p className="mt-3 text-xs text-muted-foreground">Sample price empty = normal price plus the sample markup in Settings &gt; Shop &amp; delivery. Wholesale tiers are in the same place.</p>
+      <p className="mt-3 text-xs text-muted-foreground">Sample price empty = normal price plus the sample markup in Settings &gt; Shop &amp; delivery. Wholesale tiers are in the same place; switch tiers off for products that are already priced for wholesale.</p>
     </Dialog>
   );
 }

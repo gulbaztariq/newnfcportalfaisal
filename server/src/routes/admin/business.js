@@ -44,7 +44,7 @@ r.get('/security/bans', (_req, res) => res.json({ data: security.bannedList() })
 r.delete('/security/bans/:ip', (req, res) => { security.unban(req.params.ip); res.json({ message: 'IP unbanned' }); });
 
 /* ============================================================== products (shop) */
-const PRODUCT_FIELDS = ['name', 'description', 'price', 'status', 'slug', 'category', 'sku', 'short_description', 'compare_price', 'customization_price', 'size_label', 'variants', 'featured', 'show_in_shop', 'sort', 'weight_grams', 'extra_cost', 'track_stock', 'plan_id', 'product_kind', 'discount_type', 'discount_value', 'sample_price', 'wholesale_tiers', 'order_source_id'];
+const PRODUCT_FIELDS = ['name', 'description', 'price', 'status', 'slug', 'category', 'sku', 'short_description', 'compare_price', 'customization_price', 'size_label', 'variants', 'featured', 'show_in_shop', 'sort', 'weight_grams', 'extra_cost', 'track_stock', 'plan_id', 'product_kind', 'discount_type', 'discount_value', 'sample_price', 'wholesale_tiers', 'no_wholesale_tiers', 'order_source_id'];
 const PRODUCT_KINDS = ['blank_card', 'nfc_profile', 'social_static', 'social_dynamic', 'social_profile', 'printing', 'digital'];
 const slugify = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 140);
 r.get('/nfc-cards/:id/components', wrap(async (req, res) => {
@@ -61,7 +61,7 @@ r.put('/nfc-cards/:id/components', wrap(async (req, res) => {
   res.json({ message: 'Costing saved', unit_cost: await inventory.productUnitCost(p.id) });
 }));
 r.use('/nfc-cards', crud(M.NfcCard, {
-  fields: PRODUCT_FIELDS, booleans: ['status', 'featured', 'show_in_shop', 'track_stock'], files: ['front_image', 'back_image'], folder: 'nfc',
+  fields: PRODUCT_FIELDS, booleans: ['status', 'featured', 'show_in_shop', 'track_stock', 'no_wholesale_tiers'], files: ['front_image', 'back_image'], folder: 'nfc',
   rules: { name: 'required|max:120', price: 'required|numeric' }, search: ['name', 'sku', 'category'], order: [['sort', 'ASC'], ['id', 'ASC']],
   include: [{ model: M.Plan, as: 'plan', attributes: ['id', 'name', 'frequency'] }],
   beforeSave: async (data, _req, row) => {
@@ -157,7 +157,7 @@ r.get('/orders-meta', wrap(async (_req, res) => {
   const s = await settings.all();
   const [sources, products, plans] = await Promise.all([
     M.OrderSource.findAll({ where: { status: true }, attributes: ['id', 'name', 'url', 'last_synced_at', 'platform'], order: [['name', 'ASC']] }),
-    M.NfcCard.findAll({ where: { status: true }, attributes: ['id', 'name', 'category', 'source_price', 'sku', 'images', 'price', 'variants', 'customization_price', 'plan_id', 'front_image', 'product_kind', 'order_source_id', 'discount_type', 'discount_value', 'sample_price', 'wholesale_tiers'], include: [{ model: M.Plan, as: 'plan', attributes: ['id', 'name', 'price', 'frequency'] }], order: [['sort', 'ASC'], ['id', 'ASC']] }),
+    M.NfcCard.findAll({ where: { status: true }, attributes: ['id', 'name', 'category', 'source_price', 'sku', 'images', 'price', 'variants', 'customization_price', 'plan_id', 'front_image', 'product_kind', 'order_source_id', 'discount_type', 'discount_value', 'sample_price', 'wholesale_tiers', 'no_wholesale_tiers'], include: [{ model: M.Plan, as: 'plan', attributes: ['id', 'name', 'price', 'frequency'] }], order: [['sort', 'ASC'], ['id', 'ASC']] }),
     M.Plan.findAll({ where: { status: true }, attributes: ['id', 'name'] }),
   ]);
   res.json({
@@ -374,7 +374,7 @@ r.post('/order-sources/:id/import', wrap(async (req, res) => {
   if (!out.total) fail(422, 'Validation failed', { text: 'Write one product per line, like: Blue NFC card, 1500' });
   res.json({ data: out, message: `${out.total} products saved (${out.created} new, ${out.updated} updated)` });
 }));
-const PRICE_COLS = ['id', 'name', 'sku', 'front_image', 'images', 'price', 'source_price', 'price_locked', 'discount_type', 'discount_value', 'sample_price', 'wholesale_tiers', 'product_kind', 'status', 'source_url', 'variants', 'synced_at'];
+const PRICE_COLS = ['id', 'name', 'sku', 'front_image', 'images', 'price', 'source_price', 'price_locked', 'discount_type', 'discount_value', 'sample_price', 'wholesale_tiers', 'no_wholesale_tiers', 'product_kind', 'status', 'source_url', 'variants', 'synced_at'];
 r.get('/order-sources/:id/products', wrap(async (req, res) => {
   const src = await sourceOr404(req.params.id);
   const rows = await M.NfcCard.findAll({ where: { order_source_id: src.id }, attributes: PRICE_COLS, order: [['name', 'ASC']] });
@@ -394,6 +394,7 @@ r.put('/order-sources/:id/products', wrap(async (req, res) => {
     if (x.sample_price !== undefined) data.sample_price = x.sample_price === '' || x.sample_price === null ? null : Math.max(0, r2(x.sample_price));
     if (x.product_kind !== undefined) data.product_kind = PRODUCT_KINDS.includes(x.product_kind) ? x.product_kind : null;
     if (x.status !== undefined) data.status = toBool(x.status);
+    if (x.no_wholesale_tiers !== undefined) data.no_wholesale_tiers = toBool(x.no_wholesale_tiers);
     if (Object.keys(data).length) { await row.update(data); n++; }
   }
   res.json({ message: `${n} product${n === 1 ? '' : 's'} saved` });
