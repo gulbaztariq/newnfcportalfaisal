@@ -51,13 +51,16 @@ const afterDiscount = (price, type, value) => {
 
 /** Order types: what each one needs. Used by the order wizard and by quote(). */
 const ORDER_TYPES = {
-  nfc_profile: { label: 'NFC business card + cloud profile', physical: true },
+  nfc_profile: { label: 'NFC Business Card', physical: true },
   social: { label: 'Social / review card', physical: true },
   wholesale: { label: 'Wholesale (bulk)', physical: true },
   sample: { label: 'Samples before bulk', physical: true },
+  card_printing: { label: 'Card + printing (no profile)', physical: true },
   printing: { label: 'Printing only', physical: true },
   digital: { label: 'Digital profile only', physical: false },
+  renewal: { label: 'Plan renewal', physical: false },
 };
+const NO_SHIP_TYPES = ['digital', 'renewal']; // nothing is delivered: no delivery or COD charge
 
 async function quote(lines, { is_cod = false, discount = 0, discountType, discountValue, delivery: deliveryOverride, collection = false, priceOverride = false, orderType = 'nfc_profile', sampleCredit = 0 } = {}) {
   const s = await settings.all();
@@ -161,7 +164,23 @@ async function setStatus(order, status, { actor, note, vendorId } = {}) {
   return order;
 }
 
+/**
+ * Renewal orders add their plan to the customer's subscription once they are paid (never twice).
+ * Called when an order is created as paid and whenever its payment status changes to paid.
+ */
+async function applyRenewal(order) {
+  if (!order || order.order_type !== 'renewal' || order.plan_applied_at || order.payment_status !== 'paid' || !order.user_id) return null;
+  const { NfcOrderItem, NfcCard, Plan } = M();
+  const item = await NfcOrderItem.findOne({ where: { nfc_order_id: order.id }, include: [{ model: NfcCard, as: 'product' }] });
+  const planId = item?.product?.plan_id;
+  const plan = planId ? await Plan.findByPk(planId) : null;
+  if (!plan) return null;
+  const sub = await require('./subscription').renew(order.user_id, plan, { amount: order.amount, paymentType: order.payment_type || 'renewal' });
+  await order.update({ plan_applied_at: new Date() });
+  return sub;
+}
+
 /** Revenue-recognised orders (for analytics): delivered, or paid and not cancelled/returned */
 const revenueWhere = () => ({ [Op.or]: [{ order_status: 'delivered' }, { payment_status: 'paid', order_status: { [Op.notIn]: ['cancelled', 'returned'] } }] });
 
-module.exports = { ORDER_TYPES, parseTiers, tierFor, afterDiscount, STEPS, ALL_STATUSES, LABELS, quote, create, setStatus, revenueWhere, orderNumber, dummyDomain, isDummyEmail };
+module.exports = { NO_SHIP_TYPES, applyRenewal, ORDER_TYPES, parseTiers, tierFor, afterDiscount, STEPS, ALL_STATUSES, LABELS, quote, create, setStatus, revenueWhere, orderNumber, dummyDomain, isDummyEmail };

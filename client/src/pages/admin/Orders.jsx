@@ -19,7 +19,7 @@ import {
 
 export const rs = (v, cur = 'Rs') => `${cur} ${Number(v || 0).toLocaleString('en-US', { maximumFractionDigits: 2 })}`;
 const STEP_ICONS = { pending: Clock, confirmed: Check, designing: Palette, printing: Printer, ready: PackageCheck, shipped: Truck, delivered: Home, returned: Undo2, cancelled: XCircle, processing: RefreshCw };
-const ORDER_TYPE_LABEL = { nfc_profile: 'NFC card + profile', social: 'Social / review card', wholesale: 'Wholesale', sample: 'Samples', printing: 'Printing only', digital: 'Digital profile' };
+const ORDER_TYPE_LABEL = { nfc_profile: 'NFC Business Card', social: 'Social / review card', wholesale: 'Wholesale', sample: 'Samples', card_printing: 'Card + printing', printing: 'Printing only', digital: 'Digital profile', renewal: 'Renewal' };
 const SOURCE = { shop: ['Website', 'primary'], portal: ['Portal', 'info'], admin: ['Manual', 'neutral'] };
 /** who created the order: the staff member, otherwise the customer (website / portal) */
 const createdBy = (o) => (o.creator ? `${o.creator.first_name} ${o.creator.last_name}`.trim() : o.source === 'admin' ? 'Staff' : 'Customer');
@@ -117,6 +117,7 @@ export function OrderDetail() {
     <>
       <Link to="/admin/orders" className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" />All orders</Link>
       <PageHeader eyebrow={`${SOURCE[o.source]?.[0] || 'Portal'} order${o.order_source ? ` · ${o.order_source.name}` : ''}${o.order_type && o.order_type !== 'nfc_profile' ? ` · ${ORDER_TYPE_LABEL[o.order_type]}` : ''}${Number(o.sample_credit) > 0 ? ` · sample credit ${Number(o.sample_credit)}` : ''} · ${fmtDateTime(o.created_at)} · by ${createdBy(o)}`} title={o.order_number} description={`${o.name} · ${rs(o.amount)} · ${paymentLabel(o)}${o.fulfilment === 'collection' ? ' · Office collection' : ''}`}>
+        {!['digital', 'renewal'].includes(o.order_type) && <Tip content="Same customer and products at wholesale prices"><ButtonLink as={Link} to={`/admin/orders/new?bulk=${o.id}`} variant="outline"><Boxes />Create bulk order</ButtonLink></Tip>}
         <Tip content="Same items and prices, straight to review"><ButtonLink as={Link} to={`/admin/orders/new?reorder=${o.id}`} variant="outline"><Repeat />Reorder</ButtonLink></Tip>
         <Tip content="Start from this order and change products, quantities or prices"><ButtonLink as={Link} to={`/admin/orders/new?reorder=${o.id}&edit=1`} variant="outline"><Wand2 />Reorder &amp; customise</ButtonLink></Tip>
         <Tip content="Copy the customer's tracking link"><Button variant="outline" onClick={() => copy(d.track_url, 'Tracking link copied')}><Copy />Tracking link</Button></Tip>

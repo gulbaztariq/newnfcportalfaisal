@@ -6,7 +6,7 @@ import { toast } from 'sonner';
 import {
   ArrowLeft, ArrowRight, Check, User, Package, Truck, ClipboardCheck, Plus, Trash2, Store, Wand2, IdCard, Copy, ExternalLink,
   BadgePercent, Banknote, ShoppingBag, Settings2, Sparkles, UserCheck, UserPlus, UserRound, Building2, Repeat,
-  Share2, Boxes, FlaskConical, Printer, Smartphone, Layers,
+  Share2, Boxes, FlaskConical, Printer, Smartphone, Layers, CreditCard, CalendarClock,
 } from 'lucide-react';
 import api from '@/lib/api';
 import SearchSelect from '@/components/SearchSelect';
@@ -25,18 +25,22 @@ const STEPS = [
 let lineId = 0;
 /* order types: what the customer wants decides the products, the pricing rules and whether anything ships */
 const ORDER_TYPES = [
-  { key: 'nfc_profile', title: 'NFC card + cloud profile', text: 'Business card linked to a profile on our portal', icon: IdCard },
+  { key: 'nfc_profile', title: 'NFC Business Card', text: 'Business card linked to a profile on our portal', icon: IdCard },
   { key: 'social', title: 'Social / review card', text: 'Static link, dynamic link or all-in-one social profile', icon: Share2 },
   { key: 'wholesale', title: 'Wholesale', text: 'Bulk quantities with quantity discounts', icon: Boxes },
   { key: 'sample', title: 'Samples first', text: 'Paid samples, credited to the bulk order later', icon: FlaskConical },
-  { key: 'printing', title: 'Printing only', text: 'Card printing, no profile or plan', icon: Printer },
+  { key: 'card_printing', title: 'Card + printing', text: 'NFC card with your print, no profile or plan', icon: CreditCard },
+  { key: 'printing', title: 'Printing only', text: 'Printing service on cards the client already has', icon: Printer },
   { key: 'digital', title: 'Digital profile only', text: 'Profile and plan, nothing shipped', icon: Smartphone },
+  { key: 'renewal', title: 'Renewal', text: 'Extend an existing customer\'s plan', icon: CalendarClock },
 ];
+const NO_SHIP = ['digital', 'renewal']; // nothing is delivered
+const noShip = (t) => NO_SHIP.includes(t);
 const TYPE_TITLE = Object.fromEntries(ORDER_TYPES.map((t) => [t.key, t.title]));
 const SOCIAL_VARIANTS = [{ value: 'static', label: 'Static link', kind: 'social_static' }, { value: 'dynamic', label: 'Dynamic link', kind: 'social_dynamic' }, { value: 'profile', label: 'All-in-one social profile', kind: 'social_profile' }];
 /** which product kinds an order type offers (an untagged product counts as a normal NFC product) */
 const kindsFor = (type, variant) => ({
-  nfc_profile: ['nfc_profile', null], printing: ['printing', null], digital: ['digital', null],
+  nfc_profile: ['nfc_profile', null], printing: ['printing', null], card_printing: ['blank_card', 'printing', null], digital: ['digital', null], renewal: ['__plan'],
   social: [SOCIAL_VARIANTS.find((v) => v.value === variant)?.kind].filter(Boolean).concat(variant ? [] : ['social_static', 'social_dynamic', 'social_profile']),
 }[type] || null); // null = every product (wholesale, samples)
 const afterDisc = (price, t, v) => Math.max(0, t === 'percent' ? price * (1 - Math.min(100, Number(v) || 0) / 100) : t === 'fixed' ? price - (Number(v) || 0) : price);
@@ -72,7 +76,7 @@ function Summary({ meta, quote, lines, form, setForm, loading }) {
   const cur = meta.currency;
   const products = Object.fromEntries(meta.products.map((p) => [p.id, p]));
   const collection = form.fulfilment === 'collection';
-  const digital = form.order_type === 'digital';
+  const digital = noShip(form.order_type);
   return (
     <Card className="overflow-hidden lg:sticky lg:top-24">
       <CardHeader icon={ShoppingBag} title="Order summary" />
@@ -154,6 +158,7 @@ export default function OrderWizard() {
     order_type: 'nfc_profile', social_variant: '', sample_order: null,
   });
   const [showAll, setShowAll] = useState(false);
+  const [subInfo, setSubInfo] = useState(undefined); // current plan of the customer being renewed
   const [errors, setErrors] = useState({});
   const [quote, setQuote] = useState(null);
   const [quoting, setQuoting] = useState(false);
@@ -186,19 +191,19 @@ export default function OrderWizard() {
         setReorderOf(o.order_number);
         setStep(params.get('edit') ? 2 : 4);
       }).catch(() => toast.error('Could not load the order to reorder'));
-    } else if (params.get('sample')) {
-      // bulk order after a sample order: same customer and products, wholesale pricing, the sample charge credited
-      api.get(`/admin/orders/${params.get('sample')}`).then(({ data }) => {
+    } else if (params.get('bulk') || params.get('sample')) {
+      // bulk order from any order: same customer and products at wholesale pricing; a sample order's charge is credited
+      api.get(`/admin/orders/${params.get('bulk') || params.get('sample')}`).then(({ data }) => {
         const o = data.data; const minQty = meta.wholesale_tiers?.[0]?.min || 25;
         const base = { name: o.name, phone: o.phone || '', email: o.email || '', company_name: o.company_name || '', city: o.city || '', address: o.address || '', order_source_id: o.order_source_id || '', order_type: 'wholesale',
-          sample_order: { id: o.id, order_number: o.order_number, credit: (o.items || []).reduce((a, i) => a + Number(i.total), 0) } };
+          sample_order: o.order_type === 'sample' ? { id: o.id, order_number: o.order_number, credit: (o.items || []).reduce((a, i) => a + Number(i.total), 0) } : null };
         if (o.guest_customer_id) fill({ ...base, customer_type: 'guest', guest: { id: o.guest_customer_id, name: o.guest?.name || o.name, phone: o.phone } });
         else if (o.organisation_id) fill({ ...base, customer_type: 'organisation', organisation: { id: o.organisation_id, name: o.organisation?.organisation?.name || o.name }, contact_id: o.user_id || '' });
         else if (o.user_id) fill({ ...base, customer_type: 'existing', customer: { id: o.user_id, name: `${o.user?.first_name || ''} ${o.user?.last_name || ''}`.trim() || o.name, email: o.user?.email } });
         else fill({ ...base, customer_type: 'guest' });
         setLines((o.items?.length ? o.items : []).map((it) => ({ key: ++lineId, product_id: it.nfc_card_id, variant: it.variant || '', quantity: minQty, unit_price: '', customization: !!it.customization })));
-        setReorderOf(`sample ${o.order_number}`); setStep(2);
-      }).catch(() => toast.error('Could not load the sample order'));
+        setReorderOf(`bulk from ${o.order_number}`); setStep(2);
+      }).catch(() => toast.error('Could not load the order'));
     } else if (params.get('guest')) {
       api.get(`/admin/guest-customers/${params.get('guest')}`).then(({ data }) => { const g = data.data; fill({ customer_type: 'guest', guest: g, name: g.name, phone: g.phone || '', email: g.email || '', company_name: g.company_name || '', city: g.city || '', address: g.address || '' }); });
     } else if (params.get('organisation')) {
@@ -209,14 +214,19 @@ export default function OrderWizard() {
 
   const products = useMemo(() => Object.fromEntries((meta?.products || []).map((p) => [p.id, p])), [meta]);
   const sampleMax = meta?.sample_max_qty || 5;
+  const renewFor = form.customer?.id || form.organisation?.id;
+  useEffect(() => {
+    if (form.order_type !== 'renewal' || !renewFor) { setSubInfo(undefined); return; }
+    api.get(`/admin/customers/${renewFor}/subscription`).then(({ data }) => setSubInfo(data.data)).catch(() => setSubInfo(null));
+  }, [form.order_type, renewFor]);
   const kinds = kindsFor(form.order_type, form.social_variant);
   const offered = useMemo(() => (meta?.products || []).filter((p) => (!form.order_source_id || !p.order_source_id || String(p.order_source_id) === String(form.order_source_id))
-    && (showAll || !kinds || kinds.includes(p.product_kind || null) || (form.order_type === 'digital' && p.plan_id))), [meta, form.order_source_id, form.order_type, form.social_variant, showAll]); // eslint-disable-line
+    && (showAll || !kinds || kinds.includes(p.product_kind || null) || (noShip(form.order_type) && p.plan_id))), [meta, form.order_source_id, form.order_type, form.social_variant, showAll]); // eslint-disable-line
   const valid = lines.filter((l) => l.product_id);
   const payload = () => ({
     items: valid.map(({ product_id, variant, quantity, unit_price, customization }) => ({ product_id, variant, quantity, unit_price, customization })),
     order_type: form.order_type, social_variant: form.order_type === 'social' ? form.social_variant : undefined, sample_order_id: form.order_type === 'wholesale' ? form.sample_order?.id : undefined,
-    fulfilment: form.order_type === 'digital' ? 'digital' : form.fulfilment, is_cod: form.order_type !== 'digital' && form.fulfilment === 'delivery' && form.payment === 'cod', delivery_charges: form.delivery_charges,
+    fulfilment: noShip(form.order_type) ? 'digital' : form.fulfilment, is_cod: !noShip(form.order_type) && form.fulfilment === 'delivery' && form.payment === 'cod', delivery_charges: form.delivery_charges,
     discount_type: form.discount_type, discount_value: form.discount_value || 0,
   });
   // live price from the server (same rules as the saved order)
@@ -235,9 +245,10 @@ export default function OrderWizard() {
   const pickType = (key) => setValues((f) => {
     const untouched = !f.name && !f.customer && !f.organisation && !f.guest;
     const account = ['nfc_profile', 'digital'].includes(key) || (key === 'social' && f.social_variant === 'profile');
+    const customerType = key === 'renewal' ? 'existing' : account ? 'new' : 'guest';
     return { ...f, order_type: key, social_variant: key === 'social' ? f.social_variant : '', sample_order: key === 'wholesale' ? f.sample_order : null,
-      fulfilment: key === 'digital' ? 'digital' : f.fulfilment === 'digital' ? 'delivery' : f.fulfilment, payment: key === 'digital' ? 'pending' : f.payment === 'pending' && f.fulfilment === 'digital' ? 'cod' : f.payment,
-      ...(untouched ? { customer_type: account ? 'new' : 'guest' } : {}) };
+      fulfilment: noShip(key) ? 'digital' : f.fulfilment === 'digital' ? 'delivery' : f.fulfilment, payment: noShip(key) ? 'pending' : f.payment === 'pending' && f.fulfilment === 'digital' ? 'cod' : f.payment,
+      ...(untouched ? { customer_type: customerType } : {}) };
   });
   const toggleDummy = (on) => { set('dummy', on); set('email', on ? dummyEmail(form.name, meta.dummy_domain) : ''); };
   const setType = (t) => { setValues((f) => ({ ...f, customer_type: t, customer: null, organisation: null, contact_id: '', guest: null, dummy: false, ...(t === f.customer_type ? {} : { name: '', phone: '', email: '', company_name: '', city: '', address: '' }) })); setErrors({}); };
@@ -248,7 +259,7 @@ export default function OrderWizard() {
 
   const checks = [
     () => { const e = {}; if (form.order_type === 'social' && !form.social_variant) e.social_variant = 'Choose static, dynamic or all-in-one'; return e; },
-    () => { const e = {}; if (form.customer_type === 'existing' && !form.customer) e.user_id = 'Search and choose the customer'; if (form.customer_type === 'organisation' && !form.organisation) e.organisation_id = 'Search and choose the organisation'; if (!form.name.trim()) e.name = 'Enter the customer name'; if (form.customer_type === 'new' && !form.email) e.email = 'An account needs an e-mail. Tick "Dummy e-mail" if the customer has none.'; if (form.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) e.email = 'Enter a valid e-mail address'; return e; },
+    () => { const e = {}; if (form.order_type === 'renewal' && !['existing', 'organisation'].includes(form.customer_type)) e.name = 'A renewal is for an existing customer or organisation'; if (form.customer_type === 'existing' && !form.customer) e.user_id = 'Search and choose the customer'; if (form.customer_type === 'organisation' && !form.organisation) e.organisation_id = 'Search and choose the organisation'; if (!form.name.trim()) e.name = 'Enter the customer name'; if (form.customer_type === 'new' && !form.email) e.email = 'An account needs an e-mail. Tick "Dummy e-mail" if the customer has none.'; if (form.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) e.email = 'Enter a valid e-mail address'; return e; },
     () => { const e = {}; if (!valid.length) e.products = 'Add at least one product'; else if (valid.some((l) => products[l.product_id]?.variants?.length && !l.variant)) e.products = 'Choose an option for every product'; else if (valid.some((l) => l.unit_price !== '' && Number(l.unit_price) < 0)) e.products = 'Prices cannot be negative'; else if (form.order_type === 'sample' && valid.some((l) => Number(l.quantity) > sampleMax)) e.products = `Samples are limited to ${sampleMax} pieces per product`; return e; },
     () => { const e = {}; if (form.discount_type === 'percent' && Number(form.discount_value) > 100) e.discount_value = 'Maximum 100%'; if (Number(form.discount_value) < 0) e.discount_value = 'Cannot be negative'; return e; },
     () => ({}),
@@ -284,6 +295,7 @@ export default function OrderWizard() {
           <div className="absolute -top-24 left-1/2 size-72 -translate-x-1/2 rounded-full bg-success/20 blur-3xl" />
           <motion.span initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: 'spring', stiffness: 300, damping: 18 }} className="relative mx-auto grid size-16 place-items-center rounded-2xl bg-success text-white shadow-lift"><Check className="size-8" /></motion.span>
           <h2 className="relative mt-4 font-display text-2xl font-bold">Order {o.order_number} created</h2>
+          {result.renewed && <p className="relative mt-1 font-medium text-success">Plan renewed until {new Date(result.renewed.ends_at).toLocaleDateString()}</p>}
           <p className="relative mt-1 text-muted-foreground">{form.name} · {money(cur, o.amount)} · {o.fulfilment === 'digital' ? 'Digital, no shipping' : o.fulfilment === 'collection' ? 'Office collection' : o.is_cod ? 'Cash on delivery' : 'Courier delivery'}</p>
           {acc && (
             <div className="relative mt-6 space-y-2 rounded-2xl border border-border bg-muted/40 p-4 text-left text-sm">
@@ -340,6 +352,8 @@ export default function OrderWizard() {
                       </div>
                     )}
                     {form.order_type === 'sample' && <p className="rounded-2xl bg-primary-soft/40 p-3 text-sm text-muted-foreground">Samples are charged at a higher price than normal pieces (up to <b>{sampleMax}</b> per product). When the customer orders in bulk, choose <b>Wholesale</b> and the sample charge is deducted.</p>}
+                    {form.order_type === 'card_printing' && <p className="rounded-2xl bg-primary-soft/40 p-3 text-sm text-muted-foreground">The client buys NFC cards and gets them printed with their design. No profile, no plan, no account needed: choose <b>Guest</b> in the next step.</p>}
+                    {form.order_type === 'renewal' && <p className="rounded-2xl bg-primary-soft/40 p-3 text-sm text-muted-foreground">Extends an existing customer's plan. The new period starts where the current one ends, and is added as soon as the order is marked <b>Paid</b>. Nothing is shipped.</p>}
                     {form.order_type === 'digital' && <p className="rounded-2xl bg-primary-soft/40 p-3 text-sm text-muted-foreground">No delivery charge and no courier: only the profile and its plan are set up.</p>}
                     <Field label={<span className="flex w-full items-center justify-between">Which website is this order for?<Link to="/admin/order-sources" className="text-xs font-normal text-primary hover:underline">Manage sources</Link></span>} hint="Products and prices come from this website's price list">
                       <Select value={form.order_source_id} onChange={(v) => set('order_source_id', v)} allowEmpty placeholder={meta.sources.length ? 'Phone / walk-in / other (all products)' : 'No sources yet'} options={meta.sources.map((x) => ({ value: x.id, label: x.name }))} />
@@ -444,6 +458,12 @@ export default function OrderWizard() {
                         {form.sample_order && <button type="button" onClick={() => set('sample_order', null)} className="mt-2 cursor-pointer text-xs text-muted-foreground hover:text-danger">Remove credit</button>}
                       </div>
                     )}
+                    {form.order_type === 'renewal' && (
+                      <div className="rounded-2xl border border-border p-3 text-sm">
+                        {subInfo === undefined ? <p className="text-muted-foreground">Choose the customer first.</p> : subInfo === null ? <p className="text-muted-foreground">This customer has no plan yet: the renewal starts today.</p>
+                          : <p><b>{subInfo.plan}</b> {subInfo.expired ? <span className="text-danger">expired on {new Date(subInfo.ends_at).toLocaleDateString()}</span> : <>runs until <b>{new Date(subInfo.ends_at).toLocaleDateString()}</b></>}. The renewal {subInfo.expired ? 'starts today' : 'starts after that date'}.</p>}
+                      </div>
+                    )}
                     {kinds && !showAll && offered.length === 0 && <p className="rounded-xl bg-warning-soft px-3 py-2 text-xs text-warning">No products are tagged for this order type{form.order_source_id ? ' on this website' : ''} yet. Tag them in Order sources &gt; Price list, or show all products.</p>}
                     <div className="flex items-center justify-between">
                       <Button variant="soft" size="sm" onClick={() => setLines((ls) => [...ls, newLine()])}><Plus />Add product</Button>
@@ -454,19 +474,19 @@ export default function OrderWizard() {
 
                 {step === 3 && (
                   <div className="space-y-5">
-                    {form.order_type === 'digital' ? (
-                      <div className="rounded-2xl bg-primary-soft/40 p-4 text-sm"><p className="flex items-center gap-2 font-semibold"><Smartphone className="size-4 text-primary" />Digital profile: nothing to ship</p><p className="mt-1 text-muted-foreground">No delivery or COD charges. Just record the payment.</p></div>
+                    {noShip(form.order_type) ? (
+                      <div className="rounded-2xl bg-primary-soft/40 p-4 text-sm"><p className="flex items-center gap-2 font-semibold"><Smartphone className="size-4 text-primary" />{form.order_type === 'renewal' ? 'Renewal' : 'Digital profile'}: nothing to ship</p><p className="mt-1 text-muted-foreground">No delivery or COD charges. Just record the payment.</p></div>
                     ) : <div className="grid gap-3 sm:grid-cols-2">
                       <ChoiceCard active={form.fulfilment === 'delivery'} onClick={() => { set('fulfilment', 'delivery'); if (form.payment === 'collection') set('payment', 'cod'); }} icon={Truck} title="Courier delivery" text="Sent by courier to the customer's address" />
                       <ChoiceCard active={form.fulfilment === 'collection'} onClick={() => { set('fulfilment', 'collection'); if (form.payment === 'cod') set('payment', 'collection'); }} icon={Store} title="Office collection" text="Customer collects from the office. No delivery or COD charges." />
                     </div>}
                     <div className="grid gap-4 sm:grid-cols-2">
                       <Field label="Payment">
-                        <Segmented id="pay" value={form.payment} onChange={(v) => set('payment', v)} options={form.order_type === 'digital' ? [{ value: 'paid', label: 'Paid' }, { value: 'pending', label: 'Unpaid' }] : form.fulfilment === 'collection'
+                        <Segmented id="pay" value={form.payment} onChange={(v) => set('payment', v)} options={noShip(form.order_type) ? [{ value: 'paid', label: 'Paid' }, { value: 'pending', label: 'Unpaid' }] : form.fulfilment === 'collection'
                           ? [{ value: 'collection', label: 'Pay at collection' }, { value: 'paid', label: 'Paid' }]
                           : [{ value: 'cod', label: 'COD' }, { value: 'paid', label: 'Paid' }, { value: 'pending', label: 'Unpaid' }]} />
                       </Field>
-                      {form.fulfilment === 'delivery' && form.order_type !== 'digital' && (
+                      {form.fulfilment === 'delivery' && !noShip(form.order_type) && (
                         <Field label="Delivery charges" hint={`Empty = default (${money(cur, quote?.delivery_default ?? meta.delivery_charges)})`}><Input type="number" min="0" value={form.delivery_charges} onChange={(e) => set('delivery_charges', e.target.value)} placeholder={String(quote?.delivery_default ?? meta.delivery_charges)} /></Field>
                       )}
                     </div>
@@ -491,7 +511,7 @@ export default function OrderWizard() {
                       ['Company', form.company_name || '-'], ['Address', [form.address, form.city].filter(Boolean).join(', ') || '-'], ['Source', srcName || '-'],
                     ]} />
                     <ReviewBlock title="Delivery & payment" icon={Banknote} onEdit={() => setStep(3)} rows={[
-                      ['Fulfilment', form.order_type === 'digital' ? 'Digital (no shipping)' : form.fulfilment === 'collection' ? 'Office collection' : 'Courier delivery'],
+                      ['Fulfilment', noShip(form.order_type) ? 'No shipping' : form.fulfilment === 'collection' ? 'Office collection' : 'Courier delivery'],
                       ['Payment', { cod: 'Cash on delivery', paid: 'Paid', pending: 'Unpaid', collection: 'Pay at collection' }[form.payment]],
                       ['Sample credit', quote?.sample_credit > 0 ? money(cur, quote.sample_credit) : 'None'],
                       ['Discount', quote?.discount > 0 ? `${money(cur, quote.discount)}${quote.discount_type === 'percent' ? ` (${quote.discount_value}%)` : ''}` : 'None'],

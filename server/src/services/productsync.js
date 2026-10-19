@@ -90,15 +90,22 @@ async function readShopify(base) {
 async function fetchProducts(sourceUrl) {
   const u = await assertPublicUrl(sourceUrl);
   const bases = [...new Set([`${u.origin}${u.pathname.replace(/\/+$/, '')}`, u.origin])];
+  let netError = null; // a connection problem (certificate, timeout...) is not the same as "no product feed"
+  const attempt = (fn, base) => fn(base).catch((e) => { if (e instanceof HttpError) throw e; netError = netError || e; return null; });
   for (const base of bases) {
-    const woo = await readWoo(base).catch(() => null); if (woo) return { platform: 'woocommerce', products: woo };
-    const shop = await readShopify(base).catch(() => null); if (shop) return { platform: 'shopify', products: shop };
+    const woo = await attempt(readWoo, base); if (woo) return { platform: 'woocommerce', products: woo };
+    const shop = await attempt(readShopify, base); if (shop) return { platform: 'shopify', products: shop };
+  }
+  if (netError) {
+    const why = String(netError.cause?.code || netError.cause?.message || netError.message);
+    const cert = /CERT|ISSUER|SSL|TLS|SELF_SIGNED/i.test(why) ? 'its security certificate is not valid (often a missing intermediate certificate)' : `the connection failed (${why.slice(0, 60)})`;
+    throw new HttpError(422, `Could not read ${u.hostname}: ${cert}. Fix the website or paste its products as a list.`);
   }
   throw new HttpError(422, 'No product feed found on this website (WooCommerce and Shopify are supported). You can add its products by pasting a list instead.');
 }
 
 /** Product kind from the name, only for the confident cases. Everything else stays unset for you to tag in the price list. */
-const guessKind = (name) => (/digital business card/i.test(name) ? 'nfc_profile' : /all[- ]in[- ]one.*social|social.*all[- ]in[- ]one/i.test(name) ? 'social_profile' : null);
+const guessKind = (name) => (/(digital|nfc|smart)\s+(business|visiting) card/i.test(name) ? 'nfc_profile' : /all[- ]in[- ]one.*social|social.*all[- ]in[- ]one/i.test(name) ? 'social_profile' : null);
 
 /** Upsert the local products of a source. Returns counts. */
 async function syncSource(source) {

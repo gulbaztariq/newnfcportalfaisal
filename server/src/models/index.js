@@ -427,6 +427,7 @@ const NfcOrder = sequelize.define('nfc_order', {
   social_variant: T.STRING(20), // static | dynamic | profile (for the social / review card type)
   parent_order_id: T.INTEGER, // wholesale order placed after this sample order
   sample_credit: { type: T.DECIMAL(12, 2), defaultValue: 0 }, // sample charge deducted from the bulk order
+  plan_applied_at: T.DATE, // renewal orders: when the paid plan was added to the customer's subscription
 });
 NfcOrder.belongsTo(User, { foreignKey: 'user_id' }); User.hasMany(NfcOrder, { foreignKey: 'user_id' });
 NfcOrder.belongsTo(User, { as: 'creator', foreignKey: 'created_by', constraints: false });

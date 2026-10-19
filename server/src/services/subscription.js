@@ -20,6 +20,21 @@ async function activate(userId, plan, { transactionId = null, paymentType = 'fre
   });
 }
 
+/**
+ * Renew: the new period starts where the current one ends (renewing early never loses days);
+ * an expired or missing subscription starts today. The plan can be the same or a different one.
+ */
+async function renew(userId, plan, opts = {}) {
+  const now = new Date();
+  const cur = await Subscription.findOne({ where: { user_id: userId, status: 'active' }, order: [['id', 'DESC']] });
+  const base = cur && new Date(cur.ends_at) > now ? new Date(cur.ends_at) : now;
+  await Subscription.update({ status: 'inactive' }, { where: { user_id: userId, status: 'active' } });
+  return Subscription.create({
+    user_id: userId, plan_id: plan.id, plan_amount: plan.price, discount: opts.discount || 0, payable_amount: opts.amount || 0, plan_frequency: plan.frequency,
+    starts_at: now, ends_at: endDate(plan, base), status: 'active', payment_type: opts.paymentType || 'renewal', tax_amount: opts.tax || 0,
+  });
+}
+
 async function current(userId) {
   return Subscription.findOne({ where: { user_id: userId, status: 'active' }, include: [{ model: Plan, include: [Template] }], order: [['id', 'DESC']] });
 }
@@ -69,4 +84,4 @@ async function consumeCoupon(meta) {
   if (c && c.coupon_limit) await c.update({ coupon_limit_left: Math.max(0, (c.coupon_limit_left ?? c.coupon_limit) - 1) });
 }
 
-module.exports = { activate, current, assignDefaultPlan, canCreateVcard, applyCoupon, consumeCoupon, endDate, isExpired };
+module.exports = { renew, activate, current, assignDefaultPlan, canCreateVcard, applyCoupon, consumeCoupon, endDate, isExpired };

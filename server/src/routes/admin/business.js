@@ -45,7 +45,7 @@ r.delete('/security/bans/:ip', (req, res) => { security.unban(req.params.ip); re
 
 /* ============================================================== products (shop) */
 const PRODUCT_FIELDS = ['name', 'description', 'price', 'status', 'slug', 'category', 'sku', 'short_description', 'compare_price', 'customization_price', 'size_label', 'variants', 'featured', 'show_in_shop', 'sort', 'weight_grams', 'extra_cost', 'track_stock', 'plan_id', 'product_kind', 'discount_type', 'discount_value', 'sample_price', 'wholesale_tiers', 'order_source_id'];
-const PRODUCT_KINDS = ['nfc_profile', 'social_static', 'social_dynamic', 'social_profile', 'printing', 'digital'];
+const PRODUCT_KINDS = ['blank_card', 'nfc_profile', 'social_static', 'social_dynamic', 'social_profile', 'printing', 'digital'];
 const slugify = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 140);
 r.get('/nfc-cards/:id/components', wrap(async (req, res) => {
   const rows = await M.ProductComponent.findAll({ where: { nfc_card_id: req.params.id }, include: [{ model: M.InventoryItem, as: 'item' }] });
@@ -139,7 +139,7 @@ async function sampleCreditFor(b) {
 const adminQuoteOpts = async (b) => {
   const collection = b.fulfilment === 'collection';
   return {
-    is_cod: !collection && b.order_type !== 'digital' && toBool(b.is_cod), collection, priceOverride: true, orderType: b.order_type || 'nfc_profile', sampleCredit: (await sampleCreditFor(b)).credit,
+    is_cod: !collection && !orders.NO_SHIP_TYPES.includes(b.order_type) && toBool(b.is_cod), collection, priceOverride: true, orderType: b.order_type || 'nfc_profile', sampleCredit: (await sampleCreditFor(b)).credit,
     discountType: b.discount_type === 'percent' ? 'percent' : 'fixed', discountValue: b.discount_value,
     delivery: b.delivery_charges === undefined || b.delivery_charges === null || b.delivery_charges === '' ? undefined : b.delivery_charges,
   };
@@ -188,7 +188,12 @@ r.post('/orders', wrap(async (req, res) => {
   if (b.order_source_id && !source) fail(422, 'Validation failed', { order_source_id: 'Unknown order source' });
   if (b.order_type && !orders.ORDER_TYPES[b.order_type]) fail(422, 'Validation failed', { order_type: 'Unknown order type' });
   const sampleOf = (await sampleCreditFor(b)).order;
+  if (b.order_type === 'renewal') {
+    // a renewal adds a plan to an existing customer's subscription
+    if (!['existing', 'organisation'].includes(type)) fail(422, 'Validation failed', { user_id: 'Choose the customer whose plan is being renewed' });
+  }
   const q = await orders.quote(jsonList(b.items), await adminQuoteOpts(b));
+  if (b.order_type === 'renewal' && !q.lines.every((l) => l.product.plan_id)) fail(422, 'Validation failed', { items: 'A renewal needs a plan product' });
   const email = b.email ? String(b.email).toLowerCase().trim() : null;
   const dummy = email ? await orders.isDummyEmail(email) : false;
 
@@ -235,11 +240,11 @@ r.post('/orders', wrap(async (req, res) => {
     if (vcard && account) account.vcard_url = `${appUrl}/${vcard.url_alias}`;
   }
 
-  const isCod = !collection && b.order_type !== 'digital' && toBool(b.is_cod);
+  const isCod = !collection && !orders.NO_SHIP_TYPES.includes(b.order_type) && toBool(b.is_cod);
   const o = await orders.create({
     ...pick(b, ['name', 'phone', 'address', 'city', 'courier_city_id', 'company_name', 'designation', 'customer_note', 'admin_note']),
     email, user_id: user?.id || null, vcard_id: vcard?.id || null, guest_customer_id: guest?.id || null, organisation_id: orgOwner?.id || null,
-    fulfilment: collection ? 'collection' : b.order_type === 'digital' ? 'digital' : 'delivery', is_cod: isCod,
+    fulfilment: collection ? 'collection' : orders.NO_SHIP_TYPES.includes(b.order_type) ? 'digital' : 'delivery', is_cod: isCod,
     social_variant: ['static', 'dynamic', 'profile'].includes(b.social_variant) ? b.social_variant : null, parent_order_id: sampleOf?.id || null,
     payment_type: isCod ? 'cod' : collection && b.payment_status !== 'paid' ? 'collection' : (b.payment_type || 'manual'),
     payment_status: b.payment_status === 'paid' ? 'paid' : 'pending', source: 'admin', design_type: 'standard',
@@ -247,8 +252,9 @@ r.post('/orders', wrap(async (req, res) => {
   }, q);
   if (vcard) await M.ShortLink.create({ code: await shortlinks.uniqueCode(M), title: `Order ${o.order_number}`, target_type: 'vcard', vcard_id: vcard.id, user_id: user.id, nfc_order_id: o.id });
   // organisation orders appear in the organisation journey (services/organisation.js timeline) with the contact and the staff member
-  security.audit(req, 'order.create', 'nfc_order', o.id, { type, account: account?.created || undefined });
-  res.status(201).json({ data: o, account, guest: guest ? { id: guest.id, name: guest.name } : null, message: `Order ${o.order_number} created` });
+  const renewed = await orders.applyRenewal(o); // paid renewals extend the subscription right away
+  security.audit(req, 'order.create', 'nfc_order', o.id, { type, account: account?.created || undefined, renewed: renewed ? renewed.ends_at : undefined });
+  res.status(201).json({ data: o, account, renewed: renewed ? { ends_at: renewed.ends_at } : null, guest: guest ? { id: guest.id, name: guest.name } : null, message: `Order ${o.order_number} created${renewed ? `. Plan renewed until ${dayjs(renewed.ends_at).format('DD MMM YYYY')}` : ''}` });
 }));
 
 /* customer search for the order wizard: name, e-mail or phone in one box */
@@ -277,6 +283,12 @@ r.get('/organisations/:id/people', wrap(async (req, res) => {
   if (!owner) fail(404, 'Not found');
   const members = await M.User.findAll({ where: { organisation_id: owner.id }, attributes: ['id', 'first_name', 'last_name', 'email', 'contact', 'company_role', 'org_status'], order: [['first_name', 'ASC']] });
   res.json({ data: [{ ...owner.toJSON(), company_role: 'owner' }, ...members.map((m) => m.toJSON())] });
+}));
+
+/* a customer's current plan (shown when renewing) */
+r.get('/customers/:id/subscription', wrap(async (req, res) => {
+  const sub = await subs.current(req.params.id);
+  res.json({ data: sub ? { plan: sub.plan?.name, plan_id: sub.plan_id, ends_at: sub.ends_at, expired: new Date(sub.ends_at) < new Date(), frequency: sub.plan_frequency } : null });
 }));
 
 /* guest customers: everyone who ordered without an account, with their order journey */
@@ -379,6 +391,7 @@ r.patch('/orders/:id', wrap(async (req, res) => {
   if (req.body.cod_settled !== undefined) data.cod_settled = toBool(req.body.cod_settled);
   if (req.body.nfc_written !== undefined) data.nfc_written = toBool(req.body.nfc_written);
   if (Object.keys(data).length) await o.update(data);
+  if (data.payment_status === 'paid') await orders.applyRenewal(o);
   if (req.body.order_status) {
     validate(req.body, { order_status: `in:${orders.ALL_STATUSES.join(',')}` });
     await orders.setStatus(o, req.body.order_status, { actor: req.user, note: req.body.note, vendorId: req.body.stock_vendor_id ? Number(req.body.stock_vendor_id) : undefined });

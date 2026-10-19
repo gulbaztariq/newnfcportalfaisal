@@ -7,7 +7,7 @@ import { cn } from '@/lib/cn';
 import { PageHeader, Card, CardBody, Button, Field, Input, Textarea, Select, Switch, Badge, Dialog, EmptyState, Skeleton, SearchInput, useForm, run, confirm } from '@/components/ui';
 
 const KINDS = [
-  { value: 'nfc_profile', label: 'NFC card + profile' }, { value: 'social_static', label: 'Social card: static link' }, { value: 'social_dynamic', label: 'Social card: dynamic link' },
+  { value: 'blank_card', label: 'Blank NFC card / tag' }, { value: 'nfc_profile', label: 'NFC Business Card' }, { value: 'social_static', label: 'Social card: static link' }, { value: 'social_dynamic', label: 'Social card: dynamic link' },
   { value: 'social_profile', label: 'Social profile (all-in-one)' }, { value: 'printing', label: 'Printing only' }, { value: 'digital', label: 'Digital profile' },
 ];
 const DISCOUNTS = [{ value: 'fixed', label: 'Rs off' }, { value: 'percent', label: '% off' }];
