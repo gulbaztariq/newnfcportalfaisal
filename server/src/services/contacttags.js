@@ -39,6 +39,18 @@ async function createForOrder(order, quantity, { userId, kind = 'vehicle' } = {}
   return tags;
 }
 
+const TAG_KIND_OF = { contact_tag: 'vehicle', airport_tag: 'luggage' }; // product kind -> tag kind
+
+/** Shop checkout: make the tags for every tag product in the cart (a pack makes all its tags) */
+async function createForLines(order, lines, { userId } = {}) {
+  const made = [];
+  for (const [productKind, kind] of Object.entries(TAG_KIND_OF)) {
+    const count = lines.filter((l) => l.product.product_kind === productKind).reduce((a, l) => a + l.quantity * Math.max(1, Number(l.product.tags_per_unit) || 1), 0);
+    if (count) made.push(...(await createForOrder(order, count, { userId, kind })));
+  }
+  return made;
+}
+
 /**
  * Relay a visitor's message / call-back request to the owner (or the emergency contact).
  * Never throws: each channel reports sent | skipped | failed in `delivery`.
@@ -71,4 +83,4 @@ async function notify(tag, msg) {
   return { text, delivery };
 }
 
-module.exports = { KINDS, uniqueCode, createForOrder, notify, url, manageUrl, sameToken, cleanPhone, validPhone };
+module.exports = { TAG_KIND_OF, KINDS, uniqueCode, createForOrder, createForLines, notify, url, manageUrl, sameToken, cleanPhone, validPhone };

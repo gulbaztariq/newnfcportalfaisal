@@ -45,7 +45,7 @@ export function ContactTags() {
   };
   return (
     <>
-      <PageHeader title="Contact tags" description="QR / NFC tags that let anyone reach the owner without seeing their phone number. They are made when you place a Contact tag order.">
+      <PageHeader title="Contact tags" description="QR / NFC tags that let anyone reach the owner without seeing their phone number. Car contact tags and airport (luggage) tags, made by orders from the shop or the New order screen.">
         <ButtonLink href="/api/admin/contact-tags/export" variant="outline"><Download />Export links (CSV)</ButtonLink>
       </PageHeader>
       <TableCard title="Tags" list={list} toolbar={<>
@@ -53,7 +53,7 @@ export function ContactTags() {
         <SearchInput value={list.params.search} onChange={(search) => list.set({ search })} placeholder="Code, label, owner, phone..." />
       </>}>
         <DataTable loading={list.loading} rows={list.rows}
-          empty={<EmptyState icon={ShieldCheck} title="No contact tags yet" description="Choose the Contact tag type in New order. One tag is made per piece, each with its own link and QR code." />}
+          empty={<EmptyState icon={ShieldCheck} title="No contact tags yet" description="Choose Car contact tag or Airport tag in New order, or sell them in the shop. One tag is made per piece, each with its own link and QR code." />}
           columns={[
             { key: 'c', label: 'Tag', render: (t) => <div><p className="flex items-center gap-2 font-mono text-sm font-semibold text-primary">{t.code}{t.kind === 'luggage' && <Badge tone="info">Luggage</Badge>}</p><p className="text-xs text-muted-foreground">{t.label || 'No label yet'}{t.order_number ? ` · ${t.order_number}` : ''}</p></div> },
             { key: 'o', label: 'Owner', render: (t) => <div className="text-sm"><p>{t.owner_name || '-'}</p><p className="text-xs text-muted-foreground">{t.owner_phone || t.owner_email || ''}</p></div> },

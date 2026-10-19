@@ -30,7 +30,7 @@ const ORDER_TYPES = [
   { key: 'digital', title: 'Digital profile only', text: 'Profile and plan, nothing shipped', icon: Smartphone },
   { key: 'renewal', title: 'Renewal', text: 'Extend an existing customer\'s plan', icon: CalendarClock },
   { key: 'upgrade', title: 'Upgrade plan', text: 'Move a customer to a higher plan, unused time credited', icon: TrendingUp },
-  { key: 'contact_tag', title: 'Contact tag', text: 'QR / NFC tag that reaches the owner without showing their number', icon: ShieldCheck },
+  { key: 'contact_tag', title: 'Car contact tag', text: 'Tag for a car: anyone can reach the owner, number hidden', icon: ShieldCheck },
   { key: 'airport_tag', title: 'Airport tag', text: 'Luggage tag: a finder can reach the owner, number hidden', icon: Plane },
 ];
 const TAG_TYPES = ['contact_tag', 'airport_tag'];
@@ -432,7 +432,7 @@ export default function OrderWizard() {
           <h2 className="relative mt-4 font-display text-2xl font-bold">Order {o.order_number} created</h2>
           {result.tags?.length > 0 && (
             <div className="relative mt-6 space-y-2 rounded-2xl border border-border bg-muted/40 p-4 text-left text-sm">
-              <p className="flex items-center gap-2 font-semibold"><ShieldCheck className="size-4 text-primary" />{result.tags.length} {o.order_type === 'airport_tag' ? 'airport' : 'contact'} tag{result.tags.length > 1 ? 's' : ''} created</p>
+              <p className="flex items-center gap-2 font-semibold"><ShieldCheck className="size-4 text-primary" />{result.tags.length} {o.order_type === 'airport_tag' ? 'airport' : 'car contact'} tag{result.tags.length > 1 ? 's' : ''} created</p>
               {result.tags.slice(0, 5).map((t) => (
                 <div key={t.id} className="flex items-center justify-between gap-2 rounded-xl bg-card px-3 py-2">
                   <span className="font-mono font-semibold">{t.code}</span>

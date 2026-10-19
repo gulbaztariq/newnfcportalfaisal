@@ -1327,6 +1327,27 @@ function TrackResult({ res, auth, loading, onRefresh, onReset }) {
         </div>
 
         <div className="space-y-6 lg:col-span-2">
+          {o.tags?.length > 0 && (
+            <div className="rounded-3xl border border-border bg-card p-5 shadow-soft">
+              <div className="flex items-center gap-3">
+                <span className="grid size-11 place-items-center rounded-2xl bg-primary-soft text-primary"><ShieldCheck className="size-5" /></span>
+                <div className="min-w-0 flex-1"><p className="font-display font-semibold">Your {o.tags.length > 1 ? `${o.tags.length} tags` : 'tag'}</p><p className="text-sm text-muted-foreground">Anyone who scans can reach you, and your number stays hidden.</p></div>
+              </div>
+              <ul className="mt-4 space-y-2">
+                {o.tags.slice(0, 10).map((t) => (
+                  <li key={t.code} className="rounded-2xl bg-muted/60 p-3">
+                    <p className="flex items-center justify-between gap-2"><span className="font-mono font-semibold tracking-wide">{t.code}</span><span className="truncate text-xs text-muted-foreground">{t.label || (t.kind === 'luggage' ? 'Luggage tag' : 'Car tag')}</span></p>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <a href={t.url} target="_blank" rel="noreferrer" className="rounded-full border border-border bg-card px-3 py-1 text-xs font-medium hover:border-primary hover:text-primary">Preview</a>
+                      <a href={t.qr_url} target="_blank" rel="noreferrer" className="rounded-full border border-border bg-card px-3 py-1 text-xs font-medium hover:border-primary hover:text-primary">QR code</a>
+                      {t.manage_url && <a href={t.manage_url} target="_blank" rel="noreferrer" className="rounded-full bg-primary px-3 py-1 text-xs font-semibold text-white">Set up your tag</a>}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+              {o.tags.some((t) => t.manage_url) && <p className="mt-3 text-xs text-muted-foreground">Add your label, who to contact and how you want to be alerted. Keep the "Set up" links private.</p>}
+            </div>
+          )}
           {(o.tracking_number || o.courier_status) && (
             <div className="rounded-3xl border border-border bg-card p-5 shadow-soft">
               <div className="flex items-center gap-3">

@@ -15,6 +15,7 @@ const { makeUpload, fileUrl, DOC_TYPES } = require('../middleware/upload');
 const { issueToken } = require('../middleware/auth');
 const settings = require('../services/settings');
 const orders = require('../services/orders');
+const contacttags = require('../services/contacttags');
 const extras = require('../services/extras');
 const mail = require('../services/mail');
 const ai = require('../services/ai');
@@ -107,6 +108,9 @@ r.post('/checkout', checkoutLimiter, wrap(async (req, res) => {
   if (!isCod && paymentType !== 'manual' && !payments.NAMES.includes(paymentType)) fail(422, 'Choose a payment method');
   for (const k of ['design_front', 'design_back', 'design_file']) if (!isDesignUrl(req.body[k])) fail(422, 'Invalid design file');
   const q = await orders.quote(jsonList(req.body.items), { is_cod: isCod });
+  // a cart of only tag products is a tag order (car contact tags / airport tags): the tags are made below
+  const tagKinds = q.lines.map((l) => l.product.product_kind);
+  if (tagKinds.every((k) => contacttags.TAG_KIND_OF[k])) q.order_type = tagKinds.every((k) => k === 'airport_tag') ? 'airport_tag' : 'contact_tag';
   if (Number(s.shop_min_order || 0) > q.subtotal) fail(422, `The minimum order is ${s.shop_currency_icon || 'Rs'} ${s.shop_min_order}`);
 
   // account: signed-in user, or a new account for a new e-mail
@@ -136,6 +140,7 @@ r.post('/checkout', checkoutLimiter, wrap(async (req, res) => {
     design_type: design, design_front: req.body.design_front || null, design_back: req.body.design_back || null, design_file: req.body.design_file || null,
   }, q);
   if (vcard) await M.ShortLink.create({ code: await shortlinks.uniqueCode(M), title: `Order ${order.order_number}`, target_type: 'vcard', vcard_id: vcard.id, user_id: user.id, nfc_order_id: order.id });
+  const tags = await contacttags.createForLines(order, q.lines, { userId: user?.id }); // owner = the buyer; the tag links are on the tracking page
   if (created) issueToken(res, user);
 
   const trackUrl = `/track/${order.order_number}?t=${order.access_token}`;
@@ -159,6 +164,7 @@ async function trackedOrder(req, withItems) {
   const tokenOk = o && o.access_token && t.length === Buffer.byteLength(o.access_token) && crypto.timingSafeEqual(t, Buffer.from(o.access_token));
   const phoneOk = o && q.phone && String(q.phone).replace(/\D/g, '').length >= 8 && String(o.phone).replace(/\D/g, '').slice(-8) === String(q.phone).replace(/\D/g, '').slice(-8);
   if (!o || !(own || tokenOk || phoneOk)) fail(404, 'Order not found. Check the order number and phone number.');
+  o.privileged = !!(own || tokenOk); // the order link or the signed-in owner (not just the phone number) may see the private tag links
   return o;
 }
 
@@ -182,6 +188,7 @@ r.get('/track/:number', wrap(async (req, res) => {
       payment_type: o.payment_type, receipt_uploaded: !!o.transaction?.attachment,
       name: o.name, items: (o.items || []).map((i) => pick(i.toJSON(), ['name', 'variant', 'quantity', 'unit_price', 'customization', 'customization_price', 'total'])),
       history: (o.status_history || []).map((h) => ({ status: h.status, at: h.at })), courier_history: (o.courier_history || []).slice(-15),
+      tags: (await M.ContactTag.findAll({ where: { nfc_order_id: o.id }, order: [['id', 'ASC']], limit: 50 })).map((t) => ({ code: t.code, kind: t.kind, label: t.label, url: contacttags.url(t), qr_url: `${contacttags.url(t)}/qr.png`, manage_url: o.privileged ? contacttags.manageUrl(t) : null })),
     },
     steps: orders.STEPS, labels: orders.LABELS, currency: s.shop_currency_icon || 'Rs',
   });
