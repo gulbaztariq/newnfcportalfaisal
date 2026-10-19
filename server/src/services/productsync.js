@@ -56,13 +56,43 @@ async function readWoo(base) {
       const minor = Number(p.prices?.currency_minor_unit ?? 2);
       const toMoney = (v) => (v === undefined || v === null || v === '' ? 0 : r2(Number(v) / 10 ** minor));
       out.push({
-        id: String(p.id), name: decode(p.name), url: p.permalink, sku: p.sku || null, description: plain(p.short_description || p.description), category: decode(p.categories?.[0]?.name || ''),
+        id: String(p.id), variable: p.type === 'variable', name: decode(p.name), url: p.permalink, sku: p.sku || null, description: plain(p.short_description || p.description), category: decode(p.categories?.[0]?.name || ''),
         price: toMoney(p.prices?.price), compare: toMoney(p.prices?.regular_price) > toMoney(p.prices?.price) ? toMoney(p.prices?.regular_price) : null, images: (p.images || []).map((i) => i.src).filter(Boolean), variants: [],
       });
     }
     if (page >= Number(r.headers.get('x-wp-totalpages') || 1)) break;
   }
+  await addWooVariations(base, out);
   return out;
+}
+/**
+ * Variable products (grade, chip, colour...) have one price per option. The Store API lists every option of the
+ * shop with `type=variation`; the cheapest option is the base price and the others are price differences.
+ */
+async function addWooVariations(base, products) {
+  const variable = new Set(products.filter((p) => p.variable).map((p) => p.id));
+  if (!variable.size) return;
+  const byParent = new Map();
+  for (let page = 1; page <= MAX_PAGES; page++) {
+    const r = await getJson(`${base}/wp-json/wc/store/v1/products?type=variation&per_page=100&page=${page}`).catch(() => null);
+    if (!r?.ok || !Array.isArray(r.json) || !r.json.length) break;
+    for (const v of r.json) {
+      const minor = Number(v.prices?.currency_minor_unit ?? 2);
+      const price = r2(Number(v.prices?.price ?? 0) / 10 ** minor);
+      // "Grade: Premium Grade, Chip: NTAG215" -> "Premium Grade / NTAG215"
+      const name = decode(String(v.variation || '').split(/,\s*(?=[^,:]+:)/).map((x) => x.replace(/^[^:]+:\s*/, '').trim()).filter(Boolean).join(' / ')) || `Option ${v.id}`;
+      if (!byParent.has(String(v.parent))) byParent.set(String(v.parent), []);
+      byParent.get(String(v.parent)).push({ name: name.slice(0, 60), price });
+    }
+    if (page >= Number(r.headers.get('x-wp-totalpages') || 1)) break;
+  }
+  for (const p of products) {
+    const vs = byParent.get(p.id);
+    if (!p.variable || !vs?.length) continue;
+    const min = Math.min(...vs.map((v) => v.price));
+    p.price = r2(min);
+    p.variants = vs.sort((a, b) => a.price - b.price || a.name.localeCompare(b.name)).map((v) => ({ name: v.name, price_delta: r2(v.price - min) }));
+  }
 }
 /** Shopify public products.json */
 async function readShopify(base) {
@@ -119,7 +149,8 @@ async function syncSource(source) {
     let row = await NfcCard.findOne({ where: { order_source_id: source.id, external_id: p.id } });
     const images = p.images.slice(0, 6);
     if (row) {
-      const data = { source_price: p.price, source_url: p.url, synced_at: new Date(), compare_price: p.compare, images: images.length ? images : row.images };
+      const data = { source_price: p.price, source_url: p.url, synced_at: new Date(), compare_price: p.compare, images: images.length ? images : row.images, category: (p.category || '').slice(0, 60) || row.category };
+      if (p.variants.length) data.variants = p.variants; // option prices always follow the website
       if (!row.price_locked) data.price = p.price; // an edited price is ours: keep it
       if (!row.sku && p.sku) data.sku = p.sku;
       await row.update(data); updated++;

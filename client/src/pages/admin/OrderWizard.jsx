@@ -6,7 +6,7 @@ import { toast } from 'sonner';
 import {
   ArrowLeft, ArrowRight, Check, User, Package, Truck, ClipboardCheck, Plus, Trash2, Store, Wand2, IdCard, Copy, ExternalLink,
   BadgePercent, Banknote, ShoppingBag, Settings2, Sparkles, UserCheck, UserPlus, UserRound, Building2, Repeat,
-  Share2, Boxes, FlaskConical, Printer, Smartphone, Layers, CreditCard, CalendarClock, TrendingUp,
+  Share2, Boxes, FlaskConical, Printer, Smartphone, Layers, CreditCard, CalendarClock, TrendingUp, RefreshCw,
 } from 'lucide-react';
 import api from '@/lib/api';
 import SearchSelect from '@/components/SearchSelect';
@@ -15,13 +15,9 @@ import {
   Card, CardHeader, CardBody, Button, Field, Input, Textarea, Select, Segmented, Checkbox, Badge, Tip, Skeleton, Avatar, run,
 } from '@/components/ui';
 
-const STEPS = [
-  ['type', 'Order type', Layers],
-  ['customer', 'Customer', User],
-  ['products', 'Products', Package],
-  ['delivery', 'Delivery & payment', Truck],
-  ['review', 'Review', ClipboardCheck],
-];
+const STEP_META = { type: ['Order type', Layers], customer: ['Customer', User], products: ['Products', Package], delivery: ['Delivery & payment', Truck], review: ['Review', ClipboardCheck] };
+/** Products come right after the order type (prices are fetched from the website). Renewals and upgrades need the customer first: their plan decides what is offered. */
+const flowFor = (type) => (['renewal', 'upgrade'].includes(type) ? ['type', 'customer', 'products', 'delivery', 'review'] : ['type', 'products', 'customer', 'delivery', 'review']);
 let lineId = 0;
 /* order types: what the customer wants decides the products, the pricing rules and whether anything ships */
 const ORDER_TYPES = [
@@ -51,10 +47,11 @@ const money = (cur, v) => `${cur} ${Number(v || 0).toLocaleString('en-US', { max
 const slug = (s) => String(s || '').toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, '.').replace(/^\.+|\.+$/g, '').slice(0, 30);
 const dummyEmail = (name, domain) => `${slug(name) || 'customer'}.${Math.random().toString(36).slice(2, 6)}@${domain}`;
 
-function Stepper({ step, done, onGo }) {
+function Stepper({ screens, step, done, onGo }) {
   return (
     <div className="flex items-center gap-1">
-      {STEPS.map(([k, l, I], i) => {
+      {screens.map((k, i) => {
+        const [l, I] = STEP_META[k];
         const active = i === step; const ok = done[i] && i < step;
         return (
           <div key={k} className="flex flex-1 items-center gap-1 last:flex-none">
@@ -65,7 +62,7 @@ function Stepper({ step, done, onGo }) {
               </motion.span>
               <span className="hidden text-sm font-medium md:block">{l}</span>
             </button>
-            {i < STEPS.length - 1 && <span className={cn('h-0.5 flex-1 rounded-full', i < step ? 'bg-primary' : 'bg-border')} />}
+            {i < screens.length - 1 && <span className={cn('h-0.5 flex-1 rounded-full', i < step ? 'bg-primary' : 'bg-border')} />}
           </div>
         );
       })}
@@ -148,6 +145,114 @@ function ChoiceCard({ active, onClick, icon: Icon, title, text }) {
   );
 }
 
+/** estimate of the price per piece before the server quotes it (type, tier, product discount) */
+function estimate(meta, p, variant, qty, type) {
+  const base = Number(p.price || 0) + Number((p.variants || []).find((v) => v.name === variant)?.price_delta || 0);
+  const disc = afterDisc(base, p.discount_type, p.discount_value);
+  if (type === 'sample') return Number(p.sample_price) > 0 ? Number(p.sample_price) + Number((p.variants || []).find((v) => v.name === variant)?.price_delta || 0) : base * (1 + Number(meta.sample_markup_percent || 0) / 100);
+  if (type === 'wholesale') {
+    const tiers = (Array.isArray(p.wholesale_tiers) && p.wholesale_tiers.length ? p.wholesale_tiers : meta.wholesale_tiers || []).filter((t) => Number(t.min) <= Number(qty || 1)).at(-1);
+    return disc * (1 - (tiers?.percent || 0) / 100);
+  }
+  return disc;
+}
+
+/** product catalog: search, categories, live website price next to your editable price, quantity per product */
+function Catalog({ meta, offered, lines, setLines, quote, valid, form, cur, sampleMax, refresh, onRefresh }) {
+  const [q, setQ] = useState('');
+  const [cat, setCat] = useState('');
+  const [pending, setPending] = useState({}); // option chosen before the product has a quantity
+  const sourceName = (id) => meta.sources.find((x) => x.id === id)?.name;
+  const cats = [...new Set(offered.map((p) => p.category).filter(Boolean))].sort();
+  const shown = offered.filter((p) => (!cat || p.category === cat) && (!q || `${p.name} ${p.sku || ''} ${p.category || ''}`.toLowerCase().includes(q.toLowerCase())));
+  const lineOf = (p) => lines.find((l) => String(l.product_id) === String(p.id));
+  const firstQty = form.order_type === 'wholesale' ? Number(meta.wholesale_tiers?.[0]?.min) || 1 : 1;
+  const clamp = (n) => (form.order_type === 'sample' ? Math.min(sampleMax, n) : n);
+  const upsert = (p, patch) => setLines((ls) => {
+    const has = ls.some((l) => String(l.product_id) === String(p.id));
+    if (has) return ls.map((l) => (String(l.product_id) === String(p.id) ? { ...l, ...patch } : l));
+    return [...ls.filter((l) => l.product_id), { key: ++lineId, product_id: p.id, variant: pending[p.id] ?? p.variants?.[0]?.name ?? '', quantity: firstQty, unit_price: '', customization: false, ...patch }];
+  });
+  const setQty = (p, raw) => {
+    const n = clamp(Math.max(0, parseInt(raw, 10) || 0));
+    if (n <= 0) setLines((ls) => ls.filter((l) => String(l.product_id) !== String(p.id)));
+    else upsert(p, { quantity: n });
+  };
+  const setVariant = (p, name) => { setPending((x) => ({ ...x, [p.id]: name })); if (lineOf(p)) upsert(p, { variant: name, unit_price: '' }); };
+  const failed = (refresh.results || []).filter((r) => r.status === 'failed');
+  const when = refresh.at ? refresh.at.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : null;
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="min-w-48 flex-1"><Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search products..." aria-label="Search products" /></div>
+        <Button size="sm" variant="outline" onClick={onRefresh} loading={refresh.loading}><RefreshCw />Refresh prices</Button>
+      </div>
+      <p className="text-xs text-muted-foreground">
+        {refresh.loading ? 'Reading the latest prices from the website...' : when ? `Prices read from ${form.order_source_id ? sourceName(Number(form.order_source_id)) : 'your websites'} at ${when}.` : 'Showing saved prices.'}
+        {' '}The <b>Your price</b> box is editable for this order; the website price is shown next to it.
+      </p>
+      {failed.map((r) => <p key={r.id} className="rounded-xl bg-warning-soft px-3 py-2 text-xs text-warning">{r.name}: {r.message} Saved prices are used.</p>)}
+      {cats.length > 1 && (
+        <div className="flex flex-wrap gap-1.5">
+          {[['', 'All'], ...cats.map((c) => [c, c])].map(([k, l]) => <button key={k} type="button" onClick={() => setCat(k)} className={cn('cursor-pointer rounded-full px-3 py-1 text-xs font-medium transition', cat === k ? 'bg-foreground text-background' : 'bg-muted text-muted-foreground hover:text-foreground')}>{l}</button>)}
+        </div>
+      )}
+      <div className="max-h-[520px] space-y-2 overflow-y-auto pr-1">
+        {!shown.length && <p className="py-8 text-center text-sm text-muted-foreground">No products found.</p>}
+        {shown.map((p) => {
+          const line = lineOf(p);
+          const variant = line?.variant ?? pending[p.id] ?? p.variants?.[0]?.name ?? '';
+          const qty = line ? Number(line.quantity) || 0 : 0;
+          const ql = line ? quote?.lines?.[valid.findIndex((x) => x.key === line.key)] : null;
+          const est = estimate(meta, p, variant, qty || firstQty, form.order_type);
+          const unit = line && line.unit_price !== '' ? Number(line.unit_price) : ql ? Number(ql.unit_price) : est;
+          const site = p.source_price === null || p.source_price === undefined ? null : Number(p.source_price) + Number((p.variants || []).find((v) => v.name === variant)?.price_delta || 0);
+          const img = p.front_image || p.images?.[0];
+          return (
+            <div key={p.id} className={cn('rounded-2xl border p-2.5 transition', qty ? 'border-primary bg-primary-soft/30' : 'border-border')}>
+              <div className="flex flex-wrap items-center gap-3">
+                <span className="size-12 shrink-0 overflow-hidden rounded-xl bg-muted">{img && <img src={img} alt="" loading="lazy" className="size-full object-cover" />}</span>
+                <div className="min-w-44 flex-1">
+                  <p className="text-sm leading-snug font-medium">{p.name}</p>
+                  <p className="text-xs text-muted-foreground">{[p.category, !form.order_source_id && p.order_source_id ? sourceName(p.order_source_id) : null].filter(Boolean).join(' · ')}</p>
+                </div>
+                {p.variants?.length > 0 && (
+                  <Select className="h-9 w-52" value={variant} onChange={(v) => setVariant(p, v)} options={p.variants.map((v) => ({ value: v.name, label: `${v.name}${Number(v.price_delta) ? ` (+${v.price_delta})` : ''}` }))} />
+                )}
+                <div className="text-right">
+                  <p className="text-[11px] text-muted-foreground">Website</p>
+                  <p className="text-sm tabular-nums">{site === null ? '-' : money(cur, site)}</p>
+                </div>
+                <div className="w-28">
+                  <p className="text-[11px] text-muted-foreground">Your price</p>
+                  <Input className="h-9" type="number" min="0" step="0.01" aria-label={`Price of ${p.name}`} value={line?.unit_price ?? ''} placeholder={String(Math.round(unit * 100) / 100)}
+                    onChange={(e) => upsert(p, { unit_price: e.target.value })} />
+                </div>
+                <div className="flex items-center gap-1">
+                  <Button size="icon-sm" variant="outline" onClick={() => setQty(p, qty - (qty > firstQty ? 1 : qty))} aria-label="Less" disabled={!qty}>-</Button>
+                  <Input className="h-9 w-16 text-center" type="number" min="0" max={form.order_type === 'sample' ? sampleMax : undefined} value={qty || ''} placeholder="0" aria-label={`Quantity of ${p.name}`} onChange={(e) => setQty(p, e.target.value)} />
+                  <Button size="icon-sm" variant="outline" onClick={() => setQty(p, qty ? qty + 1 : firstQty)} aria-label="More">+</Button>
+                </div>
+              </div>
+              {qty > 0 && (
+                <div className="mt-2 flex flex-wrap items-center gap-2 px-1 text-xs">
+                  <span className="font-semibold">{money(cur, ql && line.unit_price === '' ? ql.total : unit * qty)}</span>
+                  {ql?.tier_percent > 0 && <Badge tone="success">Wholesale tier {ql.tier_percent}% off</Badge>}
+                  {form.order_type === 'sample' && <Badge tone="warning">Sample price</Badge>}
+                  {p.plan && <Badge tone="primary"><IdCard className="size-3" />Plan: {p.plan.name}</Badge>}
+                  {Number(p.discount_value) > 0 && form.order_type !== 'sample' && <Badge tone="success">Discount {p.discount_type === 'percent' ? `${Number(p.discount_value)}%` : money(cur, p.discount_value)}</Badge>}
+                  {line.unit_price !== '' && ql && Number(line.unit_price) !== Number(ql.list_price) && <span className="text-muted-foreground">Edited from {money(cur, ql.list_price)}</span>}
+                  {Number(p.customization_price) > 0 && <Checkbox id={`cz-${p.id}`} checked={!!line.customization} onChange={(v) => upsert(p, { customization: v })} label={`Customisation +${money(cur, p.customization_price)} / pc`} />}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export default function OrderWizard() {
   const navigate = useNavigate();
   const [meta, setMeta] = useState(null);
@@ -161,8 +266,13 @@ export default function OrderWizard() {
     order_type: 'nfc_profile', social_variant: '', sample_order: null, plan_credit: '',
   });
   const [showAll, setShowAll] = useState(false);
+  const [refresh, setRefresh] = useState({ loading: false, results: [], at: null });
+  const refreshedKey = useRef('');
   const [subInfo, setSubInfo] = useState(undefined); // current plan of the customer being renewed
   const [errors, setErrors] = useState({});
+  const screens = flowFor(form.order_type);
+  const screen = screens[step];
+  const goTo = (k) => setStep(screens.indexOf(k));
   const [quote, setQuote] = useState(null);
   const [quoting, setQuoting] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -192,7 +302,7 @@ export default function OrderWizard() {
         const items = o.items?.length ? o.items : [];
         setLines(items.length ? items.map((it) => ({ key: ++lineId, product_id: it.nfc_card_id, variant: it.variant || '', quantity: it.quantity, unit_price: String(Number(it.unit_price)), customization: !!it.customization })) : [newLine()]);
         setReorderOf(o.order_number);
-        setStep(params.get('edit') ? 2 : 4);
+        setStep(params.get('edit') ? 1 : 4);
       }).catch(() => toast.error('Could not load the order to reorder'));
     } else if (params.get('bulk') || params.get('sample')) {
       // bulk order from any order: same customer and products at wholesale pricing; a sample order's charge is credited
@@ -205,7 +315,7 @@ export default function OrderWizard() {
         else if (o.user_id) fill({ ...base, customer_type: 'existing', customer: { id: o.user_id, name: `${o.user?.first_name || ''} ${o.user?.last_name || ''}`.trim() || o.name, email: o.user?.email } });
         else fill({ ...base, customer_type: 'guest' });
         setLines((o.items?.length ? o.items : []).map((it) => ({ key: ++lineId, product_id: it.nfc_card_id, variant: it.variant || '', quantity: minQty, unit_price: '', customization: !!it.customization })));
-        setReorderOf(`bulk from ${o.order_number}`); setStep(2);
+        setReorderOf(`bulk from ${o.order_number}`); setStep(1);
       }).catch(() => toast.error('Could not load the order'));
     } else if (params.get('guest')) {
       api.get(`/admin/guest-customers/${params.get('guest')}`).then(({ data }) => { const g = data.data; fill({ customer_type: 'guest', guest: g, name: g.name, phone: g.phone || '', email: g.email || '', company_name: g.company_name || '', city: g.city || '', address: g.address || '' }); });
@@ -213,10 +323,26 @@ export default function OrderWizard() {
       api.get('/admin/organisations/search', { params: { q: '' } }).then(({ data }) => { const o = data.data.find((x) => String(x.id) === params.get('organisation')); if (o) pickOrganisation(o); });
     }
   }, [meta]); // eslint-disable-line
-  useEffect(() => { if (meta && step === 1) nameRef.current?.focus(); }, [meta, step]);
+  useEffect(() => { if (meta && screen === 'customer') nameRef.current?.focus(); }, [meta, screen]);
 
   const products = useMemo(() => Object.fromEntries((meta?.products || []).map((p) => [p.id, p])), [meta]);
   const sampleMax = meta?.sample_max_qty || 5;
+  // live prices: when the product screen opens, the chosen website (or all of them) is read again; saved prices show meanwhile
+  const doRefresh = async (force = false) => {
+    setRefresh((r) => ({ ...r, loading: true }));
+    try {
+      const { data } = await api.post('/admin/order-sources/refresh', { ids: form.order_source_id ? [Number(form.order_source_id)] : undefined, force });
+      const { data: m } = await api.get('/admin/orders-meta');
+      setMeta((x) => ({ ...x, products: m.products, sources: m.sources }));
+      setRefresh({ loading: false, results: data.results, at: new Date() });
+    } catch { setRefresh((r) => ({ ...r, loading: false })); toast.error('Could not refresh the prices. Saved prices are shown.'); }
+  };
+  useEffect(() => {
+    if (screen !== 'products' || !meta) return;
+    const key = String(form.order_source_id || 'all');
+    if (refreshedKey.current === key) return;
+    refreshedKey.current = key; doRefresh(false);
+  }, [screen, !!meta, form.order_source_id]); // eslint-disable-line
   const renewFor = form.customer?.id || form.organisation?.id;
   useEffect(() => {
     if (!PLAN_CHANGE.includes(form.order_type) || !renewFor) { setSubInfo(undefined); return; }
@@ -260,15 +386,16 @@ export default function OrderWizard() {
   const pickContact = (id) => { const p = people.find((x) => String(x.id) === String(id)); setValues((f) => ({ ...f, contact_id: id, name: p ? `${p.first_name} ${p.last_name}`.trim() : f.name, email: p?.email || f.email, phone: p?.contact || f.phone })); };
   const pickGuest = (g) => setValues((f) => ({ ...f, guest: g, ...(g ? { name: g.name, phone: g.phone || '', email: g.email || '', company_name: g.company_name || '', city: g.city || '', address: g.address || '' } : {}) }));
 
-  const checks = [
+  const checkList = [
     () => { const e = {}; if (form.order_type === 'social' && !form.social_variant) e.social_variant = 'Choose static, dynamic or all-in-one'; return e; },
     () => { const e = {}; if (PLAN_CHANGE.includes(form.order_type) && !['existing', 'organisation'].includes(form.customer_type)) e.name = 'A renewal or upgrade is for an existing customer or organisation'; if (form.customer_type === 'existing' && !form.customer) e.user_id = 'Search and choose the customer'; if (form.customer_type === 'organisation' && !form.organisation) e.organisation_id = 'Search and choose the organisation'; if (!form.name.trim()) e.name = 'Enter the customer name'; if (form.customer_type === 'new' && !form.email) e.email = 'An account needs an e-mail. Tick "Dummy e-mail" if the customer has none.'; if (form.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) e.email = 'Enter a valid e-mail address'; return e; },
     () => { const e = {}; if (!valid.length) e.products = 'Add at least one product'; else if (valid.some((l) => products[l.product_id]?.variants?.length && !l.variant)) e.products = 'Choose an option for every product'; else if (valid.some((l) => l.unit_price !== '' && Number(l.unit_price) < 0)) e.products = 'Prices cannot be negative'; else if (form.order_type === 'sample' && valid.some((l) => Number(l.quantity) > sampleMax)) e.products = `Samples are limited to ${sampleMax} pieces per product`; return e; },
     () => { const e = {}; if (form.discount_type === 'percent' && Number(form.discount_value) > 100) e.discount_value = 'Maximum 100%'; if (Number(form.discount_value) < 0) e.discount_value = 'Cannot be negative'; return e; },
     () => ({}),
   ];
-  const done = checks.map((c) => !Object.keys(c()).length);
-  const next = () => { const e = checks[step](); setErrors(e); if (Object.keys(e).length) { toast.error(Object.values(e)[0]); return; } setStep((s) => Math.min(STEPS.length - 1, s + 1)); };
+  const checks = Object.fromEntries(['type', 'customer', 'products', 'delivery', 'review'].map((k, i) => [k, checkList[i]]));
+  const done = screens.map((k) => !Object.keys(checks[k]()).length);
+  const next = () => { const e = checks[screen](); setErrors(e); if (Object.keys(e).length) { toast.error(Object.values(e)[0]); return; } setStep((s) => Math.min(screens.length - 1, s + 1)); };
   const go = (i) => { if (i <= step || done.slice(0, i).every(Boolean)) setStep(i); };
 
   const create = async () => {
@@ -282,7 +409,7 @@ export default function OrderWizard() {
       };
       const d = await run(api.post('/admin/orders', body));
       setResult(d);
-    } catch (e) { setErrors(e.errors || {}); if (e.errors && Object.keys(e.errors).some((k) => ['name', 'email', 'phone', 'address', 'user_id', 'organisation_id', 'contact_id'].includes(k))) setStep(1); } finally { setBusy(false); }
+    } catch (e) { setErrors(e.errors || {}); if (e.errors && Object.keys(e.errors).some((k) => ['name', 'email', 'phone', 'address', 'user_id', 'organisation_id', 'contact_id'].includes(k))) goTo('customer'); } finally { setBusy(false); }
   };
   const restart = () => { setResult(null); setStep(0); setLines([newLine()]); setQuote(null); setReorderOf(null); setValues((f) => ({ ...f, customer: null, organisation: null, contact_id: '', guest: null, name: '', phone: '', email: '', dummy: false, company_name: '', city: '', address: '', delivery_charges: '', discount_value: '', admin_note: '' })); };
 
@@ -334,11 +461,11 @@ export default function OrderWizard() {
       </div>
       <div className="grid items-start gap-6 lg:grid-cols-[1fr_340px]">
         <Card className="overflow-hidden">
-          <div className="border-b border-border px-4 py-3"><Stepper step={step} done={done} onGo={go} /></div>
+          <div className="border-b border-border px-4 py-3"><Stepper screens={screens} step={step} done={done} onGo={go} /></div>
           <AnimatePresence mode="wait">
-            <motion.div key={step} initial={{ opacity: 0, x: 16 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -16 }} transition={{ duration: 0.2 }}>
+            <motion.div key={screen} initial={{ opacity: 0, x: 16 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -16 }} transition={{ duration: 0.2 }}>
               <CardBody className="min-h-[300px]">
-                {step === 0 && (
+                {screen === 'type' && (
                   <div className="space-y-5">
                     <div className="grid gap-2.5 sm:grid-cols-2 xl:grid-cols-3">
                       {ORDER_TYPES.map((t) => <ChoiceCard key={t.key} active={form.order_type === t.key} onClick={() => pickType(t.key)} icon={t.icon} title={t.title} text={t.text} />)}
@@ -365,7 +492,7 @@ export default function OrderWizard() {
                   </div>
                 )}
 
-                {step === 1 && (
+                {screen === 'customer' && (
                   <div className="space-y-4">
                     <div className="grid grid-cols-2 gap-2 xl:grid-cols-4">
                       {TYPES.map(([k, l, text, I]) => (
@@ -421,37 +548,9 @@ export default function OrderWizard() {
                   </div>
                 )}
 
-                {step === 2 && (
+                {screen === 'products' && (
                   <div className="space-y-3">
-                    <div className="hidden grid-cols-[1fr_7rem_5rem_7.5rem_6.5rem_2.25rem] gap-2 px-1 text-xs font-medium text-muted-foreground sm:grid"><span>Product</span><span>Option</span><span>Qty</span><span>Price ({cur})</span><span className="text-right">Total</span><span /></div>
-                    {lines.map((l) => {
-                      const p = products[l.product_id];
-                      const ql = quote?.lines?.[valid.findIndex((x) => x.key === l.key)]; // the server's price for this line (type, tier, discount)
-                      const unit = l.unit_price !== '' ? Number(l.unit_price) : ql ? Number(ql.unit_price) : listPrice(p, l.variant);
-                      const total = ql && l.unit_price === '' ? Number(ql.total) : (unit + (l.customization ? Number(p?.customization_price || 0) : 0)) * (Number(l.quantity) || 1);
-                      return (
-                        <motion.div key={l.key} layout initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} className="rounded-2xl border border-border p-2.5">
-                          <div className="grid grid-cols-2 gap-2 sm:grid-cols-[1fr_7rem_5rem_7.5rem_6.5rem_2.25rem] sm:items-center">
-                            <Select className="col-span-2 sm:col-span-1" value={l.product_id} onChange={(v) => pickProduct(l.key, v)} placeholder="Choose product" options={(offered.some((x) => String(x.id) === String(l.product_id)) || !p ? offered : [...offered, p]).map((x) => ({ value: x.id, label: x.name }))} />
-                            {p?.variants?.length ? <Select value={l.variant} onChange={(v) => pickVariant(l.key, p, v)} placeholder="Option" options={p.variants.map((v) => ({ value: v.name, label: v.name }))} /> : <span className="hidden text-center text-xs text-muted-foreground sm:block">-</span>}
-                            <Input type="number" min="1" max={form.order_type === 'sample' ? sampleMax : undefined} value={l.quantity} onChange={(e) => setLine(l.key, { quantity: e.target.value })} aria-label="Quantity" />
-                            <Input type="number" min="0" value={l.unit_price} onChange={(e) => setLine(l.key, { unit_price: e.target.value })} placeholder={p ? String(Math.round(unit * 100) / 100) : 'Price'} aria-label="Price per piece" />
-                            <span className="text-right font-semibold">{p ? money(cur, total) : '-'}</span>
-                            <Tip content="Remove"><Button variant="ghost" size="icon" onClick={() => setLines((ls) => (ls.length > 1 ? ls.filter((x) => x.key !== l.key) : [newLine()]))} aria-label="Remove product"><Trash2 /></Button></Tip>
-                          </div>
-                          {p && (
-                            <div className="mt-2 flex flex-wrap items-center gap-2 px-1 text-xs">
-                              {p.plan ? <Badge tone="primary"><IdCard className="size-3" />Plan: {p.plan.name}</Badge> : <Badge tone="neutral">Non-plan product</Badge>}
-                              {ql?.tier_percent > 0 && <Badge tone="success">Wholesale tier: {ql.tier_percent}% off</Badge>}
-                              {form.order_type === 'sample' && <Badge tone="warning">Sample price</Badge>}
-                              {Number(p.discount_value) > 0 && form.order_type !== 'sample' && <Badge tone="success">Product discount {p.discount_type === 'percent' ? `${Number(p.discount_value)}%` : money(cur, p.discount_value)}</Badge>}
-                              {l.unit_price !== '' && ql && Number(l.unit_price) !== Number(ql.list_price) && <span className="text-muted-foreground">Price {money(cur, ql.list_price)} overridden</span>}
-                              {Number(p.customization_price) > 0 && <Checkbox id={`cz-${l.key}`} checked={l.customization} onChange={(v) => setLine(l.key, { customization: v })} label={`Customisation +${money(cur, p.customization_price)} / pc`} />}
-                            </div>
-                          )}
-                        </motion.div>
-                      );
-                    })}
+                    <Catalog meta={meta} offered={offered} lines={lines} setLines={setLines} quote={quote} valid={valid} form={form} cur={cur} sampleMax={sampleMax} refresh={refresh} onRefresh={() => doRefresh(true)} />
                     {errors.products && <p className="text-sm text-danger">{errors.products}</p>}
                     {form.order_type === 'wholesale' && meta.sample_credit_enable && (
                       <div className="rounded-2xl border border-border p-3">
@@ -476,13 +575,13 @@ export default function OrderWizard() {
                     )}
                     {kinds && !showAll && offered.length === 0 && <p className="rounded-xl bg-warning-soft px-3 py-2 text-xs text-warning">No products are tagged for this order type{form.order_source_id ? ' on this website' : ''} yet. Tag them in Order sources &gt; Price list, or show all products.</p>}
                     <div className="flex items-center justify-between">
-                      <Button variant="soft" size="sm" onClick={() => setLines((ls) => [...ls, newLine()])}><Plus />Add product</Button>
+                      <span className="text-xs text-muted-foreground">{valid.length ? `${valid.length} product${valid.length > 1 ? 's' : ''} selected` : 'Set a quantity to add a product'}</span>
                       <div className="flex items-center gap-3">{kinds && <Checkbox id="showall" checked={showAll} onChange={setShowAll} label="Show all products" className="text-xs" />}<Link to="/admin/products" className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-primary"><Settings2 className="size-3.5" />Products & plans</Link></div>
                     </div>
                   </div>
                 )}
 
-                {step === 3 && (
+                {screen === 'delivery' && (
                   <div className="space-y-5">
                     {noShip(form.order_type) ? (
                       <div className="rounded-2xl bg-primary-soft/40 p-4 text-sm"><p className="flex items-center gap-2 font-semibold"><Smartphone className="size-4 text-primary" />{{ renewal: 'Renewal', upgrade: 'Upgrade' }[form.order_type] || 'Digital profile'}: nothing to ship</p><p className="mt-1 text-muted-foreground">No delivery or COD charges. Just record the payment.</p></div>
@@ -512,15 +611,15 @@ export default function OrderWizard() {
                   </div>
                 )}
 
-                {step === 4 && (
+                {screen === 'review' && (
                   <div className="grid gap-4 sm:grid-cols-2">
-                    <ReviewBlock title="Customer" icon={User} onEdit={() => setStep(1)} rows={[
+                    <ReviewBlock title="Customer" icon={User} onEdit={() => goTo('customer')} rows={[
                       ['Order type', `${TYPE_TITLE[form.order_type]}${form.order_type === 'social' && form.social_variant ? ` · ${SOCIAL_VARIANTS.find((v) => v.value === form.social_variant)?.label}` : ''}`],
                       ['Type', `${TYPE_LABEL[form.customer_type]}${form.customer_type === 'organisation' && form.organisation ? ` · ${form.organisation.name}` : ''}`],
                       ['Name', form.name], ['Phone', form.phone || '-'], ['E-mail', form.email ? `${form.email}${form.dummy ? ' (dummy)' : ''}` : '-'],
                       ['Company', form.company_name || '-'], ['Address', [form.address, form.city].filter(Boolean).join(', ') || '-'], ['Source', srcName || '-'],
                     ]} />
-                    <ReviewBlock title="Delivery & payment" icon={Banknote} onEdit={() => setStep(3)} rows={[
+                    <ReviewBlock title="Delivery & payment" icon={Banknote} onEdit={() => goTo('delivery')} rows={[
                       ['Fulfilment', noShip(form.order_type) ? 'No shipping' : form.fulfilment === 'collection' ? 'Office collection' : 'Courier delivery'],
                       ['Payment', { cod: 'Cash on delivery', paid: 'Paid', pending: 'Unpaid', collection: 'Pay at collection' }[form.payment]],
                       ['Sample credit', quote?.sample_credit > 0 ? money(cur, quote.sample_credit) : 'None'],
@@ -528,7 +627,7 @@ export default function OrderWizard() {
                       ['Discount', quote?.discount > 0 ? `${money(cur, quote.discount)}${quote.discount_type === 'percent' ? ` (${quote.discount_value}%)` : ''}` : 'None'],
                       ['Note', form.admin_note || '-'],
                     ]} />
-                    <ReviewBlock title="Products" icon={Package} onEdit={() => setStep(2)} className="sm:col-span-2" rows={(quote?.lines || []).map((l) => [
+                    <ReviewBlock title="Products" icon={Package} onEdit={() => goTo('products')} className="sm:col-span-2" rows={(quote?.lines || []).map((l) => [
                       `${l.name}${l.variant ? ` · ${l.variant}` : ''}`, `${l.quantity} × ${money(cur, l.unit_price)} = ${money(cur, l.total)}${l.plan ? ` · Plan: ${l.plan.name}` : ' · Non-plan'}`,
                     ])} />
                   </div>
@@ -538,8 +637,8 @@ export default function OrderWizard() {
           </AnimatePresence>
           <div className="flex items-center justify-between gap-2 border-t border-border px-5 py-3.5">
             <Button variant="ghost" onClick={() => (step ? setStep(step - 1) : navigate('/admin/orders'))}><ArrowLeft />{step ? 'Back' : 'Cancel'}</Button>
-            <span className="text-xs text-muted-foreground">Step {step + 1} of {STEPS.length}</span>
-            {step < STEPS.length - 1
+            <span className="text-xs text-muted-foreground">Step {step + 1} of {screens.length}</span>
+            {step < screens.length - 1
               ? <Button onClick={next}>Next<ArrowRight /></Button>
               : <Button onClick={create} loading={busy} disabled={!quote || quote.error}><Check />Create order{quote?.total ? ` · ${money(cur, quote.total)}` : ''}</Button>}
           </div>

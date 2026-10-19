@@ -156,8 +156,8 @@ const quoteJson = (q) => ({ ...q, lines: q.lines.map(({ product, ...l }) => ({ .
 r.get('/orders-meta', wrap(async (_req, res) => {
   const s = await settings.all();
   const [sources, products, plans] = await Promise.all([
-    M.OrderSource.findAll({ where: { status: true }, attributes: ['id', 'name', 'url'], order: [['name', 'ASC']] }),
-    M.NfcCard.findAll({ where: { status: true }, attributes: ['id', 'name', 'price', 'variants', 'customization_price', 'plan_id', 'front_image', 'product_kind', 'order_source_id', 'discount_type', 'discount_value', 'sample_price', 'wholesale_tiers'], include: [{ model: M.Plan, as: 'plan', attributes: ['id', 'name', 'price', 'frequency'] }], order: [['sort', 'ASC'], ['id', 'ASC']] }),
+    M.OrderSource.findAll({ where: { status: true }, attributes: ['id', 'name', 'url', 'last_synced_at', 'platform'], order: [['name', 'ASC']] }),
+    M.NfcCard.findAll({ where: { status: true }, attributes: ['id', 'name', 'category', 'source_price', 'sku', 'images', 'price', 'variants', 'customization_price', 'plan_id', 'front_image', 'product_kind', 'order_source_id', 'discount_type', 'discount_value', 'sample_price', 'wholesale_tiers'], include: [{ model: M.Plan, as: 'plan', attributes: ['id', 'name', 'price', 'frequency'] }], order: [['sort', 'ASC'], ['id', 'ASC']] }),
     M.Plan.findAll({ where: { status: true }, attributes: ['id', 'name'] }),
   ]);
   res.json({
@@ -344,6 +344,23 @@ const sourceOr404 = async (id) => { const src = await M.OrderSource.findByPk(id)
 r.get('/order-sources/summary', wrap(async (_req, res) => {
   const rows = await M.NfcCard.findAll({ where: { order_source_id: { [Op.ne]: null } }, attributes: ['order_source_id', [M.sequelize.fn('count', M.sequelize.col('id')), 'n']], group: ['order_source_id'], raw: true });
   res.json({ data: Object.fromEntries(rows.map((x) => [x.order_source_id, Number(x.n)])) });
+}));
+/* refresh the prices of several sources at once (the order wizard calls this when it opens the product screen) */
+const REFRESH_FRESH_MS = 10 * 60 * 1000;
+r.post('/order-sources/refresh', wrap(async (req, res) => {
+  const ids = Array.isArray(req.body.ids) ? req.body.ids.map(Number).filter(Boolean) : null;
+  const force = toBool(req.body.force);
+  const where = { status: true, url: { [Op.ne]: null } };
+  if (ids?.length) where.id = ids;
+  const sources = await M.OrderSource.findAll({ where, order: [['name', 'ASC']] });
+  const results = [];
+  const one = async (src) => {
+    if (!force && src.last_synced_at && Date.now() - new Date(src.last_synced_at).getTime() < REFRESH_FRESH_MS && src.platform) return results.push({ id: src.id, name: src.name, status: 'fresh', at: src.last_synced_at });
+    try { const out = await productsync.syncSource(src); results.push({ id: src.id, name: src.name, status: 'updated', at: new Date(), total: out.total, created: out.created }); }
+    catch (e) { results.push({ id: src.id, name: src.name, status: 'failed', message: String(e.message).slice(0, 200), at: src.last_synced_at }); }
+  };
+  for (let i = 0; i < sources.length; i += 3) await Promise.all(sources.slice(i, i + 3).map(one)); // three websites at a time
+  res.json({ results });
 }));
 r.post('/order-sources/:id/sync', wrap(async (req, res) => {
   const src = await sourceOr404(req.params.id);
