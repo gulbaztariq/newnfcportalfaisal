@@ -1,6 +1,6 @@
 const { esc, url, color, nl2br } = require('../../utils/html');
-const { TEMPLATES, LAYOUTS, SOCIAL_LAYOUTS } = require('./catalog');
-const BASE_CSS = require('./styles') + require('./premium') + require('./social');
+const { TEMPLATES, LAYOUTS, SOCIAL_LAYOUTS, BAR_LAYOUTS } = require('./catalog');
+const BASE_CSS = require('./styles') + require('./premium') + require('./social') + require('./business');
 const { t: labelsFor, RTL } = require('./i18n');
 
 const BY_SLUG = Object.fromEntries(TEMPLATES.map((t) => [t.slug, t]));
@@ -260,7 +260,10 @@ function render({ v, template, services = [], gallery = [], testimonials = [], p
   const fab = SOCIAL_LAYOUTS.has(layout);
   const sl = v.social_links || {};
   const sBtn = (href, label, icon, cls = '', ext = true) => `<a ${cls ? `class="${cls}" ` : ''}href="${href}"${ext ? ' target="_blank" rel="noopener"' : ''} aria-label="${label}"><i class="${icon}"></i></a>`;
-  const stickyBar = fab
+  const bar = BAR_LAYOUTS.has(layout);
+  const stickyBar = bar
+    ? `<nav class="sticky stk-bar" aria-label="Quick actions">${phone ? sBtn(`tel:${esc(phone)}`, L.call, 'ri-phone-fill', '', false).replace('</a>', `<span>${L.call}</span></a>`) : ''}${wa ? sBtn(url(wa), 'WhatsApp', 'ri-whatsapp-fill', 'wa').replace('</a>', `<span>${L.whatsapp}</span></a>`) : ''}${mapHref ? sBtn(url(mapHref), L.directions, 'ri-map-pin-2-fill').replace('</a>', `<span>${L.directions}</span></a>`) : ''}${sBtn(`/${alias}/contact.vcf`, L.save, 'ri-user-add-fill', 'main', false).replace('data-save', '').replace('</a>', `<span>${L.save}</span></a>`).replace('<a ', '<a data-save ')}</nav>`
+    : fab
     ? `<nav class="sticky stk-fab stk-${layout}" aria-label="Quick actions"><a class="main" href="/${alias}/contact.vcf" data-save aria-label="${L.save}"><i class="ri-user-add-fill"></i></a>${sl.instagram ? sBtn(url(sl.instagram), 'Instagram', 'ri-instagram-line', 'ig') : ''}${sl.telegram ? sBtn(url(sl.telegram), 'Telegram', 'ri-telegram-fill', 'tg') : ''}${v.email ? sBtn(`mailto:${esc(v.email)}`, L.email, 'ri-mail-fill', '', false) : ''}${phone ? sBtn(`tel:${esc(phone)}`, L.call, 'ri-phone-fill', '', false) : ''}${wa ? sBtn(url(wa), 'WhatsApp', 'ri-whatsapp-fill', 'wa') : ''}</nav>`
     : `<nav class="sticky" aria-label="Quick actions">${phone ? `<a href="tel:${esc(phone)}" aria-label="${L.call}"><i class="ri-phone-fill"></i></a>` : ''}${wa ? `<a href="${url(wa)}" target="_blank" rel="noopener" aria-label="WhatsApp"><i class="ri-whatsapp-fill"></i></a>` : ''}<a class="main" href="/${alias}/contact.vcf" data-save aria-label="${L.save}"><i class="ri-user-add-fill"></i></a>${v.email ? `<a href="mailto:${esc(v.email)}" aria-label="${L.email}"><i class="ri-mail-fill"></i></a>` : ''}<button type="button" data-share aria-label="${L.share}"><i class="ri-share-forward-fill"></i></button></nav>`;
 

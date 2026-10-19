@@ -43,11 +43,15 @@ const F = {
 
 const SOCIAL_LAYOUTS = new Set(['story', 'beat', 'flash', 'channel', 'xfeed', 'network', 'pinboard', 'groove', 'stream', 'chat', 'plane', 'thread']);
 
+// business layouts that get the labelled Call / WhatsApp / Directions / Save bar at the bottom of the screen
+const BAR_LAYOUTS = new Set(['local', 'shopfront', 'clinic', 'estate', 'bistro', 'boardroom']);
+
 const T = (slug, name, profession, layout, primary, secondary, background, text, font) => ({ slug, name, profession, layout, defaults: { primary, secondary, background, text, font } });
 
 module.exports = {
   FONTS: F,
   SOCIAL_LAYOUTS,
+  BAR_LAYOUTS,
   LAYOUTS: [
     'classic', 'modern', 'minimal', 'dark', 'card', 'split', 'bold', 'elegant', 'soft', 'corporate',
     'photo', 'glass', 'sidebar', 'editorial', 'brutal', 'mesh', 'mono', 'luxe', 'playful', 'splithero', 'stack', 'neon', 'paper', 'aurora',
@@ -55,6 +59,8 @@ module.exports = {
     'banner', 'wave', 'linkhub', 'breeze', 'cinema', 'metal', 'ticket', 'bento', 'marble', 'swiss', 'duotone', 'monogram', 'timeline', 'retro', 'holo', 'spotlight',
     // social-media layouts (social.js): these also get the floating WhatsApp / call action stack
     ...SOCIAL_LAYOUTS,
+    // business layouts (business.js)
+    'agency', 'letterhead', 'saas', 'bizcard', 'local', 'shopfront', 'clinic', 'estate', 'bistro', 'boardroom',
   ],
   TEMPLATES: [
     T('vcard1', 'Code Craft', 'Developer', 'dark', '#22d3ee', '#a78bfa', '#0b1020', '#e2e8f0', F.space),
@@ -185,5 +191,17 @@ module.exports = {
     T('vcard118', 'Chat', 'Social: WhatsApp business', 'chat', '#128c7e', '#25d366', '#efe7dd', '#111b21', F.dmsans),
     T('vcard119', 'Paper Plane', 'Social: Telegram channel', 'plane', '#2aabee', '#229ed9', '#eef6fb', '#10202b', F.manrope),
     T('vcard120', 'Thread', 'Social: Threads / Minimal', 'thread', '#101010', '#8e8e93', '#fafafa', '#101010', F.plex),
+
+    /* ---------- business ---------- */
+    T('vcard121', 'Studio Bold', 'Business: Creative Agency', 'agency', '#ff4d00', '#111111', '#ffffff', '#111111', F.archivo),
+    T('vcard122', 'Letterhead', 'Business: Law / Accounting Firm', 'letterhead', '#1b2f4b', '#8a6d3b', '#fcfbf8', '#1c2330', F.baskerville),
+    T('vcard123', 'Product', 'Business: SaaS / Startup', 'saas', '#5b5bf0', '#22d3ee', '#ffffff', '#0b1020', F.jakarta),
+    T('vcard124', 'Card', 'Business: Sales / Networking', 'bizcard', '#0f766e', '#0ea5e9', '#ffffff', '#0f172a', F.dmsans),
+    T('vcard125', 'Local', 'Business: Shop / Local Services', 'local', '#e11d48', '#f59e0b', '#ffffff', '#1c1917', F.poppins),
+    T('vcard126', 'Storefront', 'Business: Online Store / Retail', 'shopfront', '#7c3aed', '#f472b6', '#faf9ff', '#1e1b3a', F.outfit),
+    T('vcard127', 'Wellness', 'Business: Clinic / Healthcare', 'clinic', '#0891b2', '#34d399', '#ffffff', '#0b2a33', F.nunito),
+    T('vcard128', 'Estate Pro', 'Business: Real Estate Agency', 'estate', '#0f2742', '#c9a24b', '#ffffff', '#0f172a', F.manrope),
+    T('vcard129', 'Table', 'Business: Restaurant / Hotel', 'bistro', '#3b1d12', '#d9a441', '#18110d', '#f6ede0', F.cormorant),
+    T('vcard130', 'Boardroom', 'Business: Executive / Director', 'boardroom', '#1f2937', '#c9a24b', '#0f1115', '#eceae4', F.fraunces),
   ],
 };
