@@ -49,7 +49,6 @@ const all = (keys, v = true) => Object.fromEntries(keys.map((k) => [k, v]));
   const usd = await M.Currency.findOne({ where: { currency_code: 'USD' } });
   const templates = await M.Template.findAll({ order: [['id', 'ASC']] });
   const plans = [
-    { name: 'Free', price: 0, frequency: 'monthly', trial_days: 0, no_of_vcards: 1, storage_limit: 20, is_default: true, features: { social_links: true, enquiry_form: true, products_services: true }, tpl: 6 },
     { name: 'Standard', price: 9, frequency: 'monthly', trial_days: 7, no_of_vcards: 3, storage_limit: 200, features: all(['social_links', 'enquiry_form', 'products_services', 'testimonials', 'gallery', 'custom_links', 'analytics', 'seo', 'nfc_cards']), tpl: 16 },
     { name: 'Premium', price: 99, frequency: 'yearly', trial_days: 14, no_of_vcards: 10, storage_limit: 1024, features: all(M.PLAN_FEATURES), tpl: 99 },
     { name: 'Lifetime', price: 249, frequency: 'unlimited', trial_days: 0, no_of_vcards: 25, storage_limit: 5120, features: all(M.PLAN_FEATURES), tpl: 99 },
@@ -87,15 +86,15 @@ const all = (keys, v = true) => Object.fromEntries(keys.map((k) => [k, v]));
       { name: 'Corporate Business', price: 9999, vcards: 10, storage: 5120, tpl: people, f: [...FEAT.full, 'organisation'], extra: { no_of_organization_users: 10 } },
       { name: 'Corporate Enterprise', price: 24999, vcards: 50, storage: 20480, tpl: templates.filter((t) => !isSocial(t) && !isLink(t)), f: FEAT.corp, extra: { no_of_organization_users: 50, no_of_whatsapp_stores: 5 } },
       // social / review cards
-      { name: 'Social Static Link', price: 499, vcards: 1, storage: 50, tpl: templates.filter(isSocial), f: ['social_links', 'custom_links'] },
-      { name: 'Social Dynamic Link', price: 799, vcards: 1, storage: 100, tpl: templates.filter((t) => isSocial(t) || isLink(t)), f: ['social_links', 'custom_links', 'url_shortener', 'analytics', 'enquiry_form'], extra: { no_of_short_links: 0 } },
+      { name: 'Social Static Link', short: true, price: 499, vcards: 1, storage: 50, tpl: templates.filter(isSocial), f: ['social_links', 'custom_links'] },
+      { name: 'Social Dynamic Link', short: true, price: 799, vcards: 1, storage: 100, tpl: templates.filter((t) => isSocial(t) || isLink(t)), f: ['social_links', 'custom_links', 'url_shortener', 'analytics', 'enquiry_form'], extra: { no_of_short_links: 0 } },
       // digital profile only (same features as the individual tiers, no card)
       { name: 'Digital Basic', price: 799, vcards: 1, storage: 200, tpl: people.slice(0, 20), f: FEAT.basic },
       { name: 'Digital Plus', price: 1499, vcards: 3, storage: 1024, tpl: people.slice(0, 60), f: FEAT.pro },
       { name: 'Digital Pro', price: 2999, vcards: 5, storage: 3072, tpl: people, f: FEAT.full },
     ];
     for (const fam of FAMILIES) {
-      const [pl, created] = await M.Plan.findOrCreate({ where: { name: fam.name }, defaults: { name: fam.name, price: fam.price, frequency: 'yearly', trial_days: 0, no_of_vcards: fam.vcards, storage_limit: fam.storage, features: { ...all(M.PLAN_FEATURES, false), ...all(fam.f) }, currency_id: pkr?.id || usd.id, custom_select: fam.tpl.length > 20, ...(fam.extra || {}) } });
+      const [pl, created] = await M.Plan.findOrCreate({ where: { name: fam.name }, defaults: { name: fam.name, price: fam.price, frequency: 'yearly', custom_duration_days: fam.short ? null : 730, trial_days: 0, no_of_vcards: fam.vcards, storage_limit: fam.storage, features: { ...all(M.PLAN_FEATURES, false), ...all(fam.f) }, currency_id: pkr?.id || usd.id, custom_select: fam.tpl.length > 20, ...(fam.extra || {}) } });
       if (created) await pl.setTemplates(fam.tpl);
     }
     // the existing Social Profile plan becomes the all-in-one social plan (its products stay linked)
@@ -113,7 +112,7 @@ const all = (keys, v = true) => Object.fromEntries(keys.map((k) => [k, v]));
   // one product per sellable plan: this is what renewal and upgrade orders sell (price follows the plan, edit it in Orders > Products)
   for (const plan of await M.Plan.findAll({ where: { name: ['Social All-in-One', 'Individual Starter', 'Individual Professional', 'Individual Executive', 'Corporate Business', 'Corporate Enterprise', 'Social Static Link', 'Social Dynamic Link', 'Digital Basic', 'Digital Plus', 'Digital Pro'] } })) {
     const slug = `plan-${plan.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
-    await M.NfcCard.findOrCreate({ where: { slug }, defaults: { name: `${plan.name} plan (1 year)`, slug, price: plan.price, category: 'Plans', plan_id: plan.id, product_kind: plan.name.startsWith('Digital') ? 'digital' : 'plan', show_in_shop: false, status: true, short_description: 'Renew or upgrade to this plan' } });
+    await M.NfcCard.findOrCreate({ where: { slug }, defaults: { name: `${plan.name} plan (${/^Social (Static|Dynamic)/.test(plan.name) ? '1 year' : '2 years'})`, slug, price: plan.price, category: 'Plans', plan_id: plan.id, product_kind: plan.name.startsWith('Digital') ? 'digital' : 'plan', show_in_shop: false, status: true, short_description: 'Renew or upgrade to this plan' } });
   }
 
   // plans created before new features existed: add the missing feature keys (premium tiers get them on)
