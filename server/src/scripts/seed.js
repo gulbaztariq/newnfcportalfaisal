@@ -62,8 +62,52 @@ const all = (keys, v = true) => Object.fromEntries(keys.map((k) => [k, v]));
   // social-profile plan: only the social / link-card templates (price is a placeholder, edit it in Plans)
   {
     const socialTpl = templates.filter((t) => TEMPLATES.some((c) => c.slug === t.slug && /^(Social|Link Cards):/.test(c.profession)));
-    const [sp, created] = await M.Plan.findOrCreate({ where: { name: 'Social Profile' }, defaults: { name: 'Social Profile', price: 0, frequency: 'monthly', trial_days: 0, no_of_vcards: 1, storage_limit: 200, features: all(['social_links', 'custom_links', 'enquiry_form', 'analytics', 'payment_links', 'gallery']), currency_id: usd.id, custom_select: true } });
+    const [sp, created] = await M.Plan.findOrCreate({ where: { name: ['Social Profile', 'Social All-in-One'] }, defaults: { name: 'Social Profile', price: 0, frequency: 'monthly', trial_days: 0, no_of_vcards: 1, storage_limit: 200, features: all(['social_links', 'custom_links', 'enquiry_form', 'analytics', 'payment_links', 'gallery']), currency_id: usd.id, custom_select: true } });
     if (created) await sp.setTemplates(socialTpl);
+  }
+
+  // sellable plan families (PKR per year; prices are starting points, edit them in Plans)
+  {
+    const pkr = await M.Currency.findOne({ where: { currency_code: 'PKR' } });
+    const isSocial = (t) => TEMPLATES.some((c) => c.slug === t.slug && /^Social/.test(c.profession));
+    const isLink = (t) => TEMPLATES.some((c) => c.slug === t.slug && /^Link Cards/.test(c.profession));
+    const people = templates.filter((t) => !isSocial(t) && !isLink(t));
+    const FEAT = {
+      basic: ['social_links', 'enquiry_form', 'products_services', 'custom_links'],
+      pro: ['social_links', 'enquiry_form', 'products_services', 'custom_links', 'testimonials', 'gallery', 'analytics', 'seo', 'password', 'payment_links', 'custom_qrcode', 'appointments', 'nfc_cards'],
+      full: M.PLAN_FEATURES.filter((k) => !['organisation', 'whatsapp_store', 'affiliation'].includes(k)),
+      corp: M.PLAN_FEATURES.filter((k) => !['affiliation'].includes(k)),
+    };
+    const FAMILIES = [
+      // individual clients with a physical card
+      { name: 'Individual Starter', price: 999, vcards: 1, storage: 200, tpl: people.slice(0, 20), f: FEAT.basic },
+      { name: 'Individual Professional', price: 1999, vcards: 3, storage: 1024, tpl: people.slice(0, 60), f: FEAT.pro },
+      { name: 'Individual Executive', price: 3999, vcards: 5, storage: 3072, tpl: people, f: FEAT.full, extra: { no_of_short_links: 0 } },
+      // companies
+      { name: 'Corporate Business', price: 9999, vcards: 10, storage: 5120, tpl: people, f: [...FEAT.full, 'organisation'], extra: { no_of_organization_users: 10 } },
+      { name: 'Corporate Enterprise', price: 24999, vcards: 50, storage: 20480, tpl: templates.filter((t) => !isSocial(t) && !isLink(t)), f: FEAT.corp, extra: { no_of_organization_users: 50, no_of_whatsapp_stores: 5 } },
+      // social / review cards
+      { name: 'Social Static Link', price: 499, vcards: 1, storage: 50, tpl: templates.filter(isSocial), f: ['social_links', 'custom_links'] },
+      { name: 'Social Dynamic Link', price: 799, vcards: 1, storage: 100, tpl: templates.filter((t) => isSocial(t) || isLink(t)), f: ['social_links', 'custom_links', 'url_shortener', 'analytics', 'enquiry_form'], extra: { no_of_short_links: 0 } },
+      // digital profile only (same features as the individual tiers, no card)
+      { name: 'Digital Basic', price: 799, vcards: 1, storage: 200, tpl: people.slice(0, 20), f: FEAT.basic },
+      { name: 'Digital Plus', price: 1499, vcards: 3, storage: 1024, tpl: people.slice(0, 60), f: FEAT.pro },
+      { name: 'Digital Pro', price: 2999, vcards: 5, storage: 3072, tpl: people, f: FEAT.full },
+    ];
+    for (const fam of FAMILIES) {
+      const [pl, created] = await M.Plan.findOrCreate({ where: { name: fam.name }, defaults: { name: fam.name, price: fam.price, frequency: 'yearly', trial_days: 0, no_of_vcards: fam.vcards, storage_limit: fam.storage, features: { ...all(M.PLAN_FEATURES, false), ...all(fam.f) }, currency_id: pkr?.id || usd.id, custom_select: fam.tpl.length > 20, ...(fam.extra || {}) } });
+      if (created) await pl.setTemplates(fam.tpl);
+    }
+    // the existing Social Profile plan becomes the all-in-one social plan (its products stay linked)
+    const aio = await M.Plan.findOne({ where: { name: 'Social Profile' } });
+    if (aio && Number(aio.price) === 0 && !(await M.Subscription.count({ where: { plan_id: aio.id } }))) {
+      await aio.update({ name: 'Social All-in-One', price: 1199, frequency: 'yearly', currency_id: pkr?.id || usd.id, no_of_vcards: 1, storage_limit: 300, features: { ...(aio.features || {}), ...all(['social_links', 'custom_links', 'url_shortener', 'analytics', 'enquiry_form', 'payment_links', 'gallery', 'products_services', 'seo']) }, no_of_short_links: 0 });
+    }
+  }
+
+  // card reprinting products (order type "Card reprinting"); prices are starting points, edit them in Orders > Products
+  for (const [name, slug, price] of [['Card Reprint: PVC', 'reprint-pvc', 499], ['Card Reprint: Wood', 'reprint-wood', 1299], ['Card Reprint: Metal', 'reprint-metal', 2499]]) {
+    await M.NfcCard.findOrCreate({ where: { slug }, defaults: { name, slug, price, category: 'Card reprinting', product_kind: 'reprint', show_in_shop: false, status: true, short_description: 'Same design printed again on a new card' } });
   }
 
   // plans created before new features existed: add the missing feature keys (premium tiers get them on)

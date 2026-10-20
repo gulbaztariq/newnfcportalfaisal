@@ -27,6 +27,7 @@ const ORDER_TYPES = [
   { key: 'sample', title: 'Samples first', text: 'Paid samples, credited to the bulk order later', icon: FlaskConical },
   { key: 'card_printing', title: 'Card + printing', text: 'NFC card with your print, no profile or plan', icon: CreditCard },
   { key: 'printing', title: 'Printing only', text: 'Printing service on cards the client already has', icon: Printer },
+  { key: 'reprint', title: 'Card reprinting', text: 'Same design again on a new card: metal, wood, PVC and more', icon: Repeat },
   { key: 'digital', title: 'Digital profile only', text: 'Profile and plan, nothing shipped', icon: Smartphone },
   { key: 'renewal', title: 'Renewal', text: 'Extend an existing customer\'s plan', icon: CalendarClock },
   { key: 'upgrade', title: 'Upgrade plan', text: 'Move a customer to a higher plan, unused time credited', icon: TrendingUp },
@@ -41,7 +42,7 @@ const TYPE_TITLE = Object.fromEntries(ORDER_TYPES.map((t) => [t.key, t.title]));
 const SOCIAL_VARIANTS = [{ value: 'static', label: 'Static link', kind: 'social_static' }, { value: 'dynamic', label: 'Dynamic link', kind: 'social_dynamic' }, { value: 'profile', label: 'All-in-one social profile', kind: 'social_profile' }];
 /** which product kinds an order type offers (an untagged product counts as a normal NFC product) */
 const kindsFor = (type, variant) => ({
-  nfc_profile: ['nfc_profile', null], printing: ['printing', null], card_printing: ['blank_card', 'printing', null], digital: ['digital', null], renewal: ['__plan'], upgrade: ['__plan'], contact_tag: ['contact_tag'], airport_tag: ['airport_tag'],
+  nfc_profile: ['nfc_profile', null], printing: ['printing', null], reprint: ['reprint'], card_printing: ['blank_card', 'printing', null], digital: ['digital', null], renewal: ['__plan'], upgrade: ['__plan'], contact_tag: ['contact_tag'], airport_tag: ['airport_tag'],
   social: [SOCIAL_VARIANTS.find((v) => v.value === variant)?.kind].filter(Boolean).concat(variant ? [] : ['social_static', 'social_dynamic', 'social_profile']),
 }[type] || null); // null = every product (wholesale, samples)
 const afterDisc = (price, t, v) => Math.max(0, t === 'percent' ? price * (1 - Math.min(100, Number(v) || 0) / 100) : t === 'fixed' ? price - (Number(v) || 0) : price);
@@ -500,6 +501,7 @@ export default function OrderWizard() {
                     )}
                     {form.order_type === 'sample' && <p className="rounded-2xl bg-primary-soft/40 p-3 text-sm text-muted-foreground">Samples are charged at a higher price than normal pieces (up to <b>{sampleMax}</b> per product). When the customer orders in bulk, choose <b>Wholesale</b> and the sample charge is deducted.</p>}
                     {form.order_type === 'card_printing' && <p className="rounded-2xl bg-primary-soft/40 p-3 text-sm text-muted-foreground">The client buys NFC cards and gets them printed with their design. No profile, no plan, no account needed: choose <b>Guest</b> in the next step.</p>}
+                    {form.order_type === 'reprint' && <p className="rounded-2xl bg-primary-soft/40 p-3 text-sm text-muted-foreground">For a client who wants their card made again (lost, damaged, or in a different material such as metal, wood or PVC). Pick the material below. No new plan is sold: their profile stays as it is. Write the card details in the order notes.</p>}
                     {form.order_type === 'renewal' && <p className="rounded-2xl bg-primary-soft/40 p-3 text-sm text-muted-foreground">Extends an existing customer's plan. The new period starts where the current one ends, and is added as soon as the order is marked <b>Paid</b>. Nothing is shipped.</p>}
                     {form.order_type === 'airport_tag' && <p className="rounded-2xl bg-primary-soft/40 p-3 text-sm text-muted-foreground">A luggage tag for travellers. Whoever finds the bag scans it and tells the owner where it is, <b>without ever seeing the owner's number</b>. One tag is made for every piece (a pack counts all its tags). Enter the owner's phone in the next step: that is where messages go. The owner can add trip details and a reward note from their private link.</p>}
                     {form.order_type === 'contact_tag' && <p className="rounded-2xl bg-primary-soft/40 p-3 text-sm text-muted-foreground">One tag is made for every piece. Anyone who scans it can send the owner a message or ask for a call back, and <b>the owner's number is never shown</b>. Enter the owner's phone in the next step: that is where messages go. Each tag gets its own link and QR code, and the owner can edit their details from a private link.</p>}

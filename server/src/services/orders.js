@@ -57,6 +57,7 @@ const ORDER_TYPES = {
   sample: { label: 'Samples before bulk', physical: true },
   card_printing: { label: 'Card + printing (no profile)', physical: true },
   printing: { label: 'Printing only', physical: true },
+  reprint: { label: 'Card reprinting (metal / wood / PVC...)', physical: true },
   digital: { label: 'Digital profile only', physical: false },
   renewal: { label: 'Plan renewal', physical: false },
   upgrade: { label: 'Plan upgrade', physical: false },

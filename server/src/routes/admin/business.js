@@ -46,7 +46,7 @@ r.delete('/security/bans/:ip', (req, res) => { security.unban(req.params.ip); re
 
 /* ============================================================== products (shop) */
 const PRODUCT_FIELDS = ['name', 'description', 'price', 'status', 'slug', 'category', 'sku', 'short_description', 'compare_price', 'customization_price', 'size_label', 'variants', 'featured', 'show_in_shop', 'sort', 'weight_grams', 'extra_cost', 'track_stock', 'plan_id', 'product_kind', 'discount_type', 'discount_value', 'sample_price', 'wholesale_tiers', 'no_wholesale_tiers', 'tags_per_unit', 'order_source_id'];
-const PRODUCT_KINDS = ['airport_tag', 'contact_tag', 'blank_card', 'nfc_profile', 'social_static', 'social_dynamic', 'social_profile', 'printing', 'digital'];
+const PRODUCT_KINDS = ['reprint', 'airport_tag', 'contact_tag', 'blank_card', 'nfc_profile', 'social_static', 'social_dynamic', 'social_profile', 'printing', 'digital'];
 const slugify = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 140);
 r.get('/nfc-cards/:id/components', wrap(async (req, res) => {
   const rows = await M.ProductComponent.findAll({ where: { nfc_card_id: req.params.id }, include: [{ model: M.InventoryItem, as: 'item' }] });
