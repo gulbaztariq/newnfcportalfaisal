@@ -39,7 +39,7 @@ const DEFAULTS = {
   slack_enable: '0', slack_webhook_url: '', slack_events: 'user_registered,payment,nfc_order,store_order,appointment',
   recaptcha_enable: '0', recaptcha_site_key: '', recaptcha_secret: '', recaptcha_min_score: '0.5',
   google_login_enable: '0', google_client_id: '',
-  email_verification_enable: '0', blocked_email_domains: '', expiry_reminder_days: '3',
+  email_verification_enable: '0', blocked_email_domains: '', expiry_reminder_days: '30', expiry_reminder_every_days: '3',
   ai_enable: '0', anthropic_api_key: '',
   // regional
   timezone: 'UTC', date_format: 'DD MMM YYYY', time_format: '24',

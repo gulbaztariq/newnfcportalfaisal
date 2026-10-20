@@ -87,7 +87,7 @@ export default function Settings() {
 }
 
 function General({ st }) {
-  const keys = ['app_name', 'email', 'phone', 'region_code', 'address', 'default_currency_id', 'affiliation_amount', 'min_withdrawal_amount', 'register_enable', 'hide_decimal_values', 'app_logo', 'dashboard_logo', 'favicon', 'timezone', 'date_format', 'time_format', 'nfc_tax_name', 'nfc_tax_rate', 'expiry_reminder_days', 'default_vcard_enable', 'default_vcard_template'];
+  const keys = ['app_name', 'email', 'phone', 'region_code', 'address', 'default_currency_id', 'affiliation_amount', 'min_withdrawal_amount', 'register_enable', 'hide_decimal_values', 'app_logo', 'dashboard_logo', 'favicon', 'timezone', 'date_format', 'time_format', 'nfc_tax_name', 'nfc_tax_rate', 'expiry_reminder_days', 'expiry_reminder_every_days', 'default_vcard_enable', 'default_vcard_template'];
   return (
     <div className="space-y-6">
       <Card>
@@ -139,7 +139,8 @@ function General({ st }) {
         <CardBody className="grid gap-4 sm:grid-cols-3">
           <Field label="Tax name" hint="e.g. VAT"><Input {...st.input('nfc_tax_name')} placeholder="-" /></Field>
           <Field label="Tax rate (%)" hint="Added to NFC card orders"><Input {...st.input('nfc_tax_rate')} type="number" min="0" max="100" step="0.01" /></Field>
-          <Field label="Plan expiry reminder" hint="Days before expiry the user is e-mailed"><Input {...st.input('expiry_reminder_days')} type="number" min="0" max="60" /></Field>
+          <Field label="Plan expiry reminder starts" hint="Days before expiry the first e-mail is sent (0 = no reminders)"><Input {...st.input('expiry_reminder_days')} type="number" min="0" max="90" /></Field>
+          <Field label="Repeat reminder every" hint="Days between reminder e-mails until the plan is renewed"><Input {...st.input('expiry_reminder_every_days')} type="number" min="1" max="30" /></Field>
         </CardBody>
       </Card>
       <SaveBar onSave={() => st.save(keys)} saving={st.saving} />

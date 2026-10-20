@@ -6,16 +6,24 @@ const settings = require('./settings');
 const mail = require('./mail');
 const { clientUrl } = require('../config');
 
+/** E-mails every user whose plan ends within N days (default 30), again every M days (default 3) until it is renewed or ends. */
 async function expiryReminders() {
-  const days = Number((await settings.get('expiry_reminder_days')) || 3);
+  const days = Number((await settings.get('expiry_reminder_days')) || 30);
   if (!days) return;
+  const every = Math.max(1, Number((await settings.get('expiry_reminder_every_days')) || 3));
+  const now = new Date();
+  const lastBefore = dayjs().subtract(every * 24 - 1, 'hour').toDate(); // 1h slack: the job runs hourly
   const subs = await M.Subscription.findAll({
-    where: { status: 'active', expiry_notified_at: null, ends_at: { [Op.between]: [new Date(), dayjs().add(days, 'day').toDate()] } },
+    where: {
+      status: 'active', ends_at: { [Op.between]: [now, dayjs().add(days, 'day').toDate()] },
+      [Op.or]: [{ expiry_notified_at: null }, { expiry_notified_at: { [Op.lte]: lastBefore } }],
+    },
     include: [M.User, M.Plan],
   });
   for (const s of subs) {
     if (!s.user?.email || !s.plan || s.plan.frequency === 'unlimited') continue;
-    await mail.sendTemplate('plan_expiring', s.user.email, { name: s.user.first_name, plan: s.plan.name, date: dayjs(s.ends_at).format('DD MMM YYYY'), plans_url: `${clientUrl}/user/plans` }).catch((e) => console.error('mail', e.message));
+    const left = Math.max(1, Math.ceil(dayjs(s.ends_at).diff(now, 'hour') / 24));
+    await mail.sendTemplate('plan_expiring', s.user.email, { name: s.user.first_name, plan: s.plan.name, date: dayjs(s.ends_at).format('DD MMM YYYY'), days: left, plans_url: `${clientUrl}/user/plans` }).catch((e) => console.error('mail plan_expiring', e.message));
     await s.update({ expiry_notified_at: new Date() });
   }
 }

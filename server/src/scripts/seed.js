@@ -49,9 +49,6 @@ const all = (keys, v = true) => Object.fromEntries(keys.map((k) => [k, v]));
   const usd = await M.Currency.findOne({ where: { currency_code: 'USD' } });
   const templates = await M.Template.findAll({ order: [['id', 'ASC']] });
   const plans = [
-    { name: 'Standard', price: 9, frequency: 'monthly', trial_days: 7, no_of_vcards: 3, storage_limit: 200, features: all(['social_links', 'enquiry_form', 'products_services', 'testimonials', 'gallery', 'custom_links', 'analytics', 'seo', 'nfc_cards']), tpl: 16 },
-    { name: 'Premium', price: 99, frequency: 'yearly', trial_days: 14, no_of_vcards: 10, storage_limit: 1024, features: all(M.PLAN_FEATURES), tpl: 99 },
-    { name: 'Lifetime', price: 249, frequency: 'unlimited', trial_days: 0, no_of_vcards: 25, storage_limit: 5120, features: all(M.PLAN_FEATURES), tpl: 99 },
   ];
   for (const p of plans) {
     const [plan, created] = await M.Plan.findOrCreate({ where: { name: p.name }, defaults: { ...p, currency_id: usd.id, custom_select: p.tpl > 20 } });
@@ -136,7 +133,7 @@ const all = (keys, v = true) => Object.fromEntries(keys.map((k) => [k, v]));
   await mk('admin@vcard.com', 'Admin', 'User', 'admin');
   const demo = await mk('user@vcard.com', 'John', 'Doe', 'user');
   if (!(await M.Subscription.findOne({ where: { user_id: demo.id } }))) {
-    const premium = await M.Plan.findOne({ where: { name: 'Premium' } });
+    const premium = await M.Plan.findOne({ where: { name: 'Individual Executive' } });
     await require('../services/subscription').activate(demo.id, premium, { paymentType: 'admin' });
   }
   if (!(await M.Vcard.findOne({ where: { user_id: demo.id } }))) {
