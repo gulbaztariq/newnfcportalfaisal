@@ -8,7 +8,7 @@ import { PageHeader, Card, CardBody, Button, Field, Input, Textarea, Select, Swi
 
 const KINDS = [
   { value: 'airport_tag', label: 'Airport tag (luggage)' }, { value: 'contact_tag', label: 'Car contact tag (number hidden)' }, { value: 'blank_card', label: 'Blank NFC card / tag' }, { value: 'nfc_profile', label: 'NFC Business Card' }, { value: 'social_static', label: 'Social card: static link' }, { value: 'social_dynamic', label: 'Social card: dynamic link' },
-  { value: 'social_profile', label: 'Social profile (all-in-one)' }, { value: 'printing', label: 'Printing only' }, { value: 'reprint', label: 'Card reprinting (metal / wood / PVC)' }, { value: 'digital', label: 'Digital profile' },
+  { value: 'social_profile', label: 'Social profile (all-in-one)' }, { value: 'printing', label: 'Printing only' }, { value: 'plan', label: 'Plan only (renewal / upgrade)' }, { value: 'reprint', label: 'Card reprinting (metal / wood / PVC)' }, { value: 'digital', label: 'Digital profile' },
 ];
 const DISCOUNTS = [{ value: 'fixed', label: 'Rs off' }, { value: 'percent', label: '% off' }];
 const num = (v) => (v === '' || v === null || v === undefined ? 0 : Number(v));

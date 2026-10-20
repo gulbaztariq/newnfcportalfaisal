@@ -110,6 +110,12 @@ const all = (keys, v = true) => Object.fromEntries(keys.map((k) => [k, v]));
     await M.NfcCard.findOrCreate({ where: { slug }, defaults: { name, slug, price, category: 'Card reprinting', product_kind: 'reprint', show_in_shop: false, status: true, short_description: 'Same design printed again on a new card' } });
   }
 
+  // one product per sellable plan: this is what renewal and upgrade orders sell (price follows the plan, edit it in Orders > Products)
+  for (const plan of await M.Plan.findAll({ where: { name: ['Social All-in-One', 'Individual Starter', 'Individual Professional', 'Individual Executive', 'Corporate Business', 'Corporate Enterprise', 'Social Static Link', 'Social Dynamic Link', 'Digital Basic', 'Digital Plus', 'Digital Pro'] } })) {
+    const slug = `plan-${plan.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
+    await M.NfcCard.findOrCreate({ where: { slug }, defaults: { name: `${plan.name} plan (1 year)`, slug, price: plan.price, category: 'Plans', plan_id: plan.id, product_kind: plan.name.startsWith('Digital') ? 'digital' : 'plan', show_in_shop: false, status: true, short_description: 'Renew or upgrade to this plan' } });
+  }
+
   // plans created before new features existed: add the missing feature keys (premium tiers get them on)
   for (const plan of await M.Plan.findAll()) {
     const rich = ['Premium', 'Lifetime'].includes(plan.name);
