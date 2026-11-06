@@ -405,12 +405,12 @@ r.post('/order-sources/refresh', wrap(async (req, res) => {
   if (ids?.length) where.id = ids;
   const sources = await M.OrderSource.findAll({ where, order: [['name', 'ASC']] });
   const results = [];
-  const one = async (src) => {
-    if (!force && src.last_synced_at && Date.now() - new Date(src.last_synced_at).getTime() < REFRESH_FRESH_MS && src.platform) return results.push({ id: src.id, name: src.name, status: 'fresh', at: src.last_synced_at });
-    try { const out = await productsync.syncSource(src); results.push({ id: src.id, name: src.name, status: 'updated', at: new Date(), total: out.total, created: out.created }); }
-    catch (e) { results.push({ id: src.id, name: src.name, status: 'failed', message: String(e.message).slice(0, 200), at: src.last_synced_at }); }
-  };
-  for (let i = 0; i < sources.length; i += 3) await Promise.all(sources.slice(i, i + 3).map(one)); // three websites at a time
+  const stale = [];
+  for (const src of sources) {
+    if (!force && src.last_synced_at && Date.now() - new Date(src.last_synced_at).getTime() < REFRESH_FRESH_MS && src.platform) results.push({ id: src.id, name: src.name, status: 'fresh', at: src.last_synced_at });
+    else stale.push(src.id);
+  }
+  if (stale.length) results.push(...await productsync.syncAll(stale));
   res.json({ results });
 }));
 r.post('/order-sources/:id/sync', wrap(async (req, res) => {

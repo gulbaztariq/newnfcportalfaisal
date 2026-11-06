@@ -189,4 +189,19 @@ async function importPasted(source, text) {
   return { total: created + updated, created, updated };
 }
 
-module.exports = { syncSource, importPasted, fetchProducts, assertPublicUrl };
+/** Sync every active source that has a website address (three at a time). Returns one result per source. */
+async function syncAll(ids) {
+  const { OrderSource } = M();
+  const where = { status: true, url: { [Op.ne]: null } };
+  if (ids?.length) where.id = ids;
+  const sources = await OrderSource.findAll({ where, order: [['name', 'ASC']] });
+  const results = [];
+  const one = async (src) => {
+    try { const out = await syncSource(src); results.push({ id: src.id, name: src.name, status: 'updated', at: new Date(), total: out.total, created: out.created, updated: out.updated }); }
+    catch (e) { results.push({ id: src.id, name: src.name, status: 'failed', message: String(e.message).slice(0, 200), at: src.last_synced_at }); }
+  };
+  for (let i = 0; i < sources.length; i += 3) await Promise.all(sources.slice(i, i + 3).map(one));
+  return results;
+}
+
+module.exports = { syncAll, syncSource, importPasted, fetchProducts, assertPublicUrl };

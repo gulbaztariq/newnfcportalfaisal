@@ -48,6 +48,16 @@ async function courierSync() {
   }
 }
 
+/** Once a week: re-read the products and prices of every order source (edited prices stay, see productsync) */
+const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+async function weeklyProductSync() {
+  const last = Number(await settings.get('product_sync_last_run')) || 0;
+  if (Date.now() - last < WEEK_MS - 60 * 60 * 1000) return; // 1h slack: the job checks hourly
+  await settings.set({ product_sync_last_run: Date.now() }); // claim the run first so a restart never repeats it
+  const res = await require('./productsync').syncAll();
+  console.log(`weekly product sync: ${res.filter((r) => r.status === 'updated').length}/${res.length} sources updated`);
+}
+
 /** Flag unpaid invoices past their due date */
 async function overdueInvoices() {
   await M.Invoice.update({ status: 'overdue' }, { where: { status: { [Op.in]: ['sent', 'partial'] }, due_date: { [Op.lt]: dayjs().format('YYYY-MM-DD') } } });
@@ -56,6 +66,7 @@ async function overdueInvoices() {
 function start() {
   const hourly = () => {
     expiryReminders().catch((e) => console.error('job expiryReminders', e.message));
+    weeklyProductSync().catch((e) => console.error('job weeklyProductSync', e.message));
     overdueInvoices().catch((e) => console.error('job overdueInvoices', e.message));
   };
   const courier = () => courierSync().catch((e) => console.error('job courierSync', e.message));
@@ -65,4 +76,4 @@ function start() {
   setInterval(courier, 30 * 60 * 1000).unref();
 }
 
-module.exports = { start, expiryReminders, courierSync, overdueInvoices };
+module.exports = { start, weeklyProductSync, expiryReminders, courierSync, overdueInvoices };

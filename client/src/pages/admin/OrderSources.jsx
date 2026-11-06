@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { motion } from 'motion/react';
 import { Globe, Plus, Pencil, Trash2, RefreshCw, ListChecks, ClipboardPaste, ExternalLink, Lock, RotateCcw, Package, Save } from 'lucide-react';
+import { toast } from 'sonner';
 import api from '@/lib/api';
 import { cn } from '@/lib/cn';
 import { PageHeader, Card, CardBody, Button, Field, Input, Textarea, Select, Switch, Badge, Dialog, EmptyState, Skeleton, SearchInput, useForm, run, confirm } from '@/components/ui';
@@ -107,10 +108,19 @@ export function OrderSources() {
   };
   const remove = async (r) => { if (await confirm({ title: `Delete ${r.name}?`, description: 'Its synced products stay in Products.' })) { await run(api.delete(`/admin/order-sources/${r.id}`)).catch(() => {}); load(); } };
   const sync = async (r) => { setBusy(r.id); try { await run(api.post(`/admin/order-sources/${r.id}/sync`)); } catch { /* toasted */ } finally { setBusy(null); load(); } };
+  const syncAll = async () => {
+    setBusy('all');
+    try {
+      const { data } = await api.post('/admin/order-sources/refresh', { force: true });
+      const ok = data.results.filter((x) => x.status === 'updated').length; const bad = data.results.filter((x) => x.status === 'failed');
+      toast[bad.length ? 'error' : 'success'](`${ok} of ${data.results.length} websites synced${bad.length ? `. Failed: ${bad.map((x) => x.name).join(', ')}` : ''}`);
+    } catch { /* toasted */ } finally { setBusy(null); load(); }
+  };
   const importList = async () => { setBusy(pasting.id); try { await run(api.post(`/admin/order-sources/${pasting.id}/import`, { text: pasteText })); setPasting(null); setPasteText(''); } catch { /* toasted */ } finally { setBusy(null); load(); } };
   return (
     <>
-      <PageHeader title="Order sources" description="Your websites and other places orders come from. Sync a website to bring in its products and prices, then adjust prices and discounts here.">
+      <PageHeader title="Order sources" description="Your websites and other places orders come from. Products and prices sync automatically every week. Sync now to refresh them yourself, then adjust prices and discounts here.">
+        <Button variant="outline" onClick={syncAll} loading={busy === 'all'}><RefreshCw />Sync all now</Button>
         <Button onClick={() => openForm()}><Plus />Add source</Button>
       </PageHeader>
       {!rows ? <div className="grid gap-4 lg:grid-cols-2">{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-44 rounded-3xl" />)}</div> : !rows.length ? (
