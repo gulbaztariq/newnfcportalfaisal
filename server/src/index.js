@@ -15,6 +15,8 @@ const errorPage = require('./views/errors');
 const app = express();
 app.disable('x-powered-by');
 app.set('trust proxy', 1);
+// a repeated query parameter (?search=a&search=b) would reach handlers as an array and crash string handling: keep the last value
+app.set('query parser', (str) => { const q = require('querystring').parse(str); for (const k of Object.keys(q)) if (Array.isArray(q[k])) q[k] = q[k][q[k].length - 1]; return q; });
 // abuse guard first: temporarily bans IPs that flood auth / scan for exploits
 const security = require('./services/security');
 app.use(security.ipGuard);

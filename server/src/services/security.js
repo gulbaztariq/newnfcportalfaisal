@@ -6,19 +6,28 @@
 const crypto = require('crypto');
 const settings = require('./settings');
 const mail = require('./mail');
+const { HttpError } = require('../utils/http');
+const { jwtSecret } = require('../config');
 
 const hash = (s) => crypto.createHash('sha256').update(String(s)).digest('hex');
+// keyed hash for sign-in codes: a leaked database alone cannot be used to brute-force the 1,000,000 possible codes
+const otpHash = (s) => crypto.createHmac('sha256', jwtSecret).update(String(s)).digest('hex');
+const RESEND_COOLDOWN_S = 60;
 
 /* ------------------------------------------------------------ e-mail login code */
-async function sendLoginCode(user) {
+async function sendLoginCode(user, { resend = false } = {}) {
+  const minutes = Math.max(1, Number((await settings.get('login_otp_minutes')) || 5));
+  const sentAt = user.login_otp_expires_at ? new Date(user.login_otp_expires_at).getTime() - minutes * 60000 : 0;
+  const wait = Math.ceil((sentAt + RESEND_COOLDOWN_S * 1000 - Date.now()) / 1000);
+  if (resend && user.login_otp_hash && wait > 0) throw new HttpError(429, `Please wait ${wait} seconds before requesting another code`);
   const code = String(crypto.randomInt(0, 1000000)).padStart(6, '0');
-  await user.update({ login_otp_hash: hash(`${user.id}:${code}`), login_otp_expires_at: new Date(Date.now() + 10 * 60 * 1000), login_otp_attempts: 0 });
-  await mail.sendTemplate('login_code', user.email, { name: user.first_name, code });
+  await user.update({ login_otp_hash: otpHash(`${user.id}:${code}`), login_otp_expires_at: new Date(Date.now() + minutes * 60 * 1000), login_otp_attempts: 0 });
+  await mail.sendTemplate('login_code', user.email, { name: user.first_name, code, minutes });
 }
 /** true when the code matches; burns the code after 5 wrong tries or on success */
 async function checkLoginCode(user, code) {
   if (!user.login_otp_hash || !user.login_otp_expires_at || new Date(user.login_otp_expires_at) < new Date()) return false;
-  const ok = crypto.timingSafeEqual(Buffer.from(user.login_otp_hash), Buffer.from(hash(`${user.id}:${String(code).trim()}`)));
+  const ok = crypto.timingSafeEqual(Buffer.from(user.login_otp_hash), Buffer.from(otpHash(`${user.id}:${String(code).trim()}`)));
   if (ok) { await user.update({ login_otp_hash: null, login_otp_expires_at: null, login_otp_attempts: 0 }); return true; }
   const attempts = (user.login_otp_attempts || 0) + 1;
   await user.update(attempts >= 5 ? { login_otp_hash: null, login_otp_expires_at: null, login_otp_attempts: 0 } : { login_otp_attempts: attempts });

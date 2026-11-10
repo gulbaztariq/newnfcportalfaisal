@@ -91,7 +91,7 @@ r.post('/two-factor/resend', codeLimiter, wrap(async (req, res) => {
   if (payload.p !== '2fa' || payload.m !== 'email') fail(422, 'Invalid request');
   const user = await User.scope('withSecrets').findByPk(payload.sub);
   if (!user || !user.is_active || !org.canSignIn(user)) fail(422, 'Invalid request');
-  await security.sendLoginCode(user);
+  await security.sendLoginCode(user, { resend: true });
   res.json({ message: 'A new code has been sent' });
 }));
 
