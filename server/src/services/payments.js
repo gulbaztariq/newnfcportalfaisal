@@ -5,6 +5,7 @@
  * to the React success page that calls verify.
  */
 const crypto = require('crypto');
+const { Op } = require('sequelize');
 const M = require('../models');
 const settings = require('./settings');
 const subs = require('./subscription');
@@ -38,16 +39,21 @@ async function pendingTransaction(ctx, type) {
 async function fulfil(t, paidAmount) {
   if (t.status === 'paid') return;
   if (paidAmount !== undefined && Number(paidAmount) + 0.01 < Number(t.amount)) fail('The paid amount does not match the order');
-  await t.update({ status: 'paid' });
-  if (t.purpose === 'subscription') {
-    const plan = await M.Plan.findByPk(t.meta.plan_id);
-    await subs.activate(t.user_id, plan, { transactionId: t.id, paymentType: t.type, amount: t.amount, discount: t.meta.discount || 0, tax: t.meta.tax || 0, coupon: t.meta.coupon || null });
-    await subs.consumeCoupon(t.meta.coupon);
-  } else {
-    await M.NfcOrder.update({ payment_status: 'paid', transaction_id: t.id }, { where: { id: t.meta.nfc_order_id } });
-  }
-  require('./extras').slack('payment', `Payment of ${t.amount} received via ${t.type} (#${t.id})`);
-  if (t.purpose === 'subscription' && (await settings.get('invoice_auto_subscriptions')) !== '0') require('./invoices').fromTransaction(t.id).catch((e) => console.error('[invoice]', e.message));
+  // claim the transaction atomically: a webhook and a browser return arriving together must not both fulfil it
+  const [claimed] = await M.Transaction.update({ status: 'paid' }, { where: { id: t.id, status: { [Op.ne]: 'paid' } } });
+  if (!claimed) return;
+  t.status = 'paid';
+  try {
+    if (t.purpose === 'subscription') {
+      const plan = await M.Plan.findByPk(t.meta.plan_id);
+      await subs.activate(t.user_id, plan, { transactionId: t.id, paymentType: t.type, amount: t.amount, discount: t.meta.discount || 0, tax: t.meta.tax || 0, coupon: t.meta.coupon || null });
+      await subs.consumeCoupon(t.meta.coupon);
+    } else {
+      await M.NfcOrder.update({ payment_status: 'paid', transaction_id: t.id }, { where: { id: t.meta.nfc_order_id } });
+    }
+    require('./extras').slack('payment', `Payment of ${t.amount} received via ${t.type} (#${t.id})`);
+    if (t.purpose === 'subscription' && (await settings.get('invoice_auto_subscriptions')) !== '0') require('./invoices').fromTransaction(t.id).catch((e) => console.error('[invoice]', e.message));
+  } catch (e) { await M.Transaction.update({ status: 'pending' }, { where: { id: t.id } }); throw e; } // let a retry finish it
 }
 const findTx = async (ref, user, type) => {
   const t = await M.Transaction.findOne({ where: { transaction_id: String(ref || ''), user_id: user.id, type } });
@@ -391,4 +397,5 @@ module.exports = {
   createCheckout(type, ctx) { const g = gateways[type]; if (!g) fail('Unknown payment method'); return g.createCheckout(ctx); },
   verify(type, query, user) { const g = gateways[type]; if (!g) fail('Unknown payment method'); return g.verify(query, user); },
   payfastNotify: (body) => payfast.notify(body),
+  fulfil,
 };
