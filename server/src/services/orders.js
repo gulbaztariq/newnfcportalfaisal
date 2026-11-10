@@ -182,12 +182,18 @@ async function applyRenewal(order) {
   const plan = planId ? await Plan.findByPk(planId) : null;
   if (!plan) return null;
   const subs = require('./subscription');
-  // renewal: the new period follows the current one. upgrade: the new plan starts now, the unused time was credited in the price
-  const sub = order.order_type === 'upgrade'
-    ? await subs.activate(order.user_id, plan, { amount: order.amount, paymentType: order.payment_type || 'upgrade' })
-    : await subs.renew(order.user_id, plan, { amount: order.amount, paymentType: order.payment_type || 'renewal' });
-  await order.update({ plan_applied_at: new Date() });
-  return sub;
+  // claim the order first (atomic): two confirmations arriving together (gateway webhook + admin approval) must not both apply the plan
+  const { NfcOrder } = M();
+  const [claimed] = await NfcOrder.update({ plan_applied_at: new Date() }, { where: { id: order.id, plan_applied_at: null } });
+  if (!claimed) return null;
+  try {
+    // renewal: the new period follows the current one. upgrade: the new plan starts now, the unused time was credited in the price
+    const sub = order.order_type === 'upgrade'
+      ? await subs.activate(order.user_id, plan, { amount: order.amount, paymentType: order.payment_type || 'upgrade' })
+      : await subs.renew(order.user_id, plan, { amount: order.amount, paymentType: order.payment_type || 'renewal' });
+    order.plan_applied_at = new Date();
+    return sub;
+  } catch (e) { await NfcOrder.update({ plan_applied_at: null }, { where: { id: order.id } }); throw e; } // let a retry apply it
 }
 
 /** Revenue-recognised orders (for analytics): delivered, or paid and not cancelled/returned */
