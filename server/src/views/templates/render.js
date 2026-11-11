@@ -1,7 +1,38 @@
 const { esc, url, color, nl2br } = require('../../utils/html');
 const { TEMPLATES, LAYOUTS, SOCIAL_LAYOUTS, BAR_LAYOUTS, LINK_LAYOUTS } = require('./catalog');
-const BASE_CSS = require('./styles') + require('./premium') + require('./social') + require('./business') + require('./linkcards');
+const { GOOGLE_FONTS, sanitizeTheme, customOf, CUSTOM_CSS } = require('./custom');
+const signature = require('./signature');
+const BASE_CSS = require('./styles') + require('./premium') + require('./social') + require('./business') + require('./linkcards') + require('./signature').CSS + CUSTOM_CSS;
 const { t: labelsFor, RTL } = require('./i18n');
+
+/*
+ * A page only needs the rules of its own layout. The stylesheet is split into top-level rules once; a rule is dropped for a
+ * layout when every one of its selectors is scoped to a different layout (.l-other ...). At-rules (@keyframes, @media) and
+ * anything not layout-scoped are always kept, so the worst case is a rule that stays although it is not needed.
+ */
+const CSS_RULES = (() => {
+  const rules = [];
+  let depth = 0; let start = 0;
+  for (let i = 0; i < BASE_CSS.length; i++) {
+    const ch = BASE_CSS[i];
+    if (ch === '{') depth++;
+    else if (ch === '}') { depth--; if (depth === 0) { rules.push(BASE_CSS.slice(start, i + 1)); start = i + 1; } }
+  }
+  if (BASE_CSS.slice(start).trim()) rules.push(BASE_CSS.slice(start));
+  return rules.map((text) => {
+    const head = text.slice(0, text.indexOf('{')).replace(/\/\*[\s\S]*?\*\//g, '').trim();
+    if (!head || head.startsWith('@')) return { text, layouts: null };
+    const layouts = new Set();
+    for (const sel of head.split(',')) { const m = /^\s*\.l-([a-z0-9]+)(?![\w-])/.exec(sel); if (!m) return { text, layouts: null }; layouts.add(m[1]); }
+    return { text, layouts };
+  });
+})();
+const cssCache = new Map();
+function cssFor(layout) {
+  let css = cssCache.get(layout);
+  if (css === undefined) { css = CSS_RULES.filter((r) => !r.layouts || r.layouts.has(layout)).map((r) => r.text).join(''); cssCache.set(layout, css); }
+  return css;
+}
 
 const BY_SLUG = Object.fromEntries(TEMPLATES.map((t) => [t.slug, t]));
 
@@ -13,45 +44,6 @@ const SOCIAL = {
   reddit: ['ri-reddit-fill', 'Reddit'], dribbble: ['ri-dribbble-fill', 'Dribbble'], behance: ['ri-behance-fill', 'Behance'], discord: ['ri-discord-fill', 'Discord'],
 };
 const DAYS = [['mon', 'Monday'], ['tue', 'Tuesday'], ['wed', 'Wednesday'], ['thu', 'Thursday'], ['fri', 'Friday'], ['sat', 'Saturday'], ['sun', 'Sunday']];
-const GOOGLE_FONTS = {
-  Inter: 'Inter:wght@400;500;600;700;800',
-  Poppins: 'Poppins:wght@400;500;600;700;800',
-  'Playfair Display': 'Playfair+Display:wght@400;500;600;700',
-  Montserrat: 'Montserrat:wght@400;500;600;700;800',
-  Lora: 'Lora:wght@400;500;600;700',
-  'Space Grotesk': 'Space+Grotesk:wght@400;500;600;700',
-  Roboto: 'Roboto:wght@400;500;700',
-  'Open Sans': 'Open+Sans:wght@400;600;700',
-  'DM Sans': 'DM+Sans:wght@400;500;600;700',
-  Outfit: 'Outfit:wght@400;500;600;700',
-  'Plus Jakarta Sans': 'Plus+Jakarta+Sans:wght@400;500;600;700',
-  Manrope: 'Manrope:wght@400;500;600;700',
-  'Cormorant Garamond': 'Cormorant+Garamond:wght@400;500;600;700',
-  Fraunces: 'Fraunces:wght@400;500;600;700',
-  Sora: 'Sora:wght@400;500;600;700',
-  Syne: 'Syne:wght@400;500;600;700',
-  'JetBrains Mono': 'JetBrains+Mono:wght@400;500;600;700',
-  'IBM Plex Mono': 'IBM+Plex+Mono:wght@400;500;600;700',
-  Quicksand: 'Quicksand:wght@400;500;600;700',
-  Urbanist: 'Urbanist:wght@400;500;600;700',
-  Rubik: 'Rubik:wght@400;500;600;700',
-  Lexend: 'Lexend:wght@400;500;600;700',
-  'IBM Plex Sans': 'IBM+Plex+Sans:wght@400;500;600;700',
-  Figtree: 'Figtree:wght@400;500;600;700',
-  Barlow: 'Barlow:wght@400;500;600;700',
-  Bitter: 'Bitter:wght@400;500;600;700',
-  'Bodoni Moda': 'Bodoni+Moda:wght@400;500;600;700',
-  Unbounded: 'Unbounded:wght@400;500;600;700',
-  'Chakra Petch': 'Chakra+Petch:wght@400;500;600;700',
-  'EB Garamond': 'EB+Garamond:wght@400;500;600;700',
-  'Libre Franklin': 'Libre+Franklin:wght@400;500;600;700',
-  Nunito: 'Nunito:wght@400;500;600;700;800',
-  'Bricolage Grotesque': 'Bricolage+Grotesque:wght@400;500;600;700;800',
-  Archivo: 'Archivo:wght@400;500;600;700;800',
-  'Baloo 2': 'Baloo+2:wght@400;500;600;700;800',
-  'Libre Baskerville': 'Libre+Baskerville:wght@400;700',
-  Amiri: 'Amiri:wght@400;700',
-};
 /* brand colour per network, used for the icon tile of the link-card layouts */
 const BRAND = { whatsapp: '#25d366', instagram: '#e1306c', tiktok: '#25f4ee', facebook: '#1877f2', youtube: '#ff0033', linkedin: '#0a66c2', twitter: '#1d9bf0', telegram: '#2aabee', snapchat: '#fffc00', pinterest: '#e60023', github: '#a371f7', reddit: '#ff4500', dribbble: '#ea4c89', behance: '#1769ff', discord: '#5865f2', website: '#f59e0b' };
 const SOCIAL_CTA = { whatsapp: 'Chat with us', instagram: 'Follow', tiktok: 'Videos', facebook: 'Official page', youtube: 'Watch', linkedin: 'Connect', twitter: 'Follow', telegram: 'Message', snapchat: 'Add us', pinterest: 'Ideas', github: 'Code', reddit: 'Community', dribbble: 'Portfolio', behance: 'Portfolio', discord: 'Join', website: 'Visit our website' };
@@ -135,7 +127,10 @@ function themeOf(v, template, app) {
   const lang = v.default_language || 'en';
   // optional corner style chosen by the owner; overrides the layout's own --r
   const radius = { sharp: '4px', soft: '14px', round: '28px' }[th.radius] || '';
-  return { layout, dark, lowp: dark && lum(p) < 0.1, p, font, vars, radius, lang, dir: RTL.has(lang) ? 'rtl' : 'ltr', L: labelsFor(lang), favicon: app.favicon };
+  // owner's custom options (custom.js): validated again here, so nothing unchecked ever reaches the stylesheet
+  const custom = customOf(sanitizeTheme({}, th), { layout, bg, dark });
+  const fonts = [...new Set([font.google, ...custom.fonts])];
+  return { layout, dark, lowp: dark && lum(p) < 0.1, p, font, fonts, cls: custom.cls.join(' '), vars: custom.vars ? `${vars};${custom.vars}` : vars, radius, lang, dir: RTL.has(lang) ? 'rtl' : 'ltr', L: labelsFor(lang), favicon: app.favicon };
 }
 
 function headTags({ v, th, title, desc, link, appUrl, nonce, noindex }) {
@@ -153,10 +148,10 @@ ${v.profile_image ? `<meta property="og:image" content="${esc(appUrl + v.profile
 <link rel="icon" href="${url(v.profile_image || th.favicon)}">
 ${v.pwa_enable ? `<link rel="manifest" href="/${esc(v.url_alias)}/manifest.webmanifest"><meta name="apple-mobile-web-app-capable" content="yes">` : ''}
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=${th.font.google}&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?${th.fonts.map((f) => `family=${f}`).join('&')}&display=swap">
 <link rel="preload" href="/vendor/remixicon/remixicon.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="/vendor/remixicon/remixicon.css">
-<style>:root{${th.vars}}${BASE_CSS}</style>
+<style>:root{${th.vars}}${cssFor(th.layout)}</style>
 ${v.custom_css ? `<style>${String(v.custom_css).replace(/<\/?style[^>]*>/gi, '').replace(/<\//g, '<\\/')}</style>` : ''}
 ${v.google_analytics ? `<script async src="https://www.googletagmanager.com/gtag/js?id=${esc(v.google_analytics)}"></script><script nonce="${nonce}">window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments)}gtag('js',new Date());gtag('config',${js(v.google_analytics)});</script>` : ''}`;
 }
@@ -172,7 +167,7 @@ function footer(v, app, appUrl, L, pages) {
 /**
  * Render a public vCard page. Everything user-supplied is escaped; URLs are scheme-checked; colours are hex-checked.
  */
-function render({ v, template, services = [], gallery = [], testimonials = [], products = [], blogs = [], pages = [], app, appUrl, nonce }) {
+function render({ v, template, services = [], gallery = [], testimonials = [], products = [], blogs = [], pages = [], app, appUrl, nonce, preview = null }) {
   const th = themeOf(v, template, app);
   const { layout, L } = th;
   const sec = { about: true, menu: true, contact: true, social: true, services: true, gallery: true, testimonials: true, hours: true, qr: true, enquiry: true, links: true, products: true, appointments: true, blog: true, embeds: true, payments: true, map: true, ...(v.sections || {}) };
@@ -188,7 +183,8 @@ function render({ v, template, services = [], gallery = [], testimonials = [], p
 
   // section heading: our own i18n label, or the owner's custom heading (escaped)
   const titles = v.section_titles || {};
-  const H = (key, icon, label) => `<h3><i class="${icon}" aria-hidden="true"></i><span>${titles[key] ? esc(String(titles[key]).slice(0, 60)) : label}</span></h3>`;
+  const HEAD = {}; // heading of each section (icon + text), for designs that show it outside the section
+  const H = (key, icon, label) => (HEAD[key] = { icon, text: titles[key] ? esc(String(titles[key]).slice(0, 60)) : label }) && `<h3><i class="${icon}" aria-hidden="true"></i><span>${titles[key] ? esc(String(titles[key]).slice(0, 60)) : label}</span></h3>`;
   const mapHref = v.location ? (v.location_url || `https://maps.google.com/?q=${encodeURIComponent(v.location)}`) : '';
 
   let cover = `<div class="cover ${v.cover_image ? 'img' : 'g'}"${v.cover_image ? ` style="background-image:url('${url(v.cover_image)}')"` : ''}></div>`;
@@ -300,14 +296,18 @@ function render({ v, template, services = [], gallery = [], testimonials = [], p
     ? `<nav class="sticky stk-fab stk-${layout}" aria-label="Quick actions"><a class="main" href="/${alias}/contact.vcf" data-save aria-label="${L.save}"><i class="ri-user-add-fill"></i></a>${sl.instagram ? sBtn(url(sl.instagram), 'Instagram', 'ri-instagram-line', 'ig') : ''}${sl.telegram ? sBtn(url(sl.telegram), 'Telegram', 'ri-telegram-fill', 'tg') : ''}${v.email ? sBtn(`mailto:${esc(v.email)}`, L.email, 'ri-mail-fill', '', false) : ''}${phone ? sBtn(`tel:${esc(phone)}`, L.call, 'ri-phone-fill', '', false) : ''}${wa ? sBtn(url(wa), 'WhatsApp', 'ri-whatsapp-fill', 'wa') : ''}</nav>`
     : `<nav class="sticky" aria-label="Quick actions">${phone ? `<a href="tel:${esc(phone)}" aria-label="${L.call}"><i class="ri-phone-fill"></i></a>` : ''}${wa ? `<a href="${url(wa)}" target="_blank" rel="noopener" aria-label="WhatsApp"><i class="ri-whatsapp-fill"></i></a>` : ''}<a class="main" href="/${alias}/contact.vcf" data-save aria-label="${L.save}"><i class="ri-user-add-fill"></i></a>${v.email ? `<a href="mailto:${esc(v.email)}" aria-label="${L.email}"><i class="ri-mail-fill"></i></a>` : ''}<button type="button" data-share aria-label="${L.share}"><i class="ri-share-forward-fill"></i></button></nav>`;
 
+  // signature designs build their own header and decide how the sections are laid out (signature.js)
+  const installBtn = v.pwa_enable ? `<button class="install" id="install" type="button"><i class="ri-download-cloud-2-line"></i>${L.install}</button>` : '';
+  const sig = signature.ARCH[layout] ? signature.build({ layout, v, L, alias, fullName, initials, phone, wa, mapHref, socials, SOCIAL, BRAND, blocks, order, HEAD, sec, hasHours, todayHours, t12, services, gallery, testimonials, link, appName: app.app_name, install: installBtn }) : null;
+
   const html = `<!doctype html>
 <html lang="${esc(th.lang)}" dir="${th.dir}">
 <head>
 ${headTags({ v, th, title, desc: v.meta_description || v.description || v.occupation, link, appUrl, nonce })}
 </head>
 <body>
-<main class="wrap l-${layout}${linkLayout ? ' lk' : ''} ${th.dark ? 'is-dark' : 'is-light'}${th.lowp ? ' lowp' : ''} ${v.profile_image ? 'has-av' : 'no-av'}"${th.radius ? ` style="--r:${th.radius}"` : ''}>
-  <header class="hero">
+<main class="wrap l-${layout}${linkLayout ? ' lk' : ''} ${th.dark ? 'is-dark' : 'is-light'}${th.lowp ? ' lowp' : ''} ${v.profile_image ? 'has-av' : 'no-av'}${v.cover_image || (v.cover_type && v.cover_type !== 'image') ? ' has-cov' : ''}${th.cls ? ` ${th.cls}` : ''}${preview?.still ? ' pv-still' : ''}"${th.radius ? ` style="--r:${th.radius}"` : ''}>
+  ${sig ? sig.main : `<header class="hero">
     ${cover}
     <div class="deco" aria-hidden="true"><span>${esc(initials)}</span></div>
     <div class="hero-main">
@@ -332,13 +332,13 @@ ${headTags({ v, th, title, desc: v.meta_description || v.description || v.occupa
   <a class="save" id="save" href="/${alias}/contact.vcf"><i class="ri-user-add-line"></i>${L.save}</a>
   ${v.pwa_enable ? `<button class="install" id="install" type="button"><i class="ri-download-cloud-2-line"></i>${L.install}</button>` : ''}
 
-  ${ordered}
+  ${ordered}`}
 
   ${footer(v, app, appUrl, L, pages)}
-  ${v.sticky_bar !== false ? '<div style="height:70px"></div>' : ''}
+  ${v.sticky_bar !== false && (!sig || sig.dock) ? '<div style="height:70px"></div>' : ''}
 </main>
 
-${v.sticky_bar !== false ? stickyBar : ''}
+${sig ? sig.dock : v.sticky_bar !== false ? stickyBar : ''}
 
 ${menuViewer}
 <div class="lb" id="lb"><button class="x" type="button" aria-label="Close">&times;</button><div id="lbc"></div></div>
@@ -347,8 +347,10 @@ ${v.newsletter_popup ? `<div class="modal" id="nlm"><div class="sheet"><h4>${L.n
 <div class="toast" id="toast"></div>
 <script nonce="${nonce}">
 (function(){
+  ${preview ? "try{var pk='pv_scroll';var py=+sessionStorage.getItem(pk)||0;if(py)window.scrollTo(0,py);window.addEventListener('scroll',function(){sessionStorage.setItem(pk,window.scrollY)},{passive:true})}catch(e){}" : ''}
   var A=${js(v.url_alias)},API='/api/public/vcards/'+encodeURIComponent(A);
   var $=function(s){return document.querySelector(s)},$$=function(s){return Array.prototype.slice.call(document.querySelectorAll(s))};
+  ${sig ? sig.script : ''}
   var t=$('#toast');function toast(m){t.textContent=m;t.classList.add('show');setTimeout(function(){t.classList.remove('show')},2400)}
   function post(u,body,isForm){return fetch(u,{method:'POST',headers:isForm?{'X-Requested-With':'XMLHttpRequest'}:{'Content-Type':'application/json','X-Requested-With':'XMLHttpRequest'},body:isForm?body:JSON.stringify(body)}).then(function(r){return r.json().then(function(j){return{ok:r.ok,j:j}})})}
   function share(){var d={title:${js(fullName)},url:${js(link)}};if(navigator.share){navigator.share(d).catch(function(){})}else if(navigator.clipboard){navigator.clipboard.writeText(d.url).then(function(){toast('Link copied')})}}
@@ -408,7 +410,7 @@ function renderSubPage({ v, template, app, appUrl, nonce, title, bodyHtml, image
   return `<!doctype html>
 <html lang="${esc(th.lang)}" dir="${th.dir}"><head>
 ${headTags({ v, th, title: `${title} - ${[v.first_name, v.last_name].filter(Boolean).join(' ') || v.name}`, desc: v.meta_description || v.description, link, appUrl, nonce })}
-</head><body><main class="wrap l-${th.layout} ${th.dark ? 'is-dark' : 'is-light'}">
+</head><body><main class="wrap l-${th.layout} ${th.dark ? 'is-dark' : 'is-light'}${th.cls ? ` ${th.cls}` : ''}">
 <div class="page-body"><a class="backlink" href="/${esc(v.url_alias)}"><i class="ri-arrow-left-line"></i>${th.L.back}</a>
 ${image ? `<img src="${url(image)}" alt="" style="width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:18px;margin-top:16px">` : ''}
 <h1>${esc(title)}</h1>${date ? `<p style="color:var(--muted);font-size:13px;margin:-8px 0 16px">${esc(String(date).slice(0, 10))}</p>` : ''}
@@ -449,4 +451,4 @@ function manifest(v, app) {
   };
 }
 
-module.exports = { render, renderSubPage, renderLocked, renderUnavailable, manifest, vcardFile, vcardCsp, SOCIAL, DAYS };
+module.exports = { themeOf, cssFor, BASE_CSS, render, renderSubPage, renderLocked, renderUnavailable, manifest, vcardFile, vcardCsp, SOCIAL, DAYS };

@@ -25,6 +25,11 @@ const org = require('../../services/organisation');
 // organisation members whose organisation locked card management
 const cardsUnlocked = (req, _res, next) => (org.isLocked(req.user, 'manage_cards') ? next(new HttpError(403, 'Your organisation manages your cards. Please contact your organisation administrator.')) : next());
 const { trackStorage, removeOwned } = require('./helpers');
+const { render: renderCard, vcardCsp } = require('../../views/templates/render');
+const { TEMPLATES: CATALOG, CATEGORIES, metaOf } = require('../../views/templates/catalog');
+const custom = require('../../views/templates/custom');
+const { clientUrl } = require('../../config');
+const CATALOG_BY_SLUG = Object.fromEntries(CATALOG.map((t) => [t.slug, t]));
 
 const ownVcard = async (req, id = req.params.id) => {
   const v = await M.Vcard.findOne({ where: { id, user_id: req.user.id } });
@@ -60,7 +65,14 @@ r.get('/vcards/templates', wrap(async (req, res) => {
   const sub = await subs.current(req.user.id);
   const allowed = sub?.plan?.templates?.map((t) => t.id) || [];
   const all = await M.Template.findAll({ where: { status: true }, order: [['id', 'ASC']] });
-  res.json({ data: all.map((t) => ({ ...t.toJSON(), allowed: allowed.includes(t.id) })), features: sub?.plan?.features || {} });
+  // gallery metadata (category, description, collection) lives in the catalogue, next to the layout itself
+  const used = await M.Vcard.findAll({ attributes: ['template_id', [fn('COUNT', col('id')), 'n']], group: ['template_id'], raw: true });
+  const uses = Object.fromEntries(used.map((u) => [u.template_id, Number(u.n)]));
+  res.json({
+    data: all.map((t) => ({ ...t.toJSON(), ...metaOf(CATALOG_BY_SLUG[t.slug] || t), avatar_fixed: custom.AVATAR_FIXED.has(CATALOG_BY_SLUG[t.slug]?.layout), uses: uses[t.id] || 0, allowed: allowed.includes(t.id) })),
+    categories: CATEGORIES, features: sub?.plan?.features || {},
+    schema: { keys: custom.KEYS, colors: custom.COLORS, enums: custom.ENUMS, numbers: custom.NUMBERS, bools: custom.BOOLS, fonts: Object.keys(custom.GOOGLE_FONTS) },
+  });
 }));
 
 r.get('/vcards/check-alias', wrap(async (req, res) => {
@@ -97,7 +109,46 @@ r.get('/vcards/:id', wrap(async (req, res) => {
   res.json({ data: { ...hideSecret(v), services, gallery, testimonials }, features: sub?.plan?.features || {}, app_url: appUrl });
 }));
 
-const vcardUpload = makeUpload('vcards', { maxMb: 5 }).fields([{ name: 'profile_image', maxCount: 1 }, { name: 'cover_image', maxCount: 1 }]);
+const sectionsOf = (x) => Object.fromEntries(Object.entries(x || {}).filter(([k]) => SECTION_KEYS.includes(k)).map(([k, val]) => [k, toBool(val)]));
+const orderOf = (x) => [...new Set((Array.isArray(x) ? x : []).filter((k) => SECTION_KEYS.includes(k)))];
+const titlesOf = (x) => Object.fromEntries(Object.entries(x && typeof x === 'object' ? x : {}).filter(([k, val]) => SECTION_KEYS.includes(k) && typeof val === 'string' && val.trim()).map(([k, val]) => [k, val.trim().slice(0, 60)]));
+
+/**
+ * Live preview for the design editor: the owner's real card rendered with an unsaved design (template, theme, sections).
+ * Read-only: nothing is stored, no view is counted. The draft travels base64url-encoded in ?d= and is validated like a save.
+ */
+r.get('/vcards/:id/preview', wrap(async (req, res) => {
+  const v = await ownVcard(req);
+  let d = {};
+  try {
+    const raw = Buffer.from(String(req.query.d || ''), 'base64url').toString('utf8');
+    if (raw && raw.length <= 12000) d = JSON.parse(raw);
+  } catch { d = {}; }
+  if (!d || typeof d !== 'object' || Array.isArray(d)) d = {};
+  let template = await M.Template.findByPk(v.template_id);
+  if (d.template_id && Number(d.template_id) !== v.template_id) {
+    const sub = await subs.current(req.user.id);
+    const allowed = sub?.plan?.templates?.map((t) => t.id) || [];
+    if (allowed.includes(Number(d.template_id))) template = (await M.Template.findByPk(Number(d.template_id))) || template;
+  }
+  const card = { ...v.toJSON(), theme: d.theme && typeof d.theme === 'object' ? custom.sanitizeTheme(d.theme, v.theme) : custom.sanitizeTheme({}, v.theme) };
+  if (d.sections) card.sections = sectionsOf(d.sections);
+  if (Array.isArray(d.section_order)) card.section_order = orderOf(d.section_order);
+  if (d.section_titles) card.section_titles = titlesOf(d.section_titles);
+  const [services, gallery, testimonials, products, blogs, pages, app] = await Promise.all([
+    M.VcardService.findAll({ where: { vcard_id: v.id }, order: [['sort', 'ASC'], ['id', 'ASC']] }),
+    M.VcardGallery.findAll({ where: { vcard_id: v.id }, limit: 60 }),
+    M.VcardTestimonial.findAll({ where: { vcard_id: v.id }, limit: 20 }),
+    M.VcardProduct.findAll({ where: { vcard_id: v.id }, order: [['sort', 'ASC'], ['id', 'ASC']], limit: 60 }),
+    M.VcardBlog.findAll({ where: { vcard_id: v.id, status: true }, attributes: ['title', 'slug', 'image', 'created_at'], order: [['id', 'DESC']], limit: 6 }),
+    M.VcardPage.findAll({ where: { vcard_id: v.id, status: true }, attributes: ['title', 'slug'], order: [['id', 'ASC']] }),
+    settings.all(),
+  ]);
+  res.set({ 'Content-Security-Policy': vcardCsp(res.locals.nonce, clientUrl), 'X-Robots-Tag': 'noindex', 'Cache-Control': 'no-store' });
+  res.type('html').send(renderCard({ v: card, template, services, gallery, testimonials, products, blogs, pages, app, appUrl, nonce: res.locals.nonce, preview: { still: d.still === true } }));
+}));
+
+const vcardUpload = makeUpload('vcards', { maxMb: 5 }).fields([{ name: 'profile_image', maxCount: 1 }, { name: 'cover_image', maxCount: 1 }, { name: 'bg_image', maxCount: 1 }]);
 const videoUpload = makeUpload('vcards', { types: { 'video/mp4': '.mp4', 'video/webm': '.webm' }, maxMb: 25 }).single('video');
 const VCARD_FIELDS = ['name', 'occupation', 'description', 'first_name', 'last_name', 'email', 'region_code', 'phone', 'alternative_email', 'alternative_phone',
   'location', 'location_url', 'company', 'job_title', 'dob', 'menu_title', 'menu_desc', 'site_title', 'meta_keyword', 'meta_description', 'google_analytics', 'default_language', 'custom_css', 'custom_code', 'custom_code_enabled'];
@@ -113,6 +164,7 @@ r.put('/vcards/:id', vcardUpload, trackStorage, wrap(async (req, res) => {
   const v = await ownVcard(req);
   const b = { ...req.body };
   org.stripCardLocks(req.user, b, req.files); // fields locked by the member's organisation stay as they are
+  if (org.isLocked(req.user, 'theme') && req.files) delete req.files.bg_image;
   for (const k of JSON_FIELDS) if (typeof b[k] === 'string') { try { b[k] = JSON.parse(b[k]); } catch { delete b[k]; } }
   validate({ ...v.toJSON(), ...b }, { name: 'required|max:120', url_alias: 'required|alias', email: 'email', location_url: 'url' });
   const sub = await subs.current(req.user.id);
@@ -136,19 +188,19 @@ r.put('/vcards/:id', vcardUpload, trackStorage, wrap(async (req, res) => {
     if (!allowed.includes(Number(b.template_id))) fail(422, 'Validation failed', { template_id: 'This template is not included in your plan' });
     data.template_id = Number(b.template_id);
   }
-  if (b.theme) {
-    const t = pick(b.theme, ['primary', 'secondary', 'background', 'text', 'font', 'radius']);
-    if (t.radius !== undefined && !['', 'sharp', 'soft', 'round'].includes(t.radius)) delete t.radius;
-    for (const k of ['primary', 'secondary', 'background', 'text']) if (t[k] && !/^#[0-9a-f]{6}$/i.test(t[k])) delete t[k];
-    if (t.font && !/^[\w\s',-]{1,80}$/.test(t.font)) delete t.font;
-    data.theme = { ...(v.theme || {}), ...t };
+  if ((b.theme && typeof b.theme === 'object') || req.files?.bg_image?.[0]) {
+    // every option is validated against the schema in views/templates/custom.js; '' removes an option
+    const theme = custom.sanitizeTheme(b.theme, v.theme);
+    if (req.files?.bg_image?.[0]) theme.bg_image = fileUrl('vcards', req.files.bg_image[0]);
+    if (v.theme?.bg_image && v.theme.bg_image !== theme.bg_image) removeOwned(req, v.theme.bg_image);
+    data.theme = theme;
   }
   if (b.social_links) data.social_links = Object.fromEntries(Object.entries(b.social_links).filter(([, u]) => u).map(([k, u]) => [k, safeUrl(String(u).slice(0, 500))]));
   if (b.custom_links && features.custom_links) data.custom_links = (Array.isArray(b.custom_links) ? b.custom_links : []).slice(0, 20).map((l) => ({ label: String(l.label || '').slice(0, 80), url: safeUrl(String(l.url || '').slice(0, 500)), desc: String(l.desc || '').slice(0, 90), badge: String(l.badge || '').slice(0, 20), featured: l.featured === true || l.featured === 'true', icon: /^ri-[a-z0-9-]{2,40}$/.test(l.icon || '') ? l.icon : '' })).filter((l) => l.label && l.url);
   if (b.business_hours) data.business_hours = b.business_hours;
-  if (b.sections) data.sections = Object.fromEntries(Object.entries(b.sections).filter(([k]) => SECTION_KEYS.includes(k)).map(([k, val]) => [k, toBool(val)]));
-  if (Array.isArray(b.section_order)) data.section_order = [...new Set(b.section_order.filter((k) => SECTION_KEYS.includes(k)))];
-  if (b.section_titles && typeof b.section_titles === 'object') data.section_titles = Object.fromEntries(Object.entries(b.section_titles).filter(([k, val]) => SECTION_KEYS.includes(k) && typeof val === 'string' && val.trim()).map(([k, val]) => [k, val.trim().slice(0, 60)]));
+  if (b.sections) data.sections = sectionsOf(b.sections);
+  if (Array.isArray(b.section_order)) data.section_order = orderOf(b.section_order);
+  if (b.section_titles && typeof b.section_titles === 'object') data.section_titles = titlesOf(b.section_titles);
   for (const k of ['status', 'enable_enquiry_form', 'show_qr_code']) if (b[k] !== undefined) data[k] = toBool(b[k]);
   if (b.hide_branding !== undefined) data.hide_branding = features.hide_branding ? toBool(b.hide_branding) : false;
   if (b.password !== undefined && features.password) data.password = b.password ? await bcrypt.hash(String(b.password), 10) : null;

@@ -48,6 +48,33 @@ const BAR_LAYOUTS = new Set(['local', 'shopfront', 'clinic', 'estate', 'bistro',
 
 // link-card layouts (linkcards.js): socials and custom links become rich cards, hours chip in the header
 const LINK_LAYOUTS = new Set(['lkember', 'lkmidnight', 'lkglass', 'lkmint', 'lkcream', 'lkneon', 'lkroyal', 'lksunset', 'lkmono', 'lkcandy']);
+// signature collection (signature.js): designs with their own page structure, category, description and default design
+const SIGNATURE_LAYOUTS = Object.keys(require('./signature').ARCH);
+const CATEGORIES = ['Minimal', 'Luxury', 'Corporate', 'Professional', 'Creative', 'Influencer', 'Technology', 'Healthcare', 'Real Estate', 'Hospitality', 'Personal Branding'];
+const META = {};
+/** signature template: catalogue entry plus its gallery metadata. `extra` holds default custom options (see custom.js). */
+const S = (slug, name, profession, layout, category, description, [primary, secondary, background, text], font, extra = {}) => {
+  META[slug] = { category, description, version: 1, collection: 'signature', is_new: true };
+  return { slug, name, profession, layout, defaults: { primary, secondary, background, text, font, ...extra } };
+};
+/** category of an older template, derived from its layout and profession */
+function categoryOf(t) {
+  if (META[t.slug]) return META[t.slug].category;
+  const p = t.profession || '';
+  if (/^(Social|Link Cards)/.test(p) || /Influencer|Creator|YouTuber|Streamer|Podcaster/.test(p)) return 'Influencer';
+  if (/Doctor|Dentist|Nurse|Pharmac|Surgeon|Optomet|Physio|Psycholog|Nutrition|Veterinar|Clinic|Health|Wellness/.test(p)) return 'Healthcare';
+  if (/Real Estate|Property/.test(p)) return 'Real Estate';
+  if (/Hotel|Restaurant|Chef|Cafe|Baker|Travel|Tour|Events/.test(p)) return 'Hospitality';
+  if (['luxe', 'metal', 'marble', 'monogram', 'boardroom'].includes(t.layout)) return 'Luxury';
+  if (['minimal', 'mono', 'swiss', 'paper'].includes(t.layout)) return 'Minimal';
+  if (['neon', 'glass', 'holo', 'bento', 'saas'].includes(t.layout) || /Developer|Engineer|Data|Cyber|Crypto|Tech|Gamer/.test(p)) return 'Technology';
+  if (/Designer|Artist|Photograph|Musician|DJ|Actor|Model|Author|Tattoo|Makeup|Agency|Fashion|Architect/.test(p)) return 'Creative';
+  if (/Personal Brand|Coach|Speaker|Performer|Politician|General/.test(p)) return 'Personal Branding';
+  if (/^Business|CEO|Executive|Banker|Accountant|Logistics|Sales|Insurance|Recruiter|HR|Marketing|Financial/.test(p)) return 'Corporate';
+  return 'Professional';
+}
+/** gallery metadata for any template slug */
+const metaOf = (t) => ({ category: categoryOf(t), description: META[t.slug]?.description || '', version: META[t.slug]?.version || 1, collection: META[t.slug]?.collection || 'classic', is_new: !!META[t.slug]?.is_new });
 
 const T = (slug, name, profession, layout, primary, secondary, background, text, font) => ({ slug, name, profession, layout, defaults: { primary, secondary, background, text, font } });
 
@@ -56,6 +83,9 @@ module.exports = {
   SOCIAL_LAYOUTS,
   BAR_LAYOUTS,
   LINK_LAYOUTS,
+  SIGNATURE_LAYOUTS,
+  CATEGORIES,
+  metaOf,
   LAYOUTS: [
     'classic', 'modern', 'minimal', 'dark', 'card', 'split', 'bold', 'elegant', 'soft', 'corporate',
     'photo', 'glass', 'sidebar', 'editorial', 'brutal', 'mesh', 'mono', 'luxe', 'playful', 'splithero', 'stack', 'neon', 'paper', 'aurora',
@@ -66,6 +96,8 @@ module.exports = {
     // business layouts (business.js)
     ...LINK_LAYOUTS,
     'agency', 'letterhead', 'saas', 'bizcard', 'local', 'shopfront', 'clinic', 'estate', 'bistro', 'boardroom',
+    // signature collection (signature.js)
+    ...SIGNATURE_LAYOUTS,
   ],
   TEMPLATES: [
     T('vcard1', 'Code Craft', 'Developer', 'dark', '#22d3ee', '#a78bfa', '#0b1020', '#e2e8f0', F.space),
@@ -220,5 +252,49 @@ module.exports = {
     T('vcard138', 'Dusk', 'Link Cards: Events / Music', 'lksunset', '#fb7185', '#f59e0b', '#2a0f2e', '#fff4f0', F.outfit),
     T('vcard139', 'Line', 'Link Cards: Consultant / Minimal', 'lkmono', '#111111', '#6b7280', '#ffffff', '#111111', F.inter),
     T('vcard140', 'Candy', 'Link Cards: Kids / Fun Shop', 'lkcandy', '#ec4899', '#8b5cf6', '#fff5fa', '#3b0a2a', F.baloo),
+
+    /* ---------- signature collection: each design has its own page structure (signature.js) ---------- */
+    S('vcard141', 'Obsidian Luxury', 'Signature: Luxury', 'sxcard', 'Luxury', 'A black metal card with gold foil. It tilts as you move and flips over when tapped.', ['#d4af37', '#f4e3a8', '#08080a', '#f4efe2'], F.cormorant),
+    S('vcard142', 'Designer Portfolio', 'Signature: Creative', 'sxsheet', 'Creative', 'Your photo fills the screen. Content slides up in a sheet with tabs and a floating save bar.', ['#ff4d2e', '#111111', '#ffffff', '#111111'], F.sora),
+    S('vcard143', 'Material Motion', 'Signature: Technology', 'sxbento', 'Technology', 'A grid of tiles in the Material Design 3 style. Photo, name, actions and socials are all tiles that change shape.', ['#6750a4', '#7d5260', '#fffbfe', '#1c1b1f'], "'Roboto', system-ui, sans-serif"),
+    S('vcard144', 'Mono Elegance', 'Signature: Minimal', 'sxeditorial', 'Minimal', 'A black and white magazine cover: a huge name, a moving ticker and swipeable galleries.', ['#e11d48', '#525252', '#ffffff', '#0a0a0a'], F.inter, { name_font: F.bodoni, heading_font: F.bodoni }),
+    S('vcard145', 'Royal Executive', 'Signature: Corporate', 'sxpass', 'Corporate', 'A navy and gold wallet pass with a tear-off stub. Sections fold open like a stack of passes.', ['#12284f', '#c9a24b', '#ffffff', '#101b33'], F.manrope, { name_font: F.playfair }),
+    S('vcard146', 'Neon Future', 'Signature: Technology', 'sxorbit', 'Technology', 'A glowing control panel. Your social icons orbit your photo.', ['#22d3ee', '#f0abfc', '#05060d', '#eaf6ff'], F.chakra),
+
+    /* minimal & modern */
+    S('vcard147', 'Aura Minimal', 'Signature: Minimal', 'sxindex', 'Minimal', 'Pure typography: one statement, a table of contact rows and sections that open on hairlines.', ['#2563eb', '#6b7280', '#ffffff', '#111827'], F.inter),
+    S('vcard148', 'Nordic White', 'Signature: Minimal', 'sxarch', 'Minimal', 'An arched portrait on a shelf, soft pill buttons and a chip bar that jumps between sections.', ['#5c6b5e', '#d8cfc0', '#f7f4ee', '#2c2f2b'], F.dmsans, { name_font: F.fraunces }),
+    S('vcard149', 'Soft Gradient', 'Signature: Minimal', 'sxwave', 'Minimal', 'A soft colour wash, a photo that slowly changes shape and an app-style bar with a raised save button.', ['#6366f1', '#ec4899', '#fbfbff', '#1e1b4b'], F.jakarta),
+    S('vcard150', 'Essential Pro', 'Signature: Professional', 'sxcontact', 'Professional', 'Looks like the contact screen on a phone: square action buttons and grouped lists.', ['#0a7aff', '#34c759', '#ffffff', '#111111'], F.inter),
+
+    /* luxury & premium */
+    S('vcard151', 'Platinum Elite', 'Signature: Luxury', 'sxdeck', 'Luxury', 'A brushed platinum card, with every section as a slide you swipe sideways.', ['#4b5563', '#9ca3af', '#f3f4f7', '#1b2030'], F.montserrat),
+    S('vcard152', 'Midnight Gold', 'Signature: Luxury', 'sxspot', 'Luxury', 'A dark stage: a beam of gold light on your portrait and engraved gold lettering.', ['#e0b663', '#f3dca6', '#0b0b10', '#f3efe6'], F.cormorant),
+    S('vcard153', 'Signature Black', 'Signature: Luxury', 'sxsign', 'Luxury', 'A wide black and white photo, and your name written like a signature that draws itself.', ['#c8a96a', '#e8d9b5', '#0b0b0c', '#f2efe9'], F.manrope, { name_font: F.playfair, heading_font: F.playfair }),
+
+    /* corporate & professional */
+    S('vcard154', 'Corporate Executive', 'Signature: Corporate', 'sxrail', 'Corporate', 'A full-height colour rail holds the company name and actions; the content sits beside it.', ['#0f3d68', '#e5a823', '#ffffff', '#0f1e2e'], F.plex),
+    S('vcard155', 'Business Elite', 'Signature: Corporate', 'sxdash', 'Corporate', 'A business dashboard with a figures strip and two large call buttons.', ['#1d4ed8', '#f59e0b', '#ffffff', '#0f172a'], F.jakarta),
+    S('vcard156', 'Consultant Pro', 'Signature: Professional', 'sxtimeline', 'Professional', 'Your sections hang on a numbered line that fills as visitors scroll.', ['#0f766e', '#14b8a6', '#fbfdfc', '#102a27'], F.manrope),
+    S('vcard157', 'Legal Professional', 'Signature: Professional', 'sxletter', 'Professional', 'A formal letter: letterhead, your bio as the letter, a signature and numbered contact notes.', ['#1c2b3a', '#9a7b4f', '#fdfcf9', '#1c2330'], F.baskerville),
+    S('vcard158', 'Medical Professional', 'Signature: Healthcare', 'sxclinic', 'Healthcare', 'Appointment first: an open-now status, a booking card and a call bar that stays on screen.', ['#0891b2', '#10b981', '#ffffff', '#0b2a33'], F.nunito),
+
+    /* creative & personal branding */
+    S('vcard159', 'Creative Studio', 'Signature: Creative', 'sxposter', 'Creative', 'A bold poster grid with giant initials, a turning ring of text and sticker buttons.', ['#ff5a1f', '#ffd23f', '#fffaf2', '#141414'], F.bricolage),
+    S('vcard160', 'Influencer Social', 'Signature: Influencer', 'sxstory', 'Influencer', 'A social profile with story bars, a highlight circle for each network and a tight photo grid.', ['#e1306c', '#f58529', '#ffffff', '#1a1a1a'], F.outfit),
+    S('vcard161', 'Personal Brand', 'Signature: Personal Branding', 'sxbrand', 'Personal Branding', 'Your first name in giant outline letters on a colour panel, a pull quote and big paired buttons.', ['#7c3aed', '#f472b6', '#ffffff', '#1c1530'], F.urbanist),
+    S('vcard162', 'Artist Signature', 'Signature: Creative', 'sxpolaroid', 'Creative', 'A fan of photo prints that spreads when touched, stamp buttons and taped paper notes.', ['#9f1239', '#e7c9a9', '#f6f1e7', '#221a14'], F.dmsans, { name_font: F.cormorant, heading_font: F.cormorant }),
+
+    /* tech & futuristic */
+    S('vcard163', 'Cyber Glass', 'Signature: Technology', 'sxholo', 'Technology', 'A holographic ID badge that hangs from a strap and gently swings.', ['#8b5cf6', '#22d3ee', '#0a0b1a', '#eef0ff'], F.space),
+    S('vcard164', 'Digital Matrix', 'Signature: Technology', 'sxterm', 'Technology', 'A terminal window that types out who you are, with numbered shortcuts.', ['#22c55e', '#06b6d4', '#060a08', '#d7fbe6'], F.jetbrains),
+    S('vcard165', 'Aurora Tech', 'Signature: Technology', 'sxaurora', 'Technology', 'Moving aurora light, a floating island bar and keycap rows.', ['#34d399', '#818cf8', '#07090f', '#f1f5f9'], F.sora),
+
+    /* specialised */
+    S('vcard166', 'Real Estate Pro', 'Signature: Real Estate', 'sxlisting', 'Real Estate', 'A property listing: swipeable photos on top, an agent card and a call bar that stays on screen.', ['#12324a', '#c9a24b', '#ffffff', '#0f1e2a'], F.manrope),
+    S('vcard167', 'Sales Champion', 'Signature: Corporate', 'sxchat', 'Corporate', 'A chat conversation: message bubbles, quick-reply buttons and a contact card to save.', ['#e11d48', '#f59e0b', '#ffffff', '#111827'], F.outfit),
+    S('vcard168', 'Startup Founder', 'Signature: Technology', 'sxpitch', 'Technology', 'A pitch deck: a progress bar, a statement name and sections as numbered slides.', ['#4f46e5', '#06b6d4', '#ffffff', '#0b1020'], F.space),
+    S('vcard169', 'Hospitality Elite', 'Signature: Hospitality', 'sxmenu', 'Hospitality', 'A fine-dining menu: photo header, medallion portrait and services listed with dotted leaders.', ['#3a2a1e', '#c8a15a', '#fbf7f0', '#2a2018'], F.dmsans, { name_font: F.cormorant, heading_font: F.cormorant }),
+    S('vcard170', 'Modern Glass Premium', 'Signature: Luxury', 'sxglass', 'Luxury', 'Layered glass panes with depth, widgets and a phone-style dock of app icons.', ['#7c3aed', '#06b6d4', '#0d0f1f', '#f5f6ff'], F.jakarta),
   ],
 };

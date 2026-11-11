@@ -41,9 +41,18 @@ const all = (keys, v = true) => Object.fromEntries(keys.map((k) => [k, v]));
     }
   }
   for (const [name, iso_code, is_default] of LANGUAGES) await M.Language.findOrCreate({ where: { iso_code }, defaults: { name, status: true, is_default: !!is_default } });
+  const newSignature = [];
   for (const t of TEMPLATES) {
-    const [row] = await M.Template.findOrCreate({ where: { slug: t.slug }, defaults: { name: t.name, profession: t.profession, defaults: t.defaults } });
+    const [row, created] = await M.Template.findOrCreate({ where: { slug: t.slug }, defaults: { name: t.name, profession: t.profession, defaults: t.defaults } });
     if (!row.defaults || !Object.keys(row.defaults).length) await row.update({ defaults: t.defaults });
+    if (created && /^Signature:/.test(t.profession || '')) newSignature.push(row);
+  }
+  // signature templates added after a plan was created: offer them on every plan that already includes the premium designs
+  // (vcard93 "Banner" marks those). Runs once per template; change it afterwards in admin > Plans.
+  if (newSignature.length) {
+    const marker = await M.Template.findOne({ where: { slug: 'vcard93' } });
+    const plans = marker ? await marker.getPlans() : [];
+    for (const plan of plans) await plan.addTemplates(newSignature);
   }
 
   const usd = await M.Currency.findOne({ where: { currency_code: 'USD' } });
