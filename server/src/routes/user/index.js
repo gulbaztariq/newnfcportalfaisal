@@ -167,7 +167,7 @@ r.put('/vcards/:id', vcardUpload, trackStorage, wrap(async (req, res) => {
   org.stripCardLocks(req.user, b, req.files); // fields locked by the member's organisation stay as they are
   if (org.isLocked(req.user, 'theme') && req.files) delete req.files.bg_image;
   for (const k of JSON_FIELDS) if (typeof b[k] === 'string') { try { b[k] = JSON.parse(b[k]); } catch { delete b[k]; } }
-  validate({ ...v.toJSON(), ...b }, { name: 'required|max:120', url_alias: 'required|alias', email: 'email', location_url: 'url' });
+  validate({ ...v.toJSON(), ...b }, { name: 'required|max:120', url_alias: 'required|alias', first_name: 'max:100', last_name: 'max:100', occupation: 'max:150', company: 'max:150', job_title: 'max:150', email: 'email|max:191', alternative_email: 'email|max:191', phone: 'phone', alternative_phone: 'phone', location: 'max:300', location_url: 'url|max:1000', dob: 'date' });
   const sub = await subs.current(req.user.id);
   const features = sub?.plan?.features || {};
   const data = pick(b, VCARD_FIELDS);
@@ -452,6 +452,7 @@ r.get('/plans', wrap(async (req, res) => {
 }));
 
 r.post('/coupon/check', wrap(async (req, res) => {
+  validate(req.body, { plan_id: 'required', code: 'required|max:40' }, { code: 'Coupon code' });
   const plan = await M.Plan.findOne({ where: { id: req.body.plan_id, status: true } });
   if (!plan) fail(404, 'Plan not found');
   try { res.json(await subs.applyCoupon(plan, String(req.body.code || '').toUpperCase())); } catch (e) { fail(422, e.message); }
@@ -500,7 +501,7 @@ r.get('/nfc-orders', wrap(async (req, res) => {
 }));
 const logoUpload = makeUpload('nfc', { maxMb: 3 }).single('logo');
 r.post('/nfc-orders', logoUpload, wrap(async (req, res) => {
-  validate(req.body, { nfc_card_id: 'required', vcard_id: 'required', name: 'required|max:120', email: 'required|email', phone: 'required|max:30', address: 'required|max:1000', quantity: 'required|numeric', payment_type: `required|in:manual,${payments.NAMES.join(',')}` });
+  validate(req.body, { nfc_card_id: 'required', vcard_id: 'required', name: 'required|max:120', email: 'required|email', phone: 'required|phone', address: 'required|max:1000', quantity: 'required|integer|minv:1|maxv:1000', payment_type: `required|in:manual,${payments.NAMES.join(',')}` });
   const card = await M.NfcCard.findOne({ where: { id: req.body.nfc_card_id, status: true } });
   if (!card) fail(404, 'Card type not found');
   const vcard = await ownVcard(req, req.body.vcard_id);
@@ -535,7 +536,7 @@ r.get('/affiliation', wrap(async (req, res) => {
   res.json({ referrals, withdrawals, earned, balance: Math.max(0, earned - withdrawn), link: `${appUrl}/register?ref=${req.user.affiliate_code}`, min_withdrawal: Number(await settings.get('min_withdrawal_amount')) });
 }));
 r.post('/withdrawals', wrap(async (req, res) => {
-  validate(req.body, { amount: 'required|numeric', email: 'required|email', bank_details: 'required|max:2000' });
+  validate(req.body, { amount: 'required|numeric|minv:0.01', email: 'required|email', bank_details: 'required|max:2000' });
   const referrals = await M.AffiliateUser.findAll({ where: { affiliated_by: req.user.id, status: 'approved' } });
   const withdrawals = await M.Withdrawal.findAll({ where: { user_id: req.user.id, status: { [Op.ne]: 'rejected' } } });
   const balance = referrals.reduce((s, a) => s + Number(a.amount), 0) - withdrawals.reduce((s, w) => s + Number(w.amount), 0);

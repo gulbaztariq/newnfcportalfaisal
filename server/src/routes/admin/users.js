@@ -21,7 +21,7 @@ const STAFF = ['admin', 'manager', 'supervisor'];
 const parseList = (v) => { if (Array.isArray(v)) return v; try { return JSON.parse(v); } catch { return String(v || '').split(',').filter(Boolean); } };
 
 /* organisation accounts: company details sent as org_* fields next to the owner's user fields */
-const ORG_RULES = { org_name: 'required|max:150', org_email: 'email|max:191', org_phone: 'max:40', org_address: 'max:500', org_city: 'max:120', org_country: 'max:120', seats: 'numeric' };
+const ORG_RULES = { org_name: 'required|max:150', org_email: 'email|max:191', org_phone: 'phone', org_address: 'max:500', org_city: 'max:120', org_country: 'max:120', seats: 'numeric' };
 function orgData(b) {
   const w = String(b.org_website || '').trim();
   const d = {

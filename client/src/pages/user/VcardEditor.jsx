@@ -4,6 +4,7 @@ import { motion, AnimatePresence, Reorder, useDragControls } from 'motion/react'
 import { ArrowLeft, ExternalLink, QrCode, Save, IdCard, Palette, Share2, Link2, Briefcase, Images, MessageSquareQuote, Clock, Settings2, Lock, Plus, Pencil, Trash2, ArrowUp, ArrowDown, RotateCcw, Smartphone, RefreshCw, Globe, MessageCircle, Music2, Send, Sparkles } from 'lucide-react';
 import { Facebook, Instagram, Twitter, Linkedin, Youtube } from '@/components/BrandIcons';
 import { Github, Dribbble } from '@/components/BrandIcons';
+import { check } from '@/lib/validate';
 import api, { toFormData } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { cn } from '@/lib/cn';
@@ -89,6 +90,9 @@ export default function VcardEditor() {
   const ll = (text, k) => (orgLocks.has(k) ? <span className="inline-flex items-center gap-1.5">{text}<Lock className="size-3 text-warning" aria-label="Locked by your organisation" /></span> : text);
 
   const save = async () => {
+    const v0 = form.values;
+    const bad = check(v0, { name: 'required|max:120', url_alias: 'required|min:2|max:80', email: 'email|max:191', alternative_email: 'email|max:191', phone: 'phone', alternative_phone: 'phone', location_url: 'url' }, { name: 'Card name', url_alias: 'Card link', location_url: 'Google Maps link' });
+    if (Object.keys(bad).length) { form.setErrors(bad); toast.error(Object.values(bad)[0]); return; }
     setSaving(true);
     const fields = ['name', 'url_alias', 'occupation', 'description', 'first_name', 'last_name', 'email', 'region_code', 'phone', 'alternative_email', 'alternative_phone', 'location', 'location_url', 'company', 'job_title', 'dob', 'menu_title', 'menu_desc', 'default_language', 'template_id', 'theme', 'social_links', 'custom_links', 'business_hours', 'sections', 'section_order', 'section_titles', 'status', 'enable_enquiry_form', 'show_qr_code', 'hide_branding', 'custom_css', 'site_title', 'meta_keyword', 'meta_description', 'google_analytics', 'cover_type', 'youtube_link', 'instagram_embed', 'linkedin_embed', 'iframes', 'location_embed', 'payment_links', 'terms_conditions', 'privacy_policy', 'sticky_bar', 'newsletter_popup', 'ask_before_contact', 'enquiry_attachment', 'pwa_enable', 'business_directory', 'week_format', 'qr_settings', 'appointment_settings', 'custom_domain', 'custom_code', 'custom_code_enabled'];
     const payload = {};

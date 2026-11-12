@@ -116,7 +116,7 @@ async function fromTransaction(txId, userId) {
 
 async function addPayment(inv, { amount, date, method, reference, note }) {
   const a = r2(amount);
-  if (!(a > 0)) throw new HttpError(422, 'Validation failed', { amount: 'Enter an amount' });
+  if (!(a > 0)) throw new HttpError(422, 'Validation failed', { amount: 'Amount must be more than zero' });
   await M().InvoicePayment.create({ invoice_id: inv.id, amount: a, date: date || dayjs().format('YYYY-MM-DD'), method, reference, note });
   const paid = r2(Number(inv.paid_amount || 0) + a);
   await inv.update({ paid_amount: paid });

@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { toast } from 'sonner';
 import { Sparkles, Plus, Pencil, Share2, QrCode, Copy, Trash2, Eye, ExternalLink, Lock, Check, ArrowLeft, ArrowRight, Search, MessageSquareText, IdCard, Loader2, CheckCircle2, XCircle, MoreHorizontal } from 'lucide-react';
+import { check } from '@/lib/validate';
 import api, { toFormData } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { cn } from '@/lib/cn';
@@ -102,6 +103,8 @@ export function VcardCreate() {
     return () => clearTimeout(t);
   }, [form.values.url_alias]);
   const save = async () => {
+    const bad = check(form.values, { name: 'required|max:120', url_alias: 'required|min:2|max:80', template_id: 'required' }, { name: 'Card name', url_alias: 'Card link' });
+    if (Object.keys(bad).length) { form.setErrors(bad); toast.error(Object.values(bad)[0]); return; }
     setBusy(true);
     try {
       const d = await run(api.post('/user/vcards', form.values));

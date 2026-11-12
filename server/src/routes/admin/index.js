@@ -152,7 +152,7 @@ const planBody = (b) => {
   d.features = Object.fromEntries(M.PLAN_FEATURES.map((f) => [f, toBool(b.features?.[f])]));
   return d;
 };
-const planRules = { name: 'required|max:100', currency_id: 'required', price: 'required|numeric', frequency: 'required|in:monthly,yearly,unlimited', no_of_vcards: 'required|numeric', trial_days: 'numeric', storage_limit: 'numeric' };
+const planRules = { name: 'required|max:100', currency_id: 'required', price: 'required|numeric|minv:0', frequency: 'required|in:monthly,yearly,unlimited', no_of_vcards: 'required|integer|minv:0', trial_days: 'integer|minv:0', storage_limit: 'numeric|minv:0' };
 r.get('/plans', wrap(async (_req, res) => {
   const rows = await M.Plan.findAll({ include: [M.Currency, { model: M.Template, attributes: ['id', 'name'] }], order: [['id', 'ASC']] });
   const active = await M.Subscription.findAll({ attributes: ['plan_id', [fn('COUNT', col('id')), 'total']], where: { status: 'active' }, group: ['plan_id'], raw: true });
@@ -220,7 +220,7 @@ r.get('/subscriptions', wrap(async (req, res) => {
 r.put('/subscriptions/:id', wrap(async (req, res) => {
   const s = await M.Subscription.findByPk(req.params.id);
   if (!s) fail(404, 'Not found');
-  validate(req.body, { ends_at: 'required' });
+  validate(req.body, { ends_at: 'required|date' });
   const ends = dayjs(req.body.ends_at);
   if (!ends.isValid()) fail(422, 'Validation failed', { ends_at: 'Invalid date' });
   await s.update({ ends_at: ends.endOf('day').toDate(), notes: req.body.notes ?? s.notes });
@@ -313,7 +313,7 @@ r.use('/languages', crud(M.Language, { fields: ['name', 'iso_code', 'status'], b
   canDelete: async (row) => (row.is_default ? 'The default language cannot be deleted' : null) }));
 r.use('/coupon-codes', crud(M.CouponCode, {
   fields: ['coupon_name', 'type', 'discount', 'expire_at', 'coupon_limit', 'status'], booleans: ['status'], search: ['coupon_name'],
-  rules: { coupon_name: 'required|max:60', type: 'required|in:percentage,fixed', discount: 'required|numeric', coupon_limit: 'numeric' },
+  rules: { coupon_name: 'required|max:60', type: 'required|in:percentage,fixed', discount: 'required|numeric|minv:0', coupon_limit: 'integer|minv:0' },
   beforeSave: (data, _req, row) => {
     data.coupon_name = String(data.coupon_name || row?.coupon_name).toUpperCase().replace(/\s+/g, '');
     if (data.type === 'percentage' && Number(data.discount) > 100) fail(422, 'Validation failed', { discount: 'Percentage cannot exceed 100' });

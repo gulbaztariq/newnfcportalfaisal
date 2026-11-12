@@ -107,6 +107,7 @@ function AddUser({ meta, onClose, onSaved }) {
   const [done, setDone] = useState(null);
   const roles = Object.entries(ROLE_LABEL).filter(([k]) => meta.is_owner || k !== 'manager');
   const save = async () => {
+    if (!form.validate({ first_name: 'required|max:100', last_name: 'max:100', email: 'required|email|max:191', contact: 'phone', job_title: 'max:150', password: 'min:8|max:100' })) return;
     setBusy(true);
     try {
       const b = { ...form.values };
