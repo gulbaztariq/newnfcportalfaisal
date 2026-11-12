@@ -1,5 +1,9 @@
 const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
+// private settings kept outside the app folder (survive redeploys on hosts that replace it): $ENV_FILE or ~/.nfc-app.env. Values already set win.
+for (const f of [process.env.ENV_FILE, path.join(require('os').homedir(), '.nfc-app.env')]) {
+  if (f && require('fs').existsSync(f)) require('dotenv').config({ path: f });
+}
 
 const env = process.env;
 
