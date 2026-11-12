@@ -5,7 +5,7 @@ const { boot, client, makeUser, outbox, settings, M, setMail } = require('./help
 let ctx;
 before(async () => { ctx = await boot(); });
 after(async () => { ctx.server.close(); await M.sequelize.close(); });
-beforeEach(async () => { outbox.length = 0; setMail({ configured: true, fails: false }); await settings.set({ login_otp_enable: '0', enforce_2fa_staff: '1' }); });
+beforeEach(async () => { outbox.length = 0; setMail({ configured: true, fails: false }); await settings.set({ login_otp_enable: '0', enforce_2fa_staff: '1', max_login_attempts: '5' }); });
 
 const codeFromMail = () => outbox.filter((m) => m.key === 'login_code').at(-1)?.values.code;
 
@@ -93,7 +93,7 @@ test('OTP: wrong code is rejected; code burns after 5 wrong tries', async () => 
   const l = await c.post('/api/auth/login', { email: u.email, password: 'Passw0rd!x' });
   const good = codeFromMail(); const wrong = good === '000000' ? '111111' : '000000';
   for (let i = 0; i < 5; i++) assert.equal((await c.post('/api/auth/two-factor', { challenge: l.body.challenge, code: wrong })).status, 422);
-  assert.equal((await c.post('/api/auth/two-factor', { challenge: l.body.challenge, code: good })).status, 422);
+  assert.ok([422, 429].includes((await c.post('/api/auth/two-factor', { challenge: l.body.challenge, code: good })).status), 'burned (and the account is now locked for a while)');
 });
 test('OTP: expired code is rejected', async () => {
   await settings.set({ login_otp_enable: '1' });
@@ -179,7 +179,7 @@ test('e-mail login: five wrong codes burn it; asking again right away does not s
   const again = await c.post('/api/auth/login-code', { email: u.email }); assert.equal(again.status, 200);
   assert.equal(outbox.filter((m) => m.key === 'login_code').length, 1, 'cooldown: one mail');
   for (let i = 0; i < 5; i += 1) await c.post('/api/auth/two-factor', { challenge: a.body.challenge, code: '999999' === code ? '888888' : '999999' });
-  assert.equal((await c.post('/api/auth/two-factor', { challenge: a.body.challenge, code })).status, 422, 'burned after 5 wrong tries');
+  assert.ok([422, 429].includes((await c.post('/api/auth/two-factor', { challenge: a.body.challenge, code })).status), 'burned after 5 wrong tries (and locked)');
 });
 test('e-mail login: needs mail; an authenticator user still gives the app code; a new invitee is verified by the code', async () => {
   const u = await makeUser({ email_verified_at: null }); const c = client(ctx.base);
