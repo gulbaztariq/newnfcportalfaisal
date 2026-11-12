@@ -167,31 +167,36 @@ export function Login() {
   const [busy, setBusy] = useState(false);
   const [challenge, setChallenge] = useState(null);
   const [unverified, setUnverified] = useState(false);
+  const [pwFallback, setPwFallback] = useState(false); // only when the server cannot e-mail codes (mail not set up yet)
+  const emailMode = settings.email_login !== false && !pwFallback; // the normal way in: e-mail, then the code we send
   useEffect(() => { if (!loading && user) navigate(afterLogin(user), { replace: true }); }, [user, loading]); // eslint-disable-line
   const submit = async (e) => {
     e.preventDefault(); setBusy(true); setUnverified(false);
     try {
-      const { data } = await api.post('/auth/login', f);
+      const { data } = await api.post(emailMode ? '/auth/login-code' : '/auth/login', emailMode ? { email: f.email } : f);
       if (data.two_factor) { setChallenge({ id: data.challenge, method: data.method, hint: data.email_hint }); setBusy(false); return; }
       setUser(data.user); navigate(afterLogin(data.user));
-    } catch (ex) { setErr({ message: ex.message, errors: ex.errors }); setUnverified(/verif/i.test(ex.message)); setBusy(false); }
+    } catch (ex) {
+      if (emailMode && ex.response?.status === 503) { setPwFallback(true); setErr({ message: 'E-mail sign-in is not available right now. Please sign in with your password.', errors: {} }); setBusy(false); return; }
+      setErr({ message: ex.message, errors: ex.errors }); setUnverified(/verif/i.test(ex.message)); setBusy(false);
+    }
   };
   const resend = async () => { try { const { data } = await api.post('/auth/resend-verification', { email: f.email }); setErr({ message: '', errors: {} }); setUnverified(false); setOk(data.message); } catch (ex) { setErr({ message: ex.message, errors: ex.errors || {} }); } };
   const [ok, setOk] = useState('');
-  if (challenge) return <Shell title="Two-step verification" subtitle="One more step to keep your account safe."><TwoFactorStep challenge={challenge.id} method={challenge.method} hint={challenge.hint} onBack={() => setChallenge(null)} /></Shell>;
+  if (challenge) return <Shell title={emailMode && challenge.method === 'email' ? 'Check your e-mail' : 'Two-step verification'} subtitle={emailMode && challenge.method === 'email' ? 'Enter the code we just sent to sign in. No password needed.' : 'One more step to keep your account safe.'}><TwoFactorStep challenge={challenge.id} method={challenge.method} hint={challenge.hint} onBack={() => setChallenge(null)} /></Shell>;
   return (
-    <Shell title="Welcome back" subtitle="Sign in to manage your digital business cards."
-      footer={<>{settings.register_enable !== '0' && <>Don&apos;t have an account? <Link to="/register" className="font-medium text-primary hover:underline">Create one free</Link></>}<span className="mt-2 block text-xs text-muted-foreground">Added by your team or administrator? Open the link in your invitation e-mail to create your password. Lost it? Use <Link to="/forgot-password" className="font-medium text-primary hover:underline">Forgot password</Link> to get a new link.</span></>}>
+    <Shell title="Welcome back" subtitle={emailMode ? 'Enter your e-mail and we will send you a sign-in code.' : 'Sign in to manage your digital business cards.'}
+      footer={<>{settings.register_enable !== '0' && <>Don&apos;t have an account? <Link to="/register" className="font-medium text-primary hover:underline">Create one free</Link></>}{emailMode && <span className="mt-2 block text-xs text-muted-foreground">No password to remember: we e-mail you a one-time code each time you sign in. Added by your team? Just use the e-mail they registered.</span>}</>}>
       <Alert tone="success">{ok}</Alert>
       <Alert>{err.message !== 'Validation failed' && err.message && <>{err.message}{unverified && f.email && <button type="button" onClick={resend} className="ml-1 cursor-pointer font-semibold underline">Resend link</button>}</>}</Alert>
       <form onSubmit={submit} noValidate className="space-y-5">
         <Field label="E-mail" htmlFor="email" error={err.errors.email}>
-          <Input id="email" icon={Mail} type="email" autoComplete="username" placeholder="you@company.com" value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} aria-invalid={!!err.errors.email || undefined} />
+          <Input id="email" icon={Mail} type="email" autoComplete="username" autoFocus placeholder="you@company.com" value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} aria-invalid={!!err.errors.email || undefined} />
         </Field>
-        <Field label={<span className="flex w-full justify-between">Password <Link to="/forgot-password" className="text-xs font-medium text-primary hover:underline">Forgot password?</Link></span>} htmlFor="pw" error={err.errors.password}>
+        {!emailMode && <Field label={<span className="flex w-full justify-between">Password <Link to="/forgot-password" className="text-xs font-medium text-primary hover:underline">Forgot password?</Link></span>} htmlFor="pw" error={err.errors.password}>
           <PasswordInput id="pw" value={f.password} onChange={(v) => setF({ ...f, password: v })} invalid={!!err.errors.password} />
-        </Field>
-        <Button type="submit" size="lg" className="w-full" loading={busy}>Sign in <ArrowRight /></Button>
+        </Field>}
+        <Button type="submit" size="lg" className="w-full" loading={busy}>{emailMode ? 'Send me a code' : 'Sign in'} <ArrowRight /></Button>
       </form>
       <GoogleSignIn onError={(m) => setErr({ message: m, errors: {} })} />
     </Shell>
