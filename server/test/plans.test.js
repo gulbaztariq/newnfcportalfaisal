@@ -86,3 +86,24 @@ test('order numbers are unique across many orders', async () => {
   for (let i = 0; i < 25; i++) { const q = await orders.quote([{ product_id: prod.id, quantity: 1 }]); nums.add((await orders.create({ name: 'T', phone: '03001112222', email: u.email, address: 'a', city: 'c', user_id: u.id, source: 'test', is_cod: true }, q)).order_number); }
   assert.equal(nums.size, 25);
 });
+
+test('order numbers: a repeated random number is retried instead of failing the checkout', async () => {
+  const u = await makeUser(); const prod = await M.NfcCard.create({ name: 'C3', slug: `c3-${++seq}`, price: 100, status: true });
+  const real = orders.orderNumber; const next = ['ORD-TEST-DUP', 'ORD-TEST-DUP', 'ORD-TEST-DUP', 'ORD-TEST-NEW'];
+  orders.orderNumber = () => next.shift() || real();
+  try {
+    const mk = async () => orders.create({ name: 'T', phone: '03001112222', email: u.email, address: 'a', city: 'c', user_id: u.id, source: 'test', is_cod: true }, await orders.quote([{ product_id: prod.id, quantity: 1 }]));
+    assert.equal((await mk()).order_number, 'ORD-TEST-DUP');
+    assert.equal((await mk()).order_number, 'ORD-TEST-NEW', 'second order got a fresh number after two clashes');
+    assert.equal(await M.NfcOrder.count({ where: { order_number: 'ORD-TEST-DUP' } }), 1);
+  } finally { orders.orderNumber = real; }
+});
+test('invoices: numbering starts cleanly when the counter row does not exist yet', async () => {
+  // true concurrency needs MySQL (sqlite in tests has one connection); this covers the create-the-counter-first path
+  const invoices = require('../src/services/invoices'); const settings = require('../src/services/settings');
+  await M.Setting.destroy({ where: { key: 'invoice_next_number' } }); settings.clearCache();
+  const made = [];
+  for (let i = 0; i < 3; i++) made.push(await invoices.create({ customer_name: `C${i}`, items: [{ description: 'x', quantity: 1, unit_price: 10 }] }));
+  assert.equal(new Set(made.map((x) => x.number)).size, 3, made.map((x) => x.number).join(','));
+  assert.ok(await M.Setting.findOne({ where: { key: 'invoice_next_number' } }), 'counter row created');
+});

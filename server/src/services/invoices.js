@@ -25,6 +25,8 @@ async function nextNumber() {
   const s = await settings.all();
   const prefix = s.invoice_prefix ?? 'INV-';
   const pad = Number(s.invoice_number_padding || 5);
+  // make sure the counter row exists first: two first-ever invoices at once must not both try to create it
+  await Setting.findOrCreate({ where: { key: 'invoice_next_number' }, defaults: { value: String(Math.max(1, parseInt(s.invoice_next_number || '1', 10))) } });
   return sequelize.transaction(async (t) => {
     const row = await Setting.findOne({ where: { key: 'invoice_next_number' }, transaction: t, lock: t.LOCK?.UPDATE });
     let n = Math.max(1, parseInt(row?.value || s.invoice_next_number || '1', 10));

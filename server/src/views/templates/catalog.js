@@ -255,7 +255,7 @@ module.exports = {
 
     /* ---------- signature collection: each design has its own page structure (signature.js) ---------- */
     S('vcard141', 'Obsidian Luxury', 'Signature: Luxury', 'sxcard', 'Luxury', 'A black metal card with gold foil. It tilts as you move and flips over when tapped.', ['#d4af37', '#f4e3a8', '#08080a', '#f4efe2'], F.cormorant),
-    S('vcard142', 'Designer Portfolio', 'Signature: Creative', 'sxsheet', 'Creative', 'Your photo fills the screen. Content slides up in a sheet with tabs and a floating save bar.', ['#ff4d2e', '#111111', '#ffffff', '#111111'], F.sora),
+    S('vcard142', 'Designer Portfolio', 'Signature: Creative', 'sxsheet', 'Creative', 'Your photo fills the screen. Content slides up in a sheet with tabs and a floating save bar.', ['#c93216', '#111111', '#ffffff', '#111111'], F.sora),
     S('vcard143', 'Material Motion', 'Signature: Technology', 'sxbento', 'Technology', 'A grid of tiles in the Material Design 3 style. Photo, name, actions and socials are all tiles that change shape.', ['#6750a4', '#7d5260', '#fffbfe', '#1c1b1f'], "'Roboto', system-ui, sans-serif"),
     S('vcard144', 'Mono Elegance', 'Signature: Minimal', 'sxeditorial', 'Minimal', 'A black and white magazine cover: a huge name, a moving ticker and swipeable galleries.', ['#e11d48', '#525252', '#ffffff', '#0a0a0a'], F.inter, { name_font: F.bodoni, heading_font: F.bodoni }),
     S('vcard145', 'Royal Executive', 'Signature: Corporate', 'sxpass', 'Corporate', 'A navy and gold wallet pass with a tear-off stub. Sections fold open like a stack of passes.', ['#12284f', '#c9a24b', '#ffffff', '#101b33'], F.manrope, { name_font: F.playfair }),
@@ -264,8 +264,8 @@ module.exports = {
     /* minimal & modern */
     S('vcard147', 'Aura Minimal', 'Signature: Minimal', 'sxindex', 'Minimal', 'Pure typography: one statement, a table of contact rows and sections that open on hairlines.', ['#2563eb', '#6b7280', '#ffffff', '#111827'], F.inter),
     S('vcard148', 'Nordic White', 'Signature: Minimal', 'sxarch', 'Minimal', 'An arched portrait on a shelf, soft pill buttons and a chip bar that jumps between sections.', ['#5c6b5e', '#d8cfc0', '#f7f4ee', '#2c2f2b'], F.dmsans, { name_font: F.fraunces }),
-    S('vcard149', 'Soft Gradient', 'Signature: Minimal', 'sxwave', 'Minimal', 'A soft colour wash, a photo that slowly changes shape and an app-style bar with a raised save button.', ['#6366f1', '#ec4899', '#fbfbff', '#1e1b4b'], F.jakarta),
-    S('vcard150', 'Essential Pro', 'Signature: Professional', 'sxcontact', 'Professional', 'Looks like the contact screen on a phone: square action buttons and grouped lists.', ['#0a7aff', '#34c759', '#ffffff', '#111111'], F.inter),
+    S('vcard149', 'Soft Gradient', 'Signature: Minimal', 'sxwave', 'Minimal', 'A soft colour wash, a photo that slowly changes shape and an app-style bar with a raised save button.', ['#4f46e5', '#ec4899', '#fbfbff', '#1e1b4b'], F.jakarta),
+    S('vcard150', 'Essential Pro', 'Signature: Professional', 'sxcontact', 'Professional', 'Looks like the contact screen on a phone: square action buttons and grouped lists.', ['#0062cc', '#34c759', '#ffffff', '#111111'], F.inter),
 
     /* luxury & premium */
     S('vcard151', 'Platinum Elite', 'Signature: Luxury', 'sxdeck', 'Luxury', 'A brushed platinum card, with every section as a slide you swipe sideways.', ['#4b5563', '#9ca3af', '#f3f4f7', '#1b2030'], F.montserrat),
@@ -276,12 +276,12 @@ module.exports = {
     S('vcard154', 'Corporate Executive', 'Signature: Corporate', 'sxrail', 'Corporate', 'A full-height colour rail holds the company name and actions; the content sits beside it.', ['#0f3d68', '#e5a823', '#ffffff', '#0f1e2e'], F.plex),
     S('vcard155', 'Business Elite', 'Signature: Corporate', 'sxdash', 'Corporate', 'A business dashboard with a figures strip and two large call buttons.', ['#1d4ed8', '#f59e0b', '#ffffff', '#0f172a'], F.jakarta),
     S('vcard156', 'Consultant Pro', 'Signature: Professional', 'sxtimeline', 'Professional', 'Your sections hang on a numbered line that fills as visitors scroll.', ['#0f766e', '#14b8a6', '#fbfdfc', '#102a27'], F.manrope),
-    S('vcard157', 'Legal Professional', 'Signature: Professional', 'sxletter', 'Professional', 'A formal letter: letterhead, your bio as the letter, a signature and numbered contact notes.', ['#1c2b3a', '#9a7b4f', '#fdfcf9', '#1c2330'], F.baskerville),
-    S('vcard158', 'Medical Professional', 'Signature: Healthcare', 'sxclinic', 'Healthcare', 'Appointment first: an open-now status, a booking card and a call bar that stays on screen.', ['#0891b2', '#10b981', '#ffffff', '#0b2a33'], F.nunito),
+    S('vcard157', 'Legal Professional', 'Signature: Professional', 'sxletter', 'Professional', 'A formal letter: letterhead, your bio as the letter, a signature and numbered contact notes.', ['#1c2b3a', '#7a5f36', '#fdfcf9', '#1c2330'], F.baskerville),
+    S('vcard158', 'Medical Professional', 'Signature: Healthcare', 'sxclinic', 'Healthcare', 'Appointment first: an open-now status, a booking card and a call bar that stays on screen.', ['#0e7490', '#10b981', '#ffffff', '#0b2a33'], F.nunito),
 
     /* creative & personal branding */
-    S('vcard159', 'Creative Studio', 'Signature: Creative', 'sxposter', 'Creative', 'A bold poster grid with giant initials, a turning ring of text and sticker buttons.', ['#ff5a1f', '#ffd23f', '#fffaf2', '#141414'], F.bricolage),
-    S('vcard160', 'Influencer Social', 'Signature: Influencer', 'sxstory', 'Influencer', 'A social profile with story bars, a highlight circle for each network and a tight photo grid.', ['#e1306c', '#f58529', '#ffffff', '#1a1a1a'], F.outfit),
+    S('vcard159', 'Creative Studio', 'Signature: Creative', 'sxposter', 'Creative', 'A bold poster grid with giant initials, a turning ring of text and sticker buttons.', ['#c2410c', '#ffd23f', '#fffaf2', '#141414'], F.bricolage),
+    S('vcard160', 'Influencer Social', 'Signature: Influencer', 'sxstory', 'Influencer', 'A social profile with story bars, a highlight circle for each network and a tight photo grid.', ['#c81e5b', '#f58529', '#ffffff', '#1a1a1a'], F.outfit),
     S('vcard161', 'Personal Brand', 'Signature: Personal Branding', 'sxbrand', 'Personal Branding', 'Your first name in giant outline letters on a colour panel, a pull quote and big paired buttons.', ['#7c3aed', '#f472b6', '#ffffff', '#1c1530'], F.urbanist),
     S('vcard162', 'Artist Signature', 'Signature: Creative', 'sxpolaroid', 'Creative', 'A fan of photo prints that spreads when touched, stamp buttons and taped paper notes.', ['#9f1239', '#e7c9a9', '#f6f1e7', '#221a14'], F.dmsans, { name_font: F.cormorant, heading_font: F.cormorant }),
 
@@ -292,7 +292,7 @@ module.exports = {
 
     /* specialised */
     S('vcard166', 'Real Estate Pro', 'Signature: Real Estate', 'sxlisting', 'Real Estate', 'A property listing: swipeable photos on top, an agent card and a call bar that stays on screen.', ['#12324a', '#c9a24b', '#ffffff', '#0f1e2a'], F.manrope),
-    S('vcard167', 'Sales Champion', 'Signature: Corporate', 'sxchat', 'Corporate', 'A chat conversation: message bubbles, quick-reply buttons and a contact card to save.', ['#e11d48', '#f59e0b', '#ffffff', '#111827'], F.outfit),
+    S('vcard167', 'Sales Champion', 'Signature: Corporate', 'sxchat', 'Corporate', 'A chat conversation: message bubbles, quick-reply buttons and a contact card to save.', ['#be123c', '#f59e0b', '#ffffff', '#111827'], F.outfit),
     S('vcard168', 'Startup Founder', 'Signature: Technology', 'sxpitch', 'Technology', 'A pitch deck: a progress bar, a statement name and sections as numbered slides.', ['#4f46e5', '#06b6d4', '#ffffff', '#0b1020'], F.space),
     S('vcard169', 'Hospitality Elite', 'Signature: Hospitality', 'sxmenu', 'Hospitality', 'A fine-dining menu: photo header, medallion portrait and services listed with dotted leaders.', ['#3a2a1e', '#c8a15a', '#fbf7f0', '#2a2018'], F.dmsans, { name_font: F.cormorant, heading_font: F.cormorant }),
     S('vcard170', 'Modern Glass Premium', 'Signature: Luxury', 'sxglass', 'Luxury', 'Layered glass panes with depth, widgets and a phone-style dock of app icons.', ['#7c3aed', '#06b6d4', '#0d0f1f', '#f5f6ff'], F.jakarta),

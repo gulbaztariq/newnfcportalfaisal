@@ -182,3 +182,16 @@ test('preview: shows an unsaved design on the real card without storing anything
   assert.equal((await client(ctx.base).get(`/api/user/vcards/${v.id}/preview`)).status, 401, 'signed-out visitors are refused');
   const stranger = await owner([a]); assert.equal((await stranger.c.get(`/api/user/vcards/${v.id}/preview`)).status, 404, "another user's card is not found");
 });
+
+test('default palettes of the signature designs keep body text readable (WCAG AA 4.5:1)', () => {
+  for (const t of SIG) {
+    const { text, background, primary } = t.defaults;
+    assert.ok(custom.contrast(text, background) >= 4.5, `${t.slug} text ${custom.contrast(text, background).toFixed(2)}`);
+    // buttons use the main colour with black or white text, picked the way render.js picks it (Cyber Glass darkens its buttons in CSS)
+    const on = custom.contrast('#ffffff', primary) >= custom.contrast('#0b0f19', primary) ? '#ffffff' : '#0b0f19';
+    const lumP = custom.contrast(primary, '#000000');
+    const picked = lumP > (0.38 + 0.05) / 0.05 ? '#0b0f19' : '#ffffff';
+    if (t.layout !== 'sxholo') assert.ok(custom.contrast(picked, primary) >= 4.5, `${t.slug} button text ${custom.contrast(picked, primary).toFixed(2)}`);
+    assert.ok(custom.contrast(on, primary) >= 4.5, `${t.slug} best button text`);
+  }
+});

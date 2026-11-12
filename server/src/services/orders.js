@@ -128,10 +128,11 @@ async function quote(lines, { is_cod = false, discount = 0, discountType, discou
 async function create(data, q) {
   const { NfcOrder, NfcOrderItem, sequelize } = M();
   const first = q.lines[0];
-  const order = await sequelize.transaction(async (t) => {
+  // the random part of an order number can repeat on a busy day: retry with a fresh number instead of failing the checkout
+  const attempt = () => sequelize.transaction(async (t) => {
     const o = await NfcOrder.create({
       ...data,
-      order_number: orderNumber(), access_token: crypto.randomBytes(16).toString('hex'),
+      order_number: module.exports.orderNumber(), access_token: crypto.randomBytes(16).toString('hex'),
       nfc_card_id: first.product.id, quantity: q.lines.reduce((a, l) => a + l.quantity, 0), unit_price: first.unit_price,
       order_type: q.order_type || 'nfc_profile', sample_credit: q.sample_credit || 0, plan_credit: q.plan_credit || 0, subtotal: q.subtotal, discount: q.discount, discount_type: q.discount ? q.discount_type : null, discount_value: q.discount ? q.discount_value : 0, tax_amount: q.tax, delivery_charges: q.delivery, cod_charges: q.cod, amount: q.total,
       status_history: [{ status: 'pending', at: new Date(), by: data.source === 'shop' ? 'customer' : 'system' }],
@@ -141,6 +142,13 @@ async function create(data, q) {
     }
     return o;
   });
+  let order;
+  for (let i = 0; ; i++) {
+    try { order = await attempt(); break; } catch (e) {
+      const dup = e?.name === 'SequelizeUniqueConstraintError' && (e.fields?.order_number !== undefined || (e.errors || []).some((x) => x.path === 'order_number') || /order_number/.test(e.parent?.message || ''));
+      if (!dup || i >= 4) throw e;
+    }
+  }
   const s = await settings.all();
   const { appUrl } = require('../config');
   if (order.email && !(await isDummyEmail(order.email))) mail.sendTemplate('order_placed', order.email, { name: order.name, order: order.order_number, total: `${s.shop_currency_icon || 'Rs'} ${Number(order.amount).toLocaleString('en-US')}`, payment: order.is_cod ? 'Cash on delivery' : order.payment_type, track_url: `${appUrl}/track/${order.order_number}?t=${order.access_token}` }).catch(() => {});

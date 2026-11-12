@@ -489,4 +489,36 @@ const CSS = String.raw`
 @media (hover:none){.l-sxbento .x-act:hover{border-radius:28px;align-items:stretch;justify-content:space-between}.l-sxeditorial .x-ix:hover{padding-inline-start:0}}
 `;
 
-module.exports = { ARCH, build, CSS: CSS + PACKS.map((p) => p.CSS).join('') };
+const TAP = String.raw`
+/* tap targets: at least 44px without changing the drawing (loaded after every pack so it wins) */
+[class*=" l-sx"] .x-ic,.l-sxbento .x-sh,.l-sxrail .x-sb{min-width:44px;min-height:44px}
+.l-sxeditorial .x-shr,.l-sxletter .x-shr,.l-sxposter .x-shr,.l-sxpitch .x-shr,.l-sxcontact .x-edit{padding-block:13px;margin-block:-13px;min-width:44px}
+.l-sxwave .x-shw{min-height:44px}
+.l-sxspot .x-ln{padding-block:15px}
+.l-sxletter .x-nt{padding-block:13px}
+.l-sxterm .x-c{padding-block:13px}
+.l-sxmenu .x-tx{padding-block:14px}
+.l-sxstory .save,.l-sxstory .x-ig,.l-sxchat .x-chip{height:44px}
+.l-sxaurora .x-ic,.l-sxterm .x-ic{min-width:0;min-height:0;position:relative}
+.l-sxaurora .x-ic:after,.l-sxterm .x-ic:after{content:"";position:absolute;inset:-8px}
+.l-sxglass .x-ic,.l-sxbento .x-sh{width:44px;height:44px}
+.l-sxsheet .x-tabs button,.l-sxsheet .x-ind{height:44px}
+.l-sxarch .x-jump button{height:44px;padding:0 16px}
+.l-sxletter .x-shr{padding-block:14px;margin-block:-14px}
+.l-sxchat .save{height:46px}
+.l-sxdeck .x-dots{gap:4px}
+.l-sxdeck .x-dots button{position:relative}
+.l-sxdeck .x-dots button:after{content:"";position:absolute;inset:-14px -6px}
+
+/* readable secondary text (WCAG AA 4.5:1 on the default palettes) */
+[class*=" l-sx"]{--muted:color-mix(in srgb,var(--tx) 76%,transparent)}
+.l-sxholo .role{color:color-mix(in srgb,var(--p) 72%,var(--tx))}
+.l-sxpass dt{color:color-mix(in srgb,var(--s) 50%,var(--tx))}
+.l-sxholo .x-bh{color:color-mix(in srgb,var(--p) 72%,var(--tx))}
+.l-sxholo .btn{background:color-mix(in srgb,var(--p) 80%,#000)}
+.l-sxholo .save{background:linear-gradient(115deg,color-mix(in srgb,var(--p) 78%,#000),color-mix(in srgb,var(--s) 45%,#000));color:#fff}
+.l-sxposter .x-shr{color:var(--s)}
+.l-sxlisting .role{color:color-mix(in srgb,var(--s) 52%,var(--tx))}
+`;
+
+module.exports = { ARCH, build, CSS: CSS + PACKS.map((p) => p.CSS).join('') + TAP };

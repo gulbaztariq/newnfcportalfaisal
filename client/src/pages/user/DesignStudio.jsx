@@ -76,7 +76,9 @@ function OptColor({ label, value, onChange }) {
 export default function DesignStudio({ v, form, template, schema, history, bgFile, onBgFile }) {
   const [panel, setPanel] = useState('colors');
   const th = v.theme || {};
-  const set = (k, val) => { const n = { ...th }; if (val === '' || val === undefined || val === null || val === false) delete n[k]; else n[k] = val; form.set('theme', n); };
+  // always build on the latest theme, so quick successive changes never overwrite each other
+  const patch = (fn) => form.setValues((x) => ({ ...x, theme: fn({ ...(x.theme || {}) }) }));
+  const set = (k, val) => patch((n) => { if (val === '' || val === undefined || val === null || val === false) delete n[k]; else n[k] = val; return n; });
   const defaults = template?.defaults || {};
   const eff = (k) => th[k] ?? defaults[k];
   const fonts = (schema?.fonts || []).map((f) => ({ value: stack(f), label: f }));
@@ -112,7 +114,7 @@ export default function DesignStudio({ v, form, template, schema, history, bgFil
                     {PALETTES.map(([name, p, s, bg, tx]) => {
                       const on = th.primary === p && th.background === bg;
                       return (
-                        <button key={name} type="button" onClick={() => form.set('theme', { ...th, primary: p, secondary: s, background: bg, text: tx })} aria-pressed={on} title={name}
+                        <button key={name} type="button" onClick={() => patch((n) => ({ ...n, primary: p, secondary: s, background: bg, text: tx }))} aria-pressed={on} title={name}
                           className={cn('cursor-pointer overflow-hidden rounded-xl border-2 text-left transition hover:scale-[1.03]', on ? 'border-primary' : 'border-border')}>
                           <span className="flex h-9" style={{ background: bg }}><span className="m-auto flex gap-1"><i className="size-4 rounded-full" style={{ background: p }} /><i className="size-4 rounded-full" style={{ background: s }} /><i className="size-4 rounded-full border border-black/10" style={{ background: tx }} /></span></span>
                           <span className="block truncate px-2 py-1 text-[11px] font-medium">{name}</span>

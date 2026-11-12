@@ -400,7 +400,8 @@ const CSS = String.raw`
 /* ================================================================== sxrail: full-height colour rail with the actions */
 .l-sxrail{--r:10px;overflow:clip}
 .l-sxrail .x-cols{display:grid;grid-template-columns:66px 1fr}
-.l-sxrail .x-side{position:sticky;top:0;align-self:start;height:100vh;max-height:860px;display:flex;flex-direction:column;align-items:center;padding:16px 0 18px;color:var(--onp);background:linear-gradient(var(--p),color-mix(in srgb,var(--p) 66%,#000))}
+.l-sxrail .x-side{position:sticky;top:0;align-self:start;height:100vh;height:100dvh;max-height:860px;display:flex;flex-direction:column;align-items:center;padding:16px 0 18px;color:var(--onp);background:linear-gradient(var(--p),color-mix(in srgb,var(--p) 66%,#000))}
+@media(min-width:520px){.l-sxrail .x-side{top:16px;height:calc(100vh - 80px);max-height:none;border-radius:36px 0 0 0}}
 .l-sxrail .x-logo{width:42px;height:42px;flex:none;border-radius:11px;display:grid;place-items:center;font-weight:700;font-size:14px;letter-spacing:.04em;background:var(--s);color:var(--ons)}
 .l-sxrail .x-vname{flex:1;min-height:0;margin:18px 0;overflow:hidden;white-space:nowrap;writing-mode:vertical-rl;transform:rotate(180deg);font-size:10.5px;font-weight:600;letter-spacing:.32em;text-transform:uppercase;opacity:.82}
 .l-sxrail .x-side nav{display:grid;gap:8px}
