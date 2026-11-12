@@ -4,13 +4,14 @@ Works on Business / Cloud web hosting with the Node.js apps feature. Hostinger s
 
 ## 1. Create the app (hPanel)
 1. Websites > Add website > **Node.js Apps**. Choose the subdomain you created (for example `cards.yourdomain.com`).
-2. Import from **GitHub**: repository `gulbaztariq/newnfcportalfaisal`, branch `main`. (A hosting plan connects to one GitHub account at a time.)
+2. Import from **GitHub**: repository `gulbaztariq/newnfcportalfaisal`, branch **`hostinger`**. (A hosting plan connects to one GitHub account at a time.) The `hostinger` branch is `main` plus the already-built website, because the website build crashes on Hostinger's shared servers (native bundler vs. thread limits). See `HOSTINGER-BRANCH.md` on that branch for how to refresh it.
 3. Settings:
    - Node.js version: **22.x**
-   - Build command: `npm run build`
-   - Start command: `npm run start:host`
+   - Build command: `npm run build`   (on the hostinger branch this only installs server packages)
+   - Start command: `npm start`
    - Entry file (if asked): `server/src/index.js`
-4. Do **not** use `npm start`: it runs the database sync and seed on every cold start.
+4. On `main`, `npm start` runs the database sync and seed on every start; use `npm run start:host` there instead.
+5. Processes started over SSH cannot listen on a port on this hosting; the app only runs when started by hPanel's Node.js app.
 
 ## 2. Environment variables (hPanel > the app > Environment variables)
 | Name | Value |
@@ -21,7 +22,7 @@ Works on Business / Cloud web hosting with the Node.js apps feature. Hostinger s
 | `JWT_SECRET` | a long random string (64+ characters). The app refuses to start in production without one |
 | `IMPERSONATE_SECRET` | another long random string |
 | `DB_DIALECT` | `mysql` |
-| `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` | the MySQL details from hPanel > Databases. Use a NEW password (the old one was shared in chat) |
+| `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` | the MySQL details from hPanel > Databases. `DB_HOST=127.0.0.1` works from the hosting server. Use a NEW password (the old one was shared in chat) |
 | `JOBS_MODE` | `cron` |
 | `UPLOAD_DIR` | a folder outside the deploy folder, e.g. `/home/<user>/nfc-uploads` (create it first), so redeploys never delete customer images |
 | `MAIL_HOST`, `MAIL_PORT`, `MAIL_SECURE`, `MAIL_USER`, `MAIL_PASSWORD`, `MAIL_FROM` | your SMTP details (needed for password reset and e-mail codes) |
