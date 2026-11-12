@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, Navigate, useParams, useSearchParams } from 'react-router-dom';
 import { motion } from 'motion/react';
 import { ResponsiveContainer, ComposedChart, Area, Line, XAxis, YAxis, CartesianGrid, Tooltip, AreaChart, PieChart, Pie, Cell, BarChart, Bar } from 'recharts';
-import { Eye, Users, MousePointerClick, UserPlus, MessageSquareText, Percent, TrendingUp, TrendingDown, Minus, Download, Lightbulb, Globe2, Smartphone, Clock, Filter, Link2, BarChart3, Share2, AlertTriangle, Info, CheckCircle2, ExternalLink, RefreshCw, ChevronDown, X, Printer, SlidersHorizontal, Search, ArrowUp, ArrowDown, ArrowUpDown, Repeat, Target, Layers, CalendarDays, Building2, Armchair, UserCheck, IdCard, Trophy } from 'lucide-react';
+import { Eye, Users, MousePointerClick, UserPlus, MessageSquareText, Percent, TrendingUp, TrendingDown, Minus, Download, Lightbulb, Globe2, Smartphone, Clock, Filter, Link2, BarChart3, Share2, AlertTriangle, Info, CheckCircle2, ExternalLink, RefreshCw, ChevronDown, X, Printer, SlidersHorizontal, Search, ArrowUp, ArrowDown, ArrowUpDown, Repeat, Target, Layers, CalendarDays, Pencil, Building2, Armchair, UserCheck, IdCard, Trophy } from 'lucide-react';
 import api from '@/lib/api';
 import { cn } from '@/lib/cn';
 import { PageHeader, Card, CardHeader, CardBody, Segmented, Select, Button, Badge, Skeleton, EmptyState, Tip, CountUp, Input, Menu, MenuTrigger, MenuContent, MenuItem, MenuLabel, MenuSeparator } from '@/components/ui';
@@ -327,7 +327,7 @@ function CardsTable({ rows, admin, onFocus, focusId }) {
                 <td className="px-3 py-3 text-right">{c.change === null && rows.length ? <span className="text-xs text-muted-foreground">-</span> : <Delta change={c.change} />}</td>
                 <td className="px-3 py-3 text-right tabular-nums">{nf.format(c.visitors)}</td><td className="px-3 py-3 text-right tabular-nums">{nf.format(c.actions)}</td><td className="px-3 py-3 text-right tabular-nums">{nf.format(c.saves)}</td><td className="px-3 py-3 text-right tabular-nums">{nf.format(c.leads)}</td>
                 <td className="px-3 py-3 text-right tabular-nums">{c.conversion === null ? '-' : `${c.conversion}%`}</td>
-                <td className="px-5 py-3 text-right"><Tip content={String(focusId) === String(c.id) ? 'Showing only this card' : 'Show only this card'}><Button variant={String(focusId) === String(c.id) ? 'soft' : 'ghost'} size="icon" onClick={() => onFocus(c)} aria-label={`Filter to ${c.name}`}><Filter /></Button></Tip></td>
+                <td className="px-5 py-3 text-right whitespace-nowrap">{!admin && <Tip content="Edit this vCard"><Button as={Link} to={`/user/vcards/${c.id}/edit`} variant="ghost" size="icon" aria-label={`Edit ${c.name}`}><Pencil /></Button></Tip>}<Tip content={String(focusId) === String(c.id) ? 'Showing only this card' : 'Show only this card'}><Button variant={String(focusId) === String(c.id) ? 'soft' : 'ghost'} size="icon" onClick={() => onFocus(c)} aria-label={`Filter to ${c.name}`}><Filter /></Button></Tip></td>
               </tr>
             ))}
             {!list.length && <tr><td colSpan={9} className="px-5 py-10 text-center text-muted-foreground">{rows.length ? 'No cards match your search' : 'No card activity in this period'}</td></tr>}

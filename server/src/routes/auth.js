@@ -223,7 +223,7 @@ r.post('/reset-password', authLimiter, wrap(async (req, res) => {
   const user = await User.scope('withSecrets').findOne({ where: { email: String(req.body.email).toLowerCase().trim() } });
   const hash = crypto.createHash('sha256').update(String(req.body.token)).digest('hex');
   if (!user || !user.reset_token || user.reset_token !== hash || new Date(user.reset_expires_at) < new Date()) fail(422, 'This password reset link is invalid or has expired.');
-  await user.update({ password: await bcrypt.hash(String(req.body.password), 12), reset_token: null, reset_expires_at: null, token_version: (user.token_version || 0) + 1 });
+  await user.update({ password: await bcrypt.hash(String(req.body.password), 12), reset_token: null, reset_expires_at: null, token_version: (user.token_version || 0) + 1, ...(user.email_verified_at ? {} : { email_verified_at: new Date() }) }); // the link came to their inbox, so the address is confirmed
   res.json({ message: 'Your password has been reset. Please sign in.' });
 }));
 

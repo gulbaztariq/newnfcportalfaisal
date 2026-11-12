@@ -59,7 +59,19 @@ function StatusPill({ value }) {
 }
 
 /** The plain password, shown once after it is created or reset */
-function Credentials({ name, email, password }) {
+function Credentials({ name, email, password, invite_url, invite_sent }) {
+  if (invite_url) {
+    return (
+      <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="rounded-2xl border border-success/30 bg-success-soft/60 p-4">
+        <p className="flex items-center gap-2 text-sm font-semibold text-success"><CircleCheck className="size-4" />{name} has been added</p>
+        <p className="mt-1 text-xs text-muted-foreground">{invite_sent ? `We e-mailed ${email} a link to choose their own password.` : 'No e-mail was sent. Share this link with them so they can choose their own password.'} They then sign in with their e-mail and that password. The link works once and lasts 7 days.</p>
+        <button type="button" onClick={() => copy(invite_url, 'Invitation link copied')} className="group mt-3 flex w-full cursor-pointer items-center justify-between gap-2 rounded-xl border border-border bg-card px-3 py-2 text-left transition hover:border-primary">
+          <span className="min-w-0"><span className="block text-[11px] text-muted-foreground">Invitation link</span><span className="block truncate font-mono text-xs">{invite_url}</span></span>
+          <Copy className="size-4 shrink-0 text-muted-foreground group-hover:text-primary" />
+        </button>
+      </motion.div>
+    );
+  }
   return (
     <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="rounded-2xl border border-success/30 bg-success-soft/60 p-4">
       <p className="flex items-center gap-2 text-sm font-semibold text-success"><CircleCheck className="size-4" />Login details for {name}</p>
@@ -76,11 +88,11 @@ function Credentials({ name, email, password }) {
   );
 }
 
-function PasswordInput({ value, onChange, error, required, hint = 'Leave empty to generate one' }) {
+function PasswordInput({ value, onChange, error, required, hint = 'Leave empty to generate one', placeholder = 'Auto-generate' }) {
   return (
     <Field label="Password" required={required} error={error} hint={hint}>
       <div className="flex gap-2">
-        <Input value={value} onChange={(e) => onChange(e.target.value)} autoComplete="new-password" className="flex-1 font-mono" placeholder="Auto-generate" />
+        <Input value={value} onChange={(e) => onChange(e.target.value)} autoComplete="new-password" className="flex-1 font-mono" placeholder={placeholder} />
         <Tip content="Generate a strong password"><Button type="button" variant="outline" size="icon" onClick={() => onChange(randomPassword())} aria-label="Generate password"><Wand2 /></Button></Tip>
       </div>
     </Field>
@@ -101,13 +113,13 @@ function AddUser({ meta, onClose, onSaved }) {
       if (b.company_role === 'member') delete b.permissions; else b.permissions = b.permissions || meta.defaults[b.company_role];
       if (!b.password) delete b.password;
       const data = await run(api.post('/user/organisation/members', b));
-      setDone({ name: fullName(data.data), email: data.data.email, password: data.password });
+      setDone({ name: fullName(data.data), email: data.data.email, password: data.password, invite_url: data.invite_url, invite_sent: data.invite_sent });
       onSaved();
     } catch (e) { form.setErrors(e.errors || {}); } finally { setBusy(false); }
   };
   const again = () => { setDone(null); form.setValues(addBlank); };
   return (
-    <Dialog open onOpenChange={(o) => !o && onClose()} size="lg" icon={UserCog} title="Add user" description="You keep the login details. Optionally they are e-mailed to the user too."
+    <Dialog open onOpenChange={(o) => !o && onClose()} size="lg" icon={UserCog} title="Add user" description="Only a name and an e-mail are needed. They get an e-mail link to choose their own password, then sign in with their e-mail."
       footer={done ? <><Button variant="outline" onClick={again}><Plus />Add another</Button><Button onClick={onClose}>Done</Button></> : <><Button variant="outline" onClick={onClose}>Cancel</Button><Button onClick={save} loading={busy}>Add user</Button></>}>
       {done ? <Credentials {...done} /> : (
         <div className="grid gap-4 sm:grid-cols-2">
@@ -116,10 +128,10 @@ function AddUser({ meta, onClose, onSaved }) {
           <Field label="E-mail (login)" required error={form.errors.email}><Input {...form.input('email')} type="email" /></Field>
           <Field label="Phone"><Input {...form.input('contact')} /></Field>
           <Field label="Job title" hint="Shown on their card"><Input {...form.input('job_title')} /></Field>
-          <PasswordInput value={form.values.password} onChange={(v) => form.set('password', v)} error={form.errors.password} />
+          <PasswordInput value={form.values.password} onChange={(v) => form.set('password', v)} error={form.errors.password} hint="Leave empty (recommended): they choose their own password from the e-mail link" placeholder="They choose it" />
           <Field label="Role" className="sm:col-span-2" hint={ROLE_HINT[form.values.company_role]}><Select value={form.values.company_role} onChange={(x) => { form.set('company_role', x); form.set('permissions', null); }} options={roles.map(([value, l]) => ({ value, label: l }))} /></Field>
           {form.values.company_role !== 'member' && <div className="sm:col-span-2"><PermissionMatrix modules={meta.modules} value={form.values.permissions || meta.defaults[form.values.company_role]} defaults={meta.defaults[form.values.company_role]} onChange={(p) => form.set('permissions', p)} /></div>}
-          <SwitchRow className="sm:col-span-2" id="notify" title="E-mail the login details to the user" description="Turn off to share them yourself" checked={form.values.notify} onChange={(v) => form.set('notify', v)} />
+          <SwitchRow className="sm:col-span-2" id="notify" title="E-mail the invitation to the user" description="Turn off to copy the link and share it yourself" checked={form.values.notify} onChange={(v) => form.set('notify', v)} />
         </div>
       )}
     </Dialog>

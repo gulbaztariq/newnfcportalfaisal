@@ -94,15 +94,16 @@ module.exports = function usersRouter(role) {
 
   r.post('/', upload, wrap(async (req, res) => {
     const isOrg = role === 'user' && toBool(req.body.is_organisation);
-    validate(req.body, { first_name: 'required|max:100', last_name: 'required|max:100', email: 'required|email|max:191', password: 'required|min:6|max:100', ...(isOrg ? ORG_RULES : {}) });
-    if (req.body.password !== req.body.password_confirmation) fail(422, 'Validation failed', { password_confirmation: 'Passwords do not match' });
+    validate(req.body, { first_name: 'required|max:100', last_name: 'max:100', email: 'required|email|max:191', password: 'min:6|max:100', ...(isOrg ? ORG_RULES : {}) });
+    const invited = !req.body.password; // name + e-mail only: the person chooses their own password from an e-mailed link
+    if (!invited && req.body.password !== req.body.password_confirmation) fail(422, 'Validation failed', { password_confirmation: 'Passwords do not match' });
     const email = String(req.body.email).toLowerCase().trim();
     if (await User.findOne({ where: { email } })) fail(422, 'Validation failed', { email: 'This e-mail is already registered' });
     const user = await User.create({
       ...pick(req.body, ['first_name', 'last_name', 'contact', 'region_code']), email, role: role === 'admin' ? staffRole(req.body) : 'user',
       permissions: role === 'admin' && req.body.permissions !== undefined ? perms.clean(parseList(req.body.permissions)) : null,
       is_active: req.body.is_active === undefined ? true : toBool(req.body.is_active),
-      password: await bcrypt.hash(String(req.body.password), 12), email_verified_at: new Date(),
+      password: await bcrypt.hash(invited ? crypto.randomBytes(24).toString('hex') : String(req.body.password), 12), email_verified_at: new Date(),
       affiliate_code: crypto.randomBytes(5).toString('hex'), avatar: fileUrl('avatars', fileOf(req, 'avatar')),
       is_organisation: isOrg, company_role: isOrg ? 'owner' : null,
     });
@@ -116,10 +117,22 @@ module.exports = function usersRouter(role) {
       await onboarding.defaultVcard(user);
     }
     audit(req, 'user.create', 'user', user.id, { role: user.role, organisation: isOrg || undefined });
+    if (invited) {
+      const link = await require('../../services/invite').send(user, { inviter: (await settings.get('app_name')) || 'Your administrator' });
+      return res.status(201).json({ data: user, invite_url: link.url, invite_sent: link.sent, message: `${role === 'admin' ? 'Staff member' : isOrg ? 'Organisation' : 'User'} created. ${link.sent ? 'An e-mail invitation to choose a password was sent.' : 'E-mail is not set up, so share the invitation link with them.'}` });
+    }
     // credentials e-mail (the password is only in the e-mail, never logged)
     mail.sendTemplate('welcome', email, { name: user.first_name, email, password: req.body.password, login_url: `${clientUrl}/login` })
       .catch((e) => console.error('mail error', e.message));
     res.status(201).json({ data: user, message: `${role === 'admin' ? 'Staff member' : isOrg ? 'Organisation' : 'User'} created successfully. Login details were e-mailed.` });
+  }));
+
+  r.post('/:id/resend-invite', wrap(async (req, res) => {
+    const user = await User.findOne({ where: { id: req.params.id, role: roleWhere } });
+    if (!user) fail(404, 'Not found');
+    const link = await require('../../services/invite').send(user, { inviter: (await settings.get('app_name')) || 'Your administrator' });
+    audit(req, 'user.invite', 'user', user.id, {});
+    res.json({ invite_url: link.url, invite_sent: link.sent, message: link.sent ? 'A new invitation was e-mailed' : 'Invitation link created. Share it with them.' });
   }));
 
   r.put('/:id', upload, wrap(async (req, res) => {
@@ -127,7 +140,7 @@ module.exports = function usersRouter(role) {
     if (!user) fail(404, 'Not found');
     // an individual can be turned into an organisation (never a member of another one)
     const isOrg = role === 'user' && (user.is_organisation || (toBool(req.body.is_organisation) && !user.organisation_id));
-    validate(req.body, { first_name: 'required|max:100', last_name: 'required|max:100', email: 'required|email|max:191', password: 'min:6|max:100', ...(isOrg && req.body.org_name !== undefined ? ORG_RULES : {}) });
+    validate(req.body, { first_name: 'required|max:100', last_name: 'max:100', email: 'required|email|max:191', password: 'min:6|max:100', ...(isOrg && req.body.org_name !== undefined ? ORG_RULES : {}) });
     const email = String(req.body.email).toLowerCase().trim();
     if (email !== user.email && (await User.findOne({ where: { email } }))) fail(422, 'Validation failed', { email: 'This e-mail is already registered' });
     const data = { ...pick(req.body, ['first_name', 'last_name', 'contact', 'region_code']), email };

@@ -59,7 +59,7 @@ export default function Users({ role = 'user' }) {
     if (!(v.logo instanceof File)) delete v.logo;
     if (!v.is_organisation) for (const k of Object.keys(orgBlank)) delete v[k]; else v.is_organisation = '1';
     if (isAdmin) { if (v.role === 'admin' || !Array.isArray(v.permissions)) delete v.permissions; else v.permissions = JSON.stringify(v.permissions); } else { delete v.role; delete v.permissions; }
-    try { await run(editing ? api.put(`${endpoint}/${editing.id}`, toFormData(v)) : api.post(endpoint, toFormData(v))); setOpen(false); list.reload(); } catch (ex) { form.setErrors(ex.errors); } finally { setSaving(false); }
+    try { const res = await run(editing ? api.put(`${endpoint}/${editing.id}`, toFormData(v)) : api.post(endpoint, toFormData(v))); setOpen(false); list.reload(); if (res?.invite_url && !res.invite_sent) setInvite({ name: fullName(res.data), url: res.invite_url }); } catch (ex) { form.setErrors(ex.errors); } finally { setSaving(false); }
   };
   const remove = async (u) => { if (await confirm({ title: `Delete ${fullName(u)}?`, description: isAdmin ? 'This admin will lose access immediately.' : 'The user and all of their vCards will be permanently deleted.' })) { await run(api.delete(`${endpoint}/${u.id}`)).catch(() => {}); list.reload(); } };
   const status = async (u, v) => { u.is_active = v; await run(api.patch(`${endpoint}/${u.id}/status`, { is_active: v })).catch(() => { u.is_active = !v; }); list.reload(); };
@@ -67,6 +67,8 @@ export default function Users({ role = 'user' }) {
     if (!(await confirm({ title: `Delete ${selected.length} users?`, description: 'The users and all of their vCards will be permanently deleted.' }))) return;
     await run(api.post('/admin/users/bulk-delete', { ids: selected })).catch(() => {}); setSelected([]); list.reload();
   };
+  const [invite, setInvite] = useState(null); // invitation link to share when e-mail could not be sent
+  const reinvite = async (u) => { const res = await run(api.post(`${endpoint}/${u.id}/resend-invite`)).catch(() => null); if (res?.invite_url && !res.invite_sent) setInvite({ name: fullName(u), url: res.invite_url }); };
   const resend = (u) => run(api.post(`/admin/users/${u.id}/resend-verification`)).catch(() => {});
   const verify = async (u) => { await run(api.patch(`${endpoint}/${u.id}/verify-email`)).catch(() => {}); list.reload(); };
   const impersonate = async (u) => {
@@ -97,6 +99,7 @@ export default function Users({ role = 'user' }) {
         <Actions>
           {!isAdmin && <Action icon={Eye} label="View details" onClick={() => navigate(`/admin/users/${u.id}`)} />}
           {!isAdmin && <Action icon={UserCog} label="Impersonate" tone="warning" onClick={() => impersonate(u)} />}
+          <Action icon={Send} label="Send invitation again (sets a new password link)" onClick={() => reinvite(u)} />
           <Action icon={Pencil} label="Edit" tone="info" onClick={() => openForm(u)} />
           <Action icon={Trash2} label="Delete" tone="danger" onClick={() => remove(u)} />
         </Actions>
@@ -141,13 +144,13 @@ export default function Users({ role = 'user' }) {
             </>
           )}
           <Field label="First name" htmlFor="f-first_name" required error={form.errors.first_name}><Input {...form.input('first_name')} /></Field>
-          <Field label="Last name" htmlFor="f-last_name" required error={form.errors.last_name}><Input {...form.input('last_name')} /></Field>
+          <Field label="Last name" htmlFor="f-last_name" error={form.errors.last_name}><Input {...form.input('last_name')} /></Field>
           <Field label="E-mail" htmlFor="f-email" required error={form.errors.email}><Input {...form.input('email')} type="email" /></Field>
           <Field label="Phone" htmlFor="f-contact">
             <div className="flex gap-2"><Input className="w-20" placeholder="+1" value={form.values.region_code || ''} onChange={(e) => form.set('region_code', e.target.value.replace(/\D/g, ''))} /><Input {...form.input('contact')} className="flex-1" /></div>
           </Field>
-          <Field label="Password" htmlFor="f-password" required={!editing} error={form.errors.password} hint={editing ? 'Leave empty to keep the current password' : 'Minimum 6 characters'}><Input {...form.input('password')} type="password" autoComplete="new-password" /></Field>
-          <Field label="Confirm password" htmlFor="f-password_confirmation" required={!editing} error={form.errors.password_confirmation}><Input {...form.input('password_confirmation')} type="password" autoComplete="new-password" /></Field>
+          <Field label="Password" htmlFor="f-password" error={form.errors.password} hint={editing ? 'Leave empty to keep the current password' : 'Leave empty (recommended): they get an e-mail link to choose their own password'}><Input {...form.input('password')} type="password" autoComplete="new-password" /></Field>
+          <Field label="Confirm password" htmlFor="f-password_confirmation" error={form.errors.password_confirmation}><Input {...form.input('password_confirmation')} type="password" autoComplete="new-password" /></Field>
           {!isAdmin && editing && !editing.is_organisation && !editing.organisation_id && (
             <label className="flex cursor-pointer items-center justify-between rounded-2xl border border-border p-4 sm:col-span-2"><span><span className="block text-sm font-medium">Organisation account</span><span className="text-xs text-muted-foreground">Turn this user into an organisation that manages its own users</span></span><Switch checked={form.values.is_organisation} onChange={(v) => { form.set('is_organisation', v); if (v && !form.values.org_name) form.set('org_name', `${form.values.first_name} ${form.values.last_name}`.trim()); }} /></label>
           )}
@@ -164,6 +167,10 @@ export default function Users({ role = 'user' }) {
           <label className="flex cursor-pointer items-center justify-between rounded-2xl border border-border p-4 sm:col-span-2"><span><span className="block text-sm font-medium">Active</span><span className="text-xs text-muted-foreground">Inactive accounts cannot sign in</span></span><Switch checked={form.values.is_active} onChange={(v) => form.set('is_active', v)} /></label>
           <button type="submit" className="hidden" />
         </form>
+      </Dialog>
+      <Dialog open={!!invite} onOpenChange={(o) => !o && setInvite(null)} size="md" icon={Send} title="Share the invitation link" description={`E-mail is not set up, so ${invite?.name || 'the user'} did not get a message. Send them this link (works once, 7 days):`}
+        footer={<Button onClick={() => setInvite(null)}>Done</Button>}>
+        <div className="flex gap-2"><Input readOnly value={invite?.url || ''} onFocus={(e) => e.target.select()} className="flex-1 font-mono text-xs" /><Button variant="outline" onClick={() => { navigator.clipboard?.writeText(invite.url); }}>Copy</Button></div>
       </Dialog>
     </>
   );

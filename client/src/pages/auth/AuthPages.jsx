@@ -181,7 +181,7 @@ export function Login() {
   if (challenge) return <Shell title="Two-step verification" subtitle="One more step to keep your account safe."><TwoFactorStep challenge={challenge.id} method={challenge.method} hint={challenge.hint} onBack={() => setChallenge(null)} /></Shell>;
   return (
     <Shell title="Welcome back" subtitle="Sign in to manage your digital business cards."
-      footer={settings.register_enable !== '0' && <>Don&apos;t have an account? <Link to="/register" className="font-medium text-primary hover:underline">Create one free</Link></>}>
+      footer={<>{settings.register_enable !== '0' && <>Don&apos;t have an account? <Link to="/register" className="font-medium text-primary hover:underline">Create one free</Link></>}<span className="mt-2 block text-xs text-muted-foreground">Added by your team or administrator? Open the link in your invitation e-mail to create your password. Lost it? Use <Link to="/forgot-password" className="font-medium text-primary hover:underline">Forgot password</Link> to get a new link.</span></>}>
       <Alert tone="success">{ok}</Alert>
       <Alert>{err.message !== 'Validation failed' && err.message && <>{err.message}{unverified && f.email && <button type="button" onClick={resend} className="ml-1 cursor-pointer font-semibold underline">Resend link</button>}</>}</Alert>
       <form onSubmit={submit} noValidate className="space-y-5">
@@ -277,17 +277,18 @@ export function ResetPassword() {
   const [params] = useSearchParams();
   const [f, setF] = useState({ password: '', password_confirmation: '' });
   const [msg, setMsg] = useState({ errors: {} });
+  const invite = params.get('invite') === '1'; // first-time link from an invitation e-mail
   const submit = async (e) => {
     e.preventDefault();
-    try { const { data } = await api.post('/auth/reset-password', { ...f, token: params.get('token'), email: params.get('email') }); setMsg({ ok: data.message, errors: {} }); } catch (ex) { setMsg({ err: ex.message === 'Validation failed' ? '' : ex.message, errors: ex.errors }); }
+    try { const { data } = await api.post('/auth/reset-password', { ...f, token: params.get('token'), email: params.get('email') }); setMsg({ ok: invite ? 'Your password is set. You can sign in now.' : data.message, errors: {}, done: true }); } catch (ex) { setMsg({ err: ex.message === 'Validation failed' ? '' : ex.message, errors: ex.errors }); }
   };
   return (
-    <Shell title="Set a new password" subtitle="Choose a strong password you don't use elsewhere." footer={<Link to="/login" className="font-medium text-primary hover:underline">Back to sign in</Link>}>
+    <Shell title={invite ? 'Welcome! Create your password' : 'Set a new password'} subtitle={invite ? `Your account is ready${params.get('email') ? ` for ${params.get('email')}` : ''}. Choose a password to finish. You will sign in with your e-mail and this password.` : "Choose a strong password you don't use elsewhere."} footer={<Link to="/login" className="font-medium text-primary hover:underline">Back to sign in</Link>}>
       <Alert tone="success">{msg.ok}</Alert><Alert>{msg.err}</Alert>
       <form onSubmit={submit} noValidate className="space-y-5">
         <Field label="New password" htmlFor="n1" error={msg.errors.password}><PasswordInput id="n1" value={f.password} onChange={(v) => setF({ ...f, password: v })} autoComplete="new-password" /></Field>
         <Field label="Confirm password" htmlFor="n2" error={msg.errors.password_confirmation}><PasswordInput id="n2" value={f.password_confirmation} onChange={(v) => setF({ ...f, password_confirmation: v })} autoComplete="new-password" /></Field>
-        <Button type="submit" size="lg" className="w-full">Save password</Button>
+        {msg.done ? <Button as={Link} to="/login" size="lg" className="w-full">Go to sign in</Button> : <Button type="submit" size="lg" className="w-full">{invite ? 'Create password' : 'Save password'}</Button>}
       </form>
     </Shell>
   );

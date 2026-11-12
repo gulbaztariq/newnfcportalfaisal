@@ -52,6 +52,7 @@ r.get('/dashboard', wrap(async (req, res) => {
     stats: { vcards: vcards.length, active: vcards.filter((v) => v.status).length, views: vcards.reduce((s, v) => s + v.views, 0), enquiries },
     chart: { labels: days.map((d) => d.format('DD MMM')), data: days.map((d) => views.filter((v) => dayjs(v.created_at).isSame(d, 'day')).length) },
     devices, recentEnquiries, subscription: await subs.current(req.user.id),
+    vcards: vcards.map((v) => ({ id: v.id, name: v.name, alias: v.url_alias, live: !!v.status })),
   });
 }));
 
