@@ -3,6 +3,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { ArrowRight, Eye, EyeOff, Lock, Mail, User, CheckCircle2, ShieldCheck, Nfc, QrCode, Share2, Phone, Sparkles, KeyRound, MailCheck } from 'lucide-react';
 import api from '@/lib/api';
+import { check } from '@/lib/validate';
 import { useAuth, homeFor } from '@/lib/auth';
 import Logo from '@/components/Logo';
 import { recaptchaToken, googleEnabled, renderGoogleButton } from '@/lib/thirdparty';
@@ -229,7 +230,10 @@ export function Login() {
   const emailMode = settings.email_login !== false && !pwFallback; // the normal way in: e-mail, then the code we send
   useEffect(() => { if (!loading && user) navigate(afterLogin(user), { replace: true }); }, [user, loading]); // eslint-disable-line
   const submit = async (e) => {
-    e.preventDefault(); setBusy(true); setUnverified(false);
+    e.preventDefault(); setUnverified(false);
+    const bad = check(f, emailMode ? { email: 'required|email' } : { email: 'required|email', password: 'required' });
+    if (Object.keys(bad).length) { setErr({ message: '', errors: bad }); return; }
+    setBusy(true);
     try {
       const { data } = await api.post(emailMode ? '/auth/login-code' : '/auth/login', emailMode ? { email: f.email } : f);
       if (data.setup_required) { setSetup(data.setup_token); setBusy(false); return; }
@@ -273,7 +277,11 @@ export function Register() {
   const [busy, setBusy] = useState(false);
   const set = (k, v) => { setF((x) => ({ ...x, [k]: v })); setErr((e) => ({ ...e, errors: { ...e.errors, [k]: undefined } })); };
   const submit = async (e) => {
-    e.preventDefault(); setBusy(true);
+    e.preventDefault();
+    const bad = check(f, { first_name: 'required|max:100', last_name: 'required|max:100', email: 'required|email|max:191', contact: 'phone', password: 'required|min:8|max:100', password_confirmation: 'required|same:password' });
+    if (!f.terms) bad.terms = 'You must accept the Terms and Privacy Policy to create an account';
+    if (Object.keys(bad).length) { setErr({ message: '', errors: bad }); return; }
+    setBusy(true);
     try {
       const { data } = await api.post('/auth/register', { ...f, recaptcha_token: await recaptchaToken(settings, 'register') });
       if (data.verify) { setDone(data.message); setBusy(false); return; }
@@ -323,7 +331,10 @@ export function ForgotPassword() {
   const [msg, setMsg] = useState({});
   const [busy, setBusy] = useState(false);
   const submit = async (e) => {
-    e.preventDefault(); setBusy(true);
+    e.preventDefault();
+    const bad = check({ email }, { email: 'required|email' });
+    if (bad.email) { setMsg({ err: bad.email }); return; }
+    setBusy(true);
     try { const { data } = await api.post('/auth/forgot-password', { email }); setMsg({ ok: data.message }); } catch (ex) { setMsg({ err: Object.values(ex.errors)[0] || ex.message }); } finally { setBusy(false); }
   };
   return (
@@ -345,6 +356,8 @@ export function ResetPassword() {
   const invite = params.get('invite') === '1'; // first-time link from an invitation e-mail
   const submit = async (e) => {
     e.preventDefault();
+    const bad = check(f, { password: 'required|min:8|max:100', password_confirmation: 'required|same:password' });
+    if (Object.keys(bad).length) { setMsg({ errors: bad }); return; }
     try { const { data } = await api.post('/auth/reset-password', { ...f, token: params.get('token'), email: params.get('email') }); setMsg({ ok: invite ? 'Your password is set. You can sign in now.' : data.message, errors: {}, done: true }); } catch (ex) { setMsg({ err: ex.message === 'Validation failed' ? '' : ex.message, errors: ex.errors }); }
   };
   return (

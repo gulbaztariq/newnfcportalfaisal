@@ -238,7 +238,7 @@ async function createAccount({ first_name, last_name, email, password, contact, 
 r.post('/register', authLimiter, wrap(async (req, res) => {
   const s = await settings.all();
   if (s.register_enable !== '1') fail(403, 'Registration is currently disabled');
-  validate(req.body, { first_name: 'required|max:100', last_name: 'required|max:100', email: 'required|email|max:191', password: 'required|min:8|max:100', contact: 'max:30' });
+  validate(req.body, { first_name: 'required|max:100', last_name: 'required|max:100', email: 'required|email|max:191', password: 'required|min:8|max:100', contact: 'phone' });
   if (req.body.password !== req.body.password_confirmation) fail(422, 'Validation failed', { password_confirmation: 'Passwords do not match' });
   if (!req.body.terms) fail(422, 'Validation failed', { terms: 'You must accept the terms' });
   await checkBotAndDomain(req);

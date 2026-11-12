@@ -63,7 +63,7 @@ r.put('/nfc-cards/:id/components', wrap(async (req, res) => {
 }));
 r.use('/nfc-cards', crud(M.NfcCard, {
   fields: PRODUCT_FIELDS, booleans: ['status', 'featured', 'show_in_shop', 'track_stock', 'no_wholesale_tiers'], files: ['front_image', 'back_image'], folder: 'nfc',
-  rules: { name: 'required|max:120', price: 'required|numeric' }, search: ['name', 'sku', 'category'], order: [['sort', 'ASC'], ['id', 'ASC']],
+  rules: { name: 'required|max:120', price: 'required|numeric|minv:0' }, search: ['name', 'sku', 'category'], order: [['sort', 'ASC'], ['id', 'ASC']],
   include: [{ model: M.Plan, as: 'plan', attributes: ['id', 'name', 'frequency'] }],
   beforeSave: async (data, _req, row) => {
     if (data.plan_id !== undefined) data.plan_id = Number(data.plan_id) || null; // empty = non-plan product
@@ -192,7 +192,7 @@ r.post('/orders', wrap(async (req, res) => {
   const collection = b.fulfilment === 'collection';
   const type = ['existing', 'new', 'organisation', 'guest'].includes(b.customer_type) ? b.customer_type : toBool(b.create_account) ? 'new' : 'guest';
   // phone and address are optional for staff orders
-  validate(b, { name: 'required|max:120', phone: 'max:30', address: 'max:1000', city: 'max:120', email: `${type === 'new' ? 'required|' : ''}email|max:191`, company_name: 'max:150', discount_value: 'numeric', delivery_charges: 'numeric' });
+  validate(b, { name: 'required|max:120', phone: 'phone', address: 'max:1000', city: 'max:120', email: `${type === 'new' ? 'required|' : ''}email|max:191`, company_name: 'max:150', discount_value: 'numeric', delivery_charges: 'numeric|minv:0' });
   if (b.discount_type === 'percent' && Number(b.discount_value) > 100) fail(422, 'Validation failed', { discount_value: 'A percentage cannot be more than 100' });
   const source = b.order_source_id ? await M.OrderSource.findByPk(b.order_source_id) : null;
   if (b.order_source_id && !source) fail(422, 'Validation failed', { order_source_id: 'Unknown order source' });
@@ -337,7 +337,7 @@ r.get('/guest-customers/:id', wrap(async (req, res) => {
 r.put('/guest-customers/:id', wrap(async (req, res) => {
   const g = await M.GuestCustomer.findByPk(req.params.id);
   if (!g) fail(404, 'Not found');
-  validate(req.body, { name: 'required|max:120', phone: 'max:30', email: 'email|max:191', company_name: 'max:150', city: 'max:120', address: 'max:1000', notes: 'max:5000' });
+  validate(req.body, { name: 'required|max:120', phone: 'phone', email: 'email|max:191', company_name: 'max:150', city: 'max:120', address: 'max:1000', notes: 'max:5000' });
   const data = pick(req.body, ['name', 'phone', 'email', 'company_name', 'address', 'city', 'notes']);
   for (const [k, v] of Object.entries(data)) if (v === '') data[k] = null;
   if (data.phone !== undefined) data.phone_key = phoneKey(data.phone);
@@ -670,11 +670,17 @@ r.get('/invoices/:id', wrap(async (req, res) => {
 }));
 const INVOICE_FIELDS = ['customer_name', 'customer_email', 'customer_phone', 'customer_address', 'customer_company', 'discount', 'tax_name', 'tax_rate', 'delivery_charges', 'issue_date', 'due_date', 'template', 'notes', 'terms', 'currency_code', 'currency_icon'];
 const invoiceBody = (b) => {
-  validate(b, { customer_name: 'required|max:150', customer_email: 'email' });
+  validate(b, { customer_name: 'required|max:150', customer_email: 'email|max:191', customer_phone: 'phone', discount: 'numeric|minv:0', tax_rate: 'numeric|minv:0|maxv:100', delivery_charges: 'numeric|minv:0', issue_date: 'date', due_date: 'date' }, { issue_date: 'Issue date', due_date: 'Due date', tax_rate: 'Tax rate' });
   const d = pick(b, INVOICE_FIELDS);
   if (d.template && !invoices.TEMPLATES[d.template]) d.template = 'modern';
   d.items = jsonList(b.items);
-  if (!d.items.length) fail(422, 'Add at least one line item');
+  if (!d.items.length) fail(422, 'Validation failed', { items: 'Add at least one line item' });
+  d.items.forEach((it, i) => {
+    const n = i + 1;
+    if (!String(it.description || it.name || '').trim()) fail(422, 'Validation failed', { items: `Line ${n}: description is required` });
+    if (!(Number(it.quantity || 1) > 0)) fail(422, 'Validation failed', { items: `Line ${n}: quantity must be more than zero` });
+    if (Number.isNaN(Number(it.price ?? it.unit_price ?? 0)) || Number(it.price ?? it.unit_price ?? 0) < 0) fail(422, 'Validation failed', { items: `Line ${n}: price must be zero or more` });
+  });
   for (const k of ['issue_date', 'due_date']) if (d[k] === '') d[k] = null;
   return d;
 };
@@ -744,19 +750,19 @@ r.get('/finance/report/export', wrap(async (req, res) => {
     [...rep.series, { month: 'TOTAL', orders: rep.summary.orders, revenue: rep.summary.revenue, cogs: rep.summary.cogs, courier: rep.summary.courier, expenses: rep.summary.expenses, profit: rep.summary.net_profit }]);
 }));
 r.use('/finance/accounts', crud(M.FinanceAccount, { fields: ['name', 'type', 'opening_balance', 'note', 'status'], booleans: ['status'], rules: { name: 'required|max:120' }, order: [['id', 'ASC']] }));
-r.use('/finance/partners', crud(M.Partner, { fields: ['name', 'email', 'phone', 'share_percent', 'note', 'status'], booleans: ['status'], rules: { name: 'required|max:120', email: 'email' }, order: [['id', 'ASC']] }));
+r.use('/finance/partners', crud(M.Partner, { fields: ['name', 'email', 'phone', 'share_percent', 'note', 'status'], booleans: ['status'], rules: { name: 'required|max:120', email: 'email|max:191' }, order: [['id', 'ASC']] }));
 r.use('/finance/categories', crud(M.FinanceCategory, { fields: ['name', 'type'], rules: { name: 'required|max:120', type: 'required|in:expense,income' }, order: [['name', 'ASC']], filters: ['type'] }));
 r.use('/finance/entries', crud(M.FinanceEntry, {
   fields: ['type', 'date', 'title', 'category', 'amount', 'account_id', 'partner_id', 'vendor_id', 'payment_method', 'reference', 'description', 'status'],
   files: ['attachment'], folder: 'finance', types: DOC_TYPES, search: ['title', 'category', 'reference', 'description'], filters: ['type', 'partner_id', 'account_id', 'category', 'status', 'vendor_id'],
-  rules: { type: 'required|in:expense,income', date: 'required', title: 'required|max:200', amount: 'required|numeric', status: 'in:paid,unpaid' },
+  rules: { type: 'required|in:expense,income', date: 'required|date', title: 'required|max:200', amount: 'required|numeric|minv:0.01', status: 'in:paid,unpaid' },
   include: [{ model: M.Partner, as: 'partner', attributes: ['id', 'name'] }, { model: M.FinanceAccount, as: 'account', attributes: ['id', 'name'] }, { model: M.Vendor, attributes: ['id', 'name'] }, { model: M.User, as: 'creator', attributes: ['id', 'first_name', 'last_name'] }],
   order: [['date', 'DESC'], ['id', 'DESC']],
   beforeSave: (data, req, row) => { if (!row) data.created_by = req.user.id; return data; },
 }));
 r.use('/finance/settlements', crud(M.CourierSettlement, {
   fields: ['courier', 'date', 'reference', 'cod_amount', 'charges', 'net_amount', 'tracking_numbers', 'note', 'account_id'], files: ['attachment'], folder: 'finance', types: DOC_TYPES,
-  rules: { date: 'required', cod_amount: 'numeric', charges: 'numeric' }, order: [['date', 'DESC']],
+  rules: { date: 'required|date', cod_amount: 'numeric|minv:0', charges: 'numeric|minv:0' }, order: [['date', 'DESC']],
   include: [{ model: M.FinanceAccount, as: 'account', attributes: ['id', 'name'] }],
   beforeSave: async (data) => {
     const list = Array.isArray(data.tracking_numbers) ? data.tracking_numbers : String(data.tracking_numbers || '').split(/[\s,;]+/).filter(Boolean);
@@ -786,7 +792,7 @@ r.get('/inventory/items', wrap(async (req, res) => {
 }));
 r.use('/inventory/items', crud(M.InventoryItem, {
   fields: ['name', 'sku', 'category', 'unit', 'purchase_price', 'sale_price', 'reorder_level', 'description', 'status'], booleans: ['status'],
-  rules: { name: 'required|max:150', purchase_price: 'numeric', sale_price: 'numeric' },
+  rules: { name: 'required|max:150', purchase_price: 'numeric|minv:0', sale_price: 'numeric|minv:0' },
   beforeSave: async (data, req, row) => {
     if (data.sku) { if (await M.InventoryItem.findOne({ where: { sku: data.sku, id: { [Op.ne]: row?.id || 0 } } })) fail(422, 'Validation failed', { sku: 'SKU already used' }); } else if (!row) data.sku = `INV-${Date.now().toString(36).toUpperCase()}`;
     return data;
@@ -815,7 +821,7 @@ r.post('/inventory/adjust', wrap(async (req, res) => {
   res.json({ message: 'Stock updated' });
 }));
 r.post('/inventory/transfer', wrap(async (req, res) => {
-  validate(req.body, { inventory_item_id: 'required', quantity: 'required|numeric' });
+  validate(req.body, { inventory_item_id: 'required', quantity: 'required|numeric|minv:0.0001' });
   await inventory.transfer({ itemId: req.body.inventory_item_id, fromVendorId: req.body.from_vendor_id || null, toVendorId: req.body.to_vendor_id || null, quantity: req.body.quantity, date: req.body.date, note: req.body.note, userId: req.user.id });
   res.json({ message: 'Stock transferred' });
 }));
@@ -830,7 +836,7 @@ r.get('/purchases', wrap(async (req, res) => {
   res.json(paged(rows, count, p));
 }));
 r.post('/purchases', purchaseUpload, wrap(async (req, res) => {
-  validate(req.body, { date: 'required' });
+  validate(req.body, { date: 'required|date' });
   const data = {
     ...pick(req.body, ['supplier_name', 'invoice_no', 'date', 'origin_country', 'currency', 'note']),
     is_import: toBool(req.body.is_import), exchange_rate: Number(req.body.exchange_rate || 1) || 1,
@@ -878,18 +884,18 @@ r.get('/vendors', wrap(async (req, res) => {
 }));
 r.use('/vendors', crud(M.Vendor, {
   fields: ['name', 'type', 'contact_person', 'phone', 'email', 'address', 'rates', 'opening_balance', 'notes', 'status'], booleans: ['status'],
-  rules: { name: 'required|max:150', email: 'email' },
+  rules: { name: 'required|max:150', email: 'email|max:191' },
   beforeSave: (data) => { if (data.rates !== undefined) data.rates = jsonList(data.rates).filter((x) => x && x.label).map((x) => ({ label: String(x.label).slice(0, 120), rate: r2(x.rate), unit: String(x.unit || 'pc').slice(0, 20) })); return data; },
 }));
 r.use('/vendor-bills', crud(M.VendorBill, {
   fields: ['vendor_id', 'bill_no', 'date', 'due_date', 'amount', 'category', 'description', 'items'], files: ['attachment'], folder: 'vendors', types: DOC_TYPES,
-  rules: { vendor_id: 'required', date: 'required', amount: 'required|numeric', category: 'in:printing,other' }, filters: ['vendor_id', 'category'], order: [['date', 'DESC']],
+  rules: { vendor_id: 'required', date: 'required|date', amount: 'required|numeric|minv:0.01', category: 'in:printing,other' }, filters: ['vendor_id', 'category'], order: [['date', 'DESC']],
   include: [{ model: M.Vendor, attributes: ['id', 'name'] }],
   beforeSave: (data) => { if (data.items !== undefined) data.items = jsonList(data.items); if (data.due_date === '') data.due_date = null; return data; },
 }));
 r.use('/vendor-payments', crud(M.VendorPayment, {
   fields: ['vendor_id', 'vendor_bill_id', 'amount', 'date', 'method', 'reference', 'note', 'account_id', 'partner_id'], files: ['attachment'], folder: 'vendors', types: DOC_TYPES,
-  rules: { vendor_id: 'required', date: 'required', amount: 'required|numeric' }, filters: ['vendor_id', 'partner_id'], order: [['date', 'DESC']],
+  rules: { vendor_id: 'required', date: 'required|date', amount: 'required|numeric|minv:0.01' }, filters: ['vendor_id', 'partner_id'], order: [['date', 'DESC']],
   include: [{ model: M.Vendor, attributes: ['id', 'name'] }, { model: M.Partner, as: 'partner', attributes: ['id', 'name'] }, { model: M.FinanceAccount, as: 'account', attributes: ['id', 'name'] }],
 }));
 
@@ -930,7 +936,7 @@ r.get('/messaging/events', wrap(async (_req, res) => {
   res.json({ data: Object.entries(messaging.EVENTS).map(([key, e]) => ({ key, label: e.label, text: s[`msg_tpl_${key}`] || e.text, default_text: e.text, wa_template: s[`wa_tpl_${key}`] || '', whatsapp: s[`notify_${key}_whatsapp`] ?? '', sms: s[`notify_${key}_sms`] ?? '' })) });
 }));
 r.post('/messaging/test', wrap(async (req, res) => {
-  validate(req.body, { to: 'required|max:30', channel: 'required|in:whatsapp,sms' });
+  validate(req.body, { to: 'required|phone', channel: 'required|in:whatsapp,sms' });
   const to = messaging.normalizePhone(req.body.to, (await settings.get('phone_default_region')) || '92');
   try {
     if (req.body.channel === 'whatsapp') await messaging.sendWhatsapp(to, req.body.text || 'Test message from your NFC platform'); else await messaging.sendSms(to, req.body.text || 'Test message from your NFC platform');

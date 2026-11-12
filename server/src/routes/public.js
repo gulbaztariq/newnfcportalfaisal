@@ -139,7 +139,7 @@ api.post('/vcards/:alias/enquiry', formLimiter, enquiryUpload, wrap(async (req, 
   if (req.body.website) return res.json({ message: 'Thank you!' });
   const v = await liveVcard(req.params.alias);
   if (!v.enable_enquiry_form && req.body.message !== 'Downloaded the contact card') fail(404, 'Not found');
-  validate(req.body, { name: 'required|max:120', email: 'email|max:191', phone: 'max:30', message: 'required|max:2000', product_name: 'max:150' });
+  validate(req.body, { name: 'required|max:120', email: 'email|max:191', phone: 'phone', message: 'required|max:2000', product_name: 'max:150' });
   await guardEmail(req.body.email);
   const e = await M.VcardEnquiry.create({
     vcard_id: v.id, name: req.body.name, email: req.body.email || null, phone: req.body.phone || null, message: req.body.message,
@@ -183,7 +183,7 @@ api.get('/vcards/:alias/slots', wrap(async (req, res) => {
 }));
 api.post('/vcards/:alias/appointments', formLimiter, wrap(async (req, res) => {
   const v = await liveVcard(req.params.alias);
-  validate(req.body, { name: 'required|max:120', email: 'email|max:191', phone: 'max:30', date: 'required', from_time: 'required', to_time: 'required', notes: 'max:1000', service_name: 'max:150' });
+  validate(req.body, { name: 'required|max:120', email: 'email|max:191', phone: 'phone', date: 'required|date', from_time: 'required', to_time: 'required', notes: 'max:1000', service_name: 'max:150' });
   if (!req.body.email && !req.body.phone) fail(422, 'Please leave an e-mail or phone number');
   await guardEmail(req.body.email);
   const slot = (await freeSlots(v, req.body.date)).find((s) => s.from === req.body.from_time && s.to === req.body.to_time);
@@ -199,7 +199,7 @@ api.post('/vcards/:alias/appointments', formLimiter, wrap(async (req, res) => {
 api.post('/stores/:alias/orders', orderLimiter, wrap(async (req, res) => {
   const st = await M.WhatsappStore.findOne({ where: { url_alias: req.params.alias, status: true }, include: [{ model: M.User, attributes: ['email', 'is_active', 'org_status'] }] });
   if (!st || !isLive(st.user)) fail(404, 'Store not found');
-  validate(req.body, { customer_name: 'required|max:120', customer_phone: 'required|max:30', customer_address: 'max:500', notes: 'max:500', delivery_type: 'in:delivery,takeaway' });
+  validate(req.body, { customer_name: 'required|max:120', customer_phone: 'required|phone', customer_address: 'max:500', notes: 'max:500', delivery_type: 'in:delivery,takeaway' });
   const type = req.body.delivery_type || (st.delivery_enabled ? 'delivery' : 'takeaway');
   if ((type === 'delivery' && !st.delivery_enabled) || (type === 'takeaway' && !st.takeaway_enabled)) fail(422, 'This option is not available');
   if (type === 'delivery' && !String(req.body.customer_address || '').trim()) fail(422, 'Validation failed', { customer_address: 'Please enter your delivery address' });
@@ -524,6 +524,7 @@ pages.get('/:alias/manifest.webmanifest', wrap(async (req, res, next) => {
 pages.post('/:alias/unlock', formLimiter, express.urlencoded({ extended: false }), wrap(async (req, res, next) => {
   const v = await findVcard(req.params.alias);
   if (!v || !v.password) return next();
+  if (!String(req.body.password || '').trim()) return res.status(422).send(renderLocked({ v, app: await settings.all(), error: 'Enter the card password', nonce: res.locals.nonce }));
   if (!(await bcrypt.compare(String(req.body.password || ''), v.password))) {
     return res.status(422).send(renderLocked({ v, app: await settings.all(), error: 'Incorrect password', nonce: res.locals.nonce }));
   }

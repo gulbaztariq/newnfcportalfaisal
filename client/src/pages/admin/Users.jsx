@@ -54,7 +54,9 @@ export default function Users({ role = 'user' }) {
     setOpen(true);
   };
   const save = async (e) => {
-    e?.preventDefault(); setSaving(true);
+    e?.preventDefault();
+    if (!form.validate({ first_name: 'required|max:100', last_name: 'max:100', email: 'required|email|max:191', contact: 'phone', password: 'min:6|max:100', password_confirmation: form.values.password ? 'required|same:password' : '' })) return;
+    setSaving(true);
     const v = { ...form.values }; if (!(v.avatar instanceof File)) delete v.avatar;
     if (!(v.logo instanceof File)) delete v.logo;
     if (!v.is_organisation) for (const k of Object.keys(orgBlank)) delete v[k]; else v.is_organisation = '1';

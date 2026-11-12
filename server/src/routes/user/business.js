@@ -23,6 +23,7 @@ r.get('/short-links', wrap(async (req, res) => {
   res.json({ data: rows.map(withUrl), enabled: !!req._features?.url_shortener, limit: sub?.plan?.no_of_short_links || 0 });
 }));
 async function targetOf(req, b, row) {
+  validate(b, { title: 'max:150', note: 'max:500' }, { title: 'Link title', note: 'Note' });
   const d = pick(b, ['title', 'note']);
   if (b.target_type !== undefined || !row) {
     const type = b.target_type || 'vcard';

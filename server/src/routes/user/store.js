@@ -48,7 +48,7 @@ r.get('/stores', wrap(async (req, res) => {
 }));
 r.post('/stores', storeUpload, trackStorage, wrap(async (req, res) => {
   await requireFeature(req, 'whatsapp_store', 'WhatsApp store');
-  validate(req.body, { name: 'required|max:150', url_alias: 'required|alias', whatsapp_number: 'required|max:30' });
+  validate(req.body, { name: 'required|max:150', url_alias: 'required|alias', whatsapp_number: 'required|phone' });
   const sub = await subs.current(req.user.id);
   const limit = sub?.plan?.no_of_whatsapp_stores || 1;
   if ((await M.WhatsappStore.count({ where: { user_id: req.user.id } })) >= limit) fail(422, `Your plan allows ${limit} store(s)`);
@@ -67,7 +67,7 @@ r.get('/stores/:sid', wrap(async (req, res) => {
 }));
 r.put('/stores/:sid', storeUpload, trackStorage, wrap(async (req, res) => {
   const st = await ownStore(req);
-  validate({ ...st.toJSON(), ...req.body }, { name: 'required|max:150', whatsapp_number: 'required|max:30' });
+  validate({ ...st.toJSON(), ...req.body }, { name: 'required|max:150', whatsapp_number: 'required|phone' });
   const data = storeData(req.body, st);
   if (req.body.url_alias && req.body.url_alias.toLowerCase() !== st.url_alias) {
     const alias = req.body.url_alias.toLowerCase();
@@ -137,7 +137,7 @@ const prodData = (b) => {
 };
 r.post('/stores/:sid/products', prodUpload, trackStorage, wrap(async (req, res) => {
   const st = await ownStore(req);
-  validate(req.body, { name: 'required|max:150', price: 'required|numeric', sale_price: 'numeric', stock: 'numeric' });
+  validate(req.body, { name: 'required|max:150', price: 'required|numeric|minv:0', sale_price: 'numeric|minv:0', stock: 'integer|minv:0' });
   const data = prodData(req.body);
   if (data.category_id && !(await M.StoreCategory.findOne({ where: { id: data.category_id, store_id: st.id } }))) data.category_id = null;
   const p = await M.StoreProduct.create({ ...data, store_id: st.id, images: (req.files || []).map((f) => fileUrl('stores', f)) });
@@ -147,7 +147,7 @@ r.put('/stores/:sid/products/:pid', prodUpload, trackStorage, wrap(async (req, r
   const st = await ownStore(req);
   const p = await M.StoreProduct.findOne({ where: { id: req.params.pid, store_id: st.id } });
   if (!p) fail(404, 'Not found');
-  validate({ ...p.toJSON(), ...req.body }, { name: 'required|max:150', price: 'required|numeric' });
+  validate({ ...p.toJSON(), ...req.body }, { name: 'required|max:150', price: 'required|numeric|minv:0' });
   let keep = p.images || [];
   if (req.body.keep_images !== undefined) {
     let k = []; try { k = JSON.parse(req.body.keep_images); } catch { k = []; }

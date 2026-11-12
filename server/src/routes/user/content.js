@@ -44,7 +44,7 @@ const productData = (b) => {
 r.post('/vcards/:id/products', productUpload, trackStorage, wrap(async (req, res) => {
   await requireFeature(req, 'products', 'Products');
   const v = await ownVcardOf(req, req.params.id);
-  validate(req.body, { name: 'required|max:150', price: 'numeric', product_url: 'max:500' });
+  validate(req.body, { name: 'required|max:150', price: 'numeric|minv:0', product_url: 'url|max:500' });
   if ((await M.VcardProduct.count({ where: { vcard_id: v.id } })) >= 100) fail(422, 'Limit reached (100 products)');
   const item = await M.VcardProduct.create({ ...productData(req.body), vcard_id: v.id, images: (req.files || []).map((f) => fileUrl('products', f)) });
   res.status(201).json({ data: item, message: 'Product added' });
@@ -53,7 +53,7 @@ r.put('/vcards/:id/products/:pid', productUpload, trackStorage, wrap(async (req,
   const v = await ownVcardOf(req, req.params.id);
   const item = await M.VcardProduct.findOne({ where: { id: req.params.pid, vcard_id: v.id } });
   if (!item) fail(404, 'Not found');
-  validate({ ...item.toJSON(), ...req.body }, { name: 'required|max:150', price: 'numeric' });
+  validate({ ...item.toJSON(), ...req.body }, { name: 'required|max:150', price: 'numeric|minv:0' });
   let keep = item.images || [];
   if (req.body.keep_images !== undefined) {
     let k = []; try { k = JSON.parse(req.body.keep_images); } catch { k = []; }
@@ -227,7 +227,7 @@ r.get('/organisation', wrap(async (req, res) => {
 r.put('/organisation', orgUpload, wrap(async (req, res) => {
   const owner = await orgOwner(req);
   if (req.actor) fail(403, 'Only the organisation owner can change the company profile');
-  validate(req.body, { name: 'required|max:150', email: 'email', phone: 'max:40', address: 'max:500', city: 'max:120', country: 'max:120' });
+  validate(req.body, { name: 'required|max:150', email: 'email|max:191', phone: 'phone', address: 'max:500', city: 'max:120', country: 'max:120' });
   const data = { ...pick(req.body, ['name', 'email', 'phone', 'address', 'city', 'country']), website: websiteOf(req.body.website) };
   for (const [k, v] of Object.entries(data)) if (v === '') data[k] = null;
   let row = await M.Organisation.findOne({ where: { owner_id: owner.id } });
@@ -255,7 +255,7 @@ r.get('/organisation/members', wrap(async (req, res) => {
 }));
 r.post('/organisation/members', wrap(async (req, res) => {
   const owner = await orgOwner(req);
-  validate(req.body, { first_name: 'required|max:100', last_name: 'max:100', email: 'required|email', password: 'min:8|max:100', contact: 'max:30', job_title: 'max:150' });
+  validate(req.body, { first_name: 'required|max:100', last_name: 'max:100', email: 'required|email', password: 'min:8|max:100', contact: 'phone', job_title: 'max:150' });
   if (req.actor && req.body.company_role === 'manager') fail(403, 'Only the organisation owner can add managers');
   const limit = await org.seatLimit(owner);
   if ((await org.seatsUsed(owner)) >= limit) fail(422, `Your organisation allows ${limit} user(s). Contact the administrator for more seats.`);
@@ -339,7 +339,7 @@ r.get('/organisation/members/:mid/details', wrap(async (req, res) => {
 }));
 r.put('/organisation/members/:mid/details', memberPhotoUpload, wrap(async (req, res) => {
   const m = await memberOf(req);
-  validate(req.body, { first_name: 'required|max:100', last_name: 'max:100', email: 'required|email', contact: 'max:30' });
+  validate(req.body, { first_name: 'required|max:100', last_name: 'max:100', email: 'required|email', contact: 'phone' });
   const email = String(req.body.email).toLowerCase().trim();
   if (email !== m.email && (await M.User.findOne({ where: { email } }))) fail(422, 'Validation failed', { email: 'This e-mail is already registered' });
   const account = { ...pick(req.body, ['first_name', 'last_name', 'contact', 'region_code']), email };
@@ -349,7 +349,7 @@ r.put('/organisation/members/:mid/details', memberPhotoUpload, wrap(async (req, 
     if (!card) fail(404, 'Card not found');
     let c = req.body.card || {};
     if (typeof c === 'string') { try { c = JSON.parse(c); } catch { c = {}; } }
-    validate({ ...card.toJSON(), ...c }, { name: 'required|max:120', email: 'email', location_url: 'url' });
+    validate({ ...card.toJSON(), ...c }, { name: 'required|max:120', email: 'email|max:191', location_url: 'url' });
     const data = pick(c, org.CARD_FIELDS);
     for (const [k, v] of Object.entries(data)) data[k] = v === '' || v === null ? null : String(v).slice(0, k === 'description' ? 5000 : 500);
     if (data.name === null) delete data.name;

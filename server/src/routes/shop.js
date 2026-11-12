@@ -99,7 +99,7 @@ const isDesignUrl = (u) => !u || /^\/uploads\/designs\/[a-f0-9]{32}\.(svg|png|jp
 r.post('/checkout', checkoutLimiter, wrap(async (req, res) => {
   await shopOn();
   const s = await settings.all();
-  validate(req.body, { name: 'required|max:120', phone: 'required|max:30', email: 'required|email|max:191', address: 'required|max:1000', city: 'required|max:120', company_name: 'max:150', customer_note: 'max:2000', design_prompt: 'max:2000' });
+  validate(req.body, { name: 'required|max:120', phone: 'required|phone', email: 'required|email|max:191', address: 'required|max:1000', city: 'required|max:120', company_name: 'max:150', customer_note: 'max:2000', design_prompt: 'max:2000' });
   if (!req.user && !(await extras.verifyRecaptcha(req.body.recaptcha_token, req.ip))) fail(422, 'reCAPTCHA check failed, please try again');
   if (await extras.isBlockedEmail(req.body.email)) fail(422, 'Validation failed', { email: 'This e-mail domain is not allowed' });
   const isCod = toBool(req.body.is_cod);

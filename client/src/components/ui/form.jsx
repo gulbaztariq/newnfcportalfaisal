@@ -5,6 +5,7 @@ import * as Cb from '@radix-ui/react-checkbox';
 import { motion } from 'motion/react';
 import { Check, ChevronDown, ImagePlus, UploadCloud, X } from 'lucide-react';
 import { cn } from '@/lib/cn';
+import { check } from '@/lib/validate';
 
 /* ----------------------------------------------------------------- select */
 const EMPTY = '__none__';
@@ -138,5 +139,7 @@ export function useForm(initial) {
   const set = (name, v) => { setValues((x) => ({ ...x, [name]: v })); setErrors((e) => ({ ...e, [name]: undefined })); };
   /** props for <Input>/<Textarea> */
   const input = (name) => ({ id: `f-${name}`, name, value: values[name] ?? '', onChange: (e) => set(name, e.target.value), 'aria-invalid': !!errors[name] || undefined });
-  return { values, setValues, errors, setErrors, set, input };
+  /** run instant checks (same wording as the server); shows the messages and returns true when everything is fine */
+  const validate = (rules, labels) => { const e = check(values, rules, labels); setErrors(e); return Object.keys(e).length === 0; };
+  return { values, setValues, errors, setErrors, set, input, validate };
 }
