@@ -5,7 +5,7 @@ const jwt = require('jsonwebtoken');
 const QRCode = require('qrcode');
 const rateLimit = require('express-rate-limit');
 const { User, AffiliateUser } = require('../models');
-const { wrap, fail, validate, pick } = require('../utils/http');
+const { HttpError, wrap, fail, validate, pick } = require('../utils/http');
 const { issueToken, clearTokens, requireAuth, COOKIE, IMP_COOKIE, cookieOpts } = require('../middleware/auth');
 const { makeUpload, fileUrl, removeFile } = require('../middleware/upload');
 const settings = require('../services/settings');
@@ -84,12 +84,33 @@ r.post('/login', authLimiter, wrap(async (req, res) => {
   await completeLogin(res, user);
 }));
 
+/**
+ * Sign in with just an e-mail: a 6-digit code is e-mailed, the person types it in (POST /two-factor with the challenge).
+ * The answer is identical for unknown, deactivated and locked accounts, so it cannot be used to find out who has an account.
+ */
+r.post('/login-code', authLimiter, wrap(async (req, res) => {
+  validate(req.body, { email: 'required|email' });
+  if (process.env.DISABLE_LOGIN_OTP === '1' || !(await mail.isConfigured())) fail(503, 'Sign-in codes are not available right now. Please sign in with your password.');
+  const email = String(req.body.email).toLowerCase().trim();
+  const user = await User.scope('withSecrets').findOne({ where: { email } });
+  const usable = !!user && user.is_active && org.canSignIn(user) && !(await security.lockoutState(user));
+  if (usable) {
+    try { await security.sendLoginCode(user, { resend: true }); } catch (e) {
+      if (!(e instanceof HttpError && e.status === 429)) { console.error('[login code]', e.message); fail(502, 'We could not e-mail your sign-in code. Please try again in a moment.'); } // 429: a code was just sent, reuse it
+    }
+  } else security.strike(req.ip, 1);
+  const challenge = jwt.sign({ sub: usable ? user.id : 0, v: usable ? user.token_version || 0 : 0, p: '2fa', m: 'email', via: 'code' }, jwtSecret, { expiresIn: '10m' });
+  const [n, d] = email.split('@');
+  res.json({ two_factor: true, method: 'email', challenge, email_hint: `${n.slice(0, 2)}***@${d}` });
+}));
+
 /** Send a new e-mail sign-in code for a pending e-mail challenge */
 r.post('/two-factor/resend', codeLimiter, wrap(async (req, res) => {
   let payload;
   try { payload = jwt.verify(String(req.body.challenge || ''), jwtSecret); } catch { fail(422, 'Your sign-in session expired, please sign in again'); }
   if (payload.p !== '2fa' || payload.m !== 'email') fail(422, 'Invalid request');
-  const user = await User.scope('withSecrets').findByPk(payload.sub);
+  const user = payload.sub ? await User.scope('withSecrets').findByPk(payload.sub) : null;
+  if (!payload.sub) return res.json({ message: 'A new code has been sent' }); // challenge for an e-mail that has no account: same answer
   if (!user || !user.is_active || !org.canSignIn(user)) fail(422, 'Invalid request');
   await security.sendLoginCode(user, { resend: true });
   res.json({ message: 'A new code has been sent' });
@@ -100,13 +121,17 @@ r.post('/two-factor', codeLimiter, wrap(async (req, res) => {
   let payload;
   try { payload = jwt.verify(String(req.body.challenge || ''), jwtSecret); } catch { fail(422, 'Your sign-in session expired, please sign in again'); }
   if (payload.p !== '2fa') fail(422, 'Invalid request');
-  const user = await User.scope('withSecrets').findByPk(payload.sub);
+  const user = payload.sub ? await User.scope('withSecrets').findByPk(payload.sub) : null;
+  if (!payload.sub) { security.strike(req.ip, 2); fail(422, 'Validation failed', { code: 'The code is invalid or expired' }); }
   if (!user || !user.is_active || (user.token_version || 0) !== payload.v) fail(422, 'Invalid request');
   if (!org.canSignIn(user)) fail(403, org.LOCKED_MESSAGE);
   const code = String(req.body.code || '').trim();
   if (payload.m === 'email') {
     if (!(await security.checkLoginCode(user, code))) { security.strike(req.ip, 2); fail(422, 'Validation failed', { code: 'The code is invalid or expired' }); }
-    await user.update({ last_login_at: new Date() });
+    if (user.two_factor_enabled && payload.via === 'code') { // authenticator users still give their app code after the e-mailed one
+      return res.json({ two_factor: true, method: 'totp', challenge: jwt.sign({ sub: user.id, v: user.token_version || 0, p: '2fa', m: 'totp' }, jwtSecret, { expiresIn: '5m' }) });
+    }
+    await user.update({ last_login_at: new Date(), ...(user.email_verified_at ? {} : { email_verified_at: new Date() }) });
     res.clearCookie(IMP_COOKIE, { path: '/' });
     issueToken(res, user);
     return res.json({ user: publicUser(user) });

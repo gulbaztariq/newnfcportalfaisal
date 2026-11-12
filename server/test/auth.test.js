@@ -148,3 +148,52 @@ test('login code: the product default is ON for everyone (users, company admins 
   assert.equal(defaults.login_otp_enable, '1');
   assert.equal(defaults.enforce_2fa_staff, '1');
 });
+
+/* ---------------- sign in with only an e-mail: the code is the credential ---------------- */
+test('e-mail login: e-mail -> code by mail -> signed in, no password involved', async () => {
+  const u = await makeUser(); const c = client(ctx.base);
+  const a = await c.post('/api/auth/login-code', { email: u.email });
+  assert.equal(a.status, 200); assert.equal(a.body.method, 'email'); assert.ok(a.body.challenge); assert.match(a.body.email_hint, /\*\*\*@/);
+  const code = codeFromMail(); assert.match(code, /^\d{6}$/); assert.equal(outbox.at(-1).to, u.email);
+  assert.equal((await c.post('/api/auth/two-factor', { challenge: a.body.challenge, code: code === '000000' ? '111111' : '000000' })).status, 422, 'wrong code');
+  const ok = await c.post('/api/auth/two-factor', { challenge: a.body.challenge, code });
+  assert.equal(ok.status, 200, ok.text); assert.equal(ok.body.user.email, u.email);
+  assert.equal((await c.get('/api/auth/me')).body.user.email, u.email, 'session cookie works');
+  assert.equal((await c.post('/api/auth/two-factor', { challenge: a.body.challenge, code })).status, 422, 'a code works once');
+});
+test('e-mail login: unknown, deactivated and locked accounts get the same answer and no mail; the code never works', async () => {
+  const gone = await makeUser({ is_active: false });
+  for (const email of ['ghost@example.test', gone.email]) {
+    outbox.length = 0; const c = client(ctx.base);
+    const r = await c.post('/api/auth/login-code', { email });
+    assert.equal(r.status, 200); assert.equal(r.body.method, 'email'); assert.equal(outbox.length, 0, 'nothing mailed');
+    const t = await c.post('/api/auth/two-factor', { challenge: r.body.challenge, code: '123456' });
+    assert.equal(t.status, 422); assert.ok(t.body.errors?.code);
+    assert.equal((await c.post('/api/auth/two-factor/resend', { challenge: r.body.challenge })).status, 200);
+  }
+  assert.equal((await client(ctx.base).post('/api/auth/login-code', { email: 'nope' })).status, 422);
+});
+test('e-mail login: five wrong codes burn it; asking again right away does not send a second mail', async () => {
+  const u = await makeUser(); const c = client(ctx.base);
+  const a = await c.post('/api/auth/login-code', { email: u.email }); const code = codeFromMail();
+  const again = await c.post('/api/auth/login-code', { email: u.email }); assert.equal(again.status, 200);
+  assert.equal(outbox.filter((m) => m.key === 'login_code').length, 1, 'cooldown: one mail');
+  for (let i = 0; i < 5; i += 1) await c.post('/api/auth/two-factor', { challenge: a.body.challenge, code: '999999' === code ? '888888' : '999999' });
+  assert.equal((await c.post('/api/auth/two-factor', { challenge: a.body.challenge, code })).status, 422, 'burned after 5 wrong tries');
+});
+test('e-mail login: needs mail; an authenticator user still gives the app code; a new invitee is verified by the code', async () => {
+  const u = await makeUser({ email_verified_at: null }); const c = client(ctx.base);
+  const a = await c.post('/api/auth/login-code', { email: u.email });
+  const ok = await c.post('/api/auth/two-factor', { challenge: a.body.challenge, code: codeFromMail() });
+  assert.equal(ok.status, 200); assert.ok((await M.User.findByPk(u.id)).email_verified_at);
+  const t = await makeUser({ two_factor_enabled: true, two_factor_secret: 'JBSWY3DPEHPK3PXP' });
+  const b = await client(ctx.base).post('/api/auth/login-code', { email: t.email });
+  const step = await client(ctx.base).post('/api/auth/two-factor', { challenge: b.body.challenge, code: codeFromMail() });
+  assert.equal(step.status, 200); assert.equal(step.body.method, 'totp'); assert.ok(!step.body.user, 'not signed in yet');
+  setMail({ configured: false });
+  const off = await client(ctx.base).post('/api/auth/login-code', { email: u.email });
+  assert.equal(off.status, 503);
+  assert.equal((await client(ctx.base).get('/api/public/settings')).body.data.email_login, false);
+  setMail({ configured: true });
+  assert.equal((await client(ctx.base).get('/api/public/settings')).body.data.email_login, true);
+});

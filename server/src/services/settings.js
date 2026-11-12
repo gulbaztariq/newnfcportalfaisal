@@ -112,6 +112,8 @@ async function publicSettings() {
   const s = await all();
   const out = PUBLIC_KEYS.reduce((o, k) => ((o[k] = s[k]), o), {});
   out.app_url = require('../config').appUrl;
+  // sign in with an e-mailed code only works when mail can be sent; otherwise the login page falls back to a password
+  out.email_login = process.env.DISABLE_LOGIN_OTP !== '1' && (await require('./mail').isConfigured());
   out.home_custom_css = String(s.home_custom_css || '').replace(/<\/?style[^>]*>/gi, '');
   return out;
 }
