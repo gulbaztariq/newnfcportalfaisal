@@ -339,7 +339,7 @@ r.get('/analytics', wrap(async (req, res) => {
   const raw = req.query.vcard;
   const want = raw && raw !== 'all' ? Number(raw) : null;
   if (raw && raw !== 'all' && (!Number.isInteger(want) || !mine.some((c) => c.id === want))) fail(404, 'vCard not found');
-  const data = await require('../../services/analytics').report(want ? [want] : mine.map((c) => c.id), { days: req.query.days, tz: req.query.tz });
+  const data = await require('../../services/analytics').report(want ? [want] : mine.map((c) => c.id), require('../../services/analytics').optionsFrom(req.query));
   res.json({ data, cards: mine.map((c) => ({ id: c.id, name: c.name, alias: c.url_alias, live: !!c.status })) });
 }));
 

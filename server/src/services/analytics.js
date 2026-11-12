@@ -53,21 +53,45 @@ const tally = (rows, fn, top = 8) => {
   return [...list.slice(0, top - 1), { name: 'Other', value: rest }];
 };
 
+const FILTER_KEYS = ['channel', 'device', 'os', 'browser', 'source', 'visitor', 'action'];
+const DATE = /^\d{4}-\d{2}-\d{2}$/;
+
 /**
  * @param {number[]|null} vcardIds  cards to report on (null = every card)
- * @param {object} o  { days (7-365), tz (minutes east of UTC, for hours and weekdays), now }
+ * @param {object} o
+ *   days (1-366) or from/to (YYYY-MM-DD, the owner's local dates), tz (minutes east of UTC, for hours and weekdays), now,
+ *   compare 'previous' | 'year' | 'none', granularity 'auto' | 'day' | 'week' | 'month',
+ *   filters { channel, device, os, browser, source, visitor ('new'|'returning'), action }
  */
-async function report(vcardIds, { days = 30, tz = 0, now = new Date() } = {}) {
-  days = Math.min(365, Math.max(1, Math.round(Number(days) || 30)));
+async function report(vcardIds, { days = 30, from, to, tz = 0, now = new Date(), compare = 'previous', granularity = 'auto', filters = {} } = {}) {
   tz = Math.max(-840, Math.min(840, Math.round(Number(tz) || 0)));
   const local = (d) => dayjs.utc(d).add(tz, 'minute'); // the owner's wall clock, built with UTC maths so the server's own time zone never matters
   const today = local(now).startOf('day');
-  const start = today.subtract(days - 1, 'day'); // local midnight, first day of the period
-  const prevStart = start.subtract(days, 'day');
+  let start; let end; // first and last local day of the period (inclusive)
+  if (DATE.test(String(from || '')) && DATE.test(String(to || ''))) {
+    start = dayjs.utc(from).startOf('day'); end = dayjs.utc(to).startOf('day');
+    if (!start.isValid() || !end.isValid()) { start = today.subtract(29, 'day'); end = today; }
+    if (end.isAfter(today)) end = today;
+    if (start.isAfter(end)) start = end;
+    if (end.diff(start, 'day') > 365) start = end.subtract(365, 'day');
+  } else {
+    const n = Math.min(366, Math.max(1, Math.round(Number(days) || 30)));
+    end = today; start = today.subtract(n - 1, 'day');
+  }
+  days = end.diff(start, 'day') + 1;
+  compare = ['previous', 'year', 'none'].includes(compare) ? compare : 'previous';
+  const prevStart = compare === 'none' ? null : compare === 'year' ? start.subtract(1, 'year') : start.subtract(days, 'day');
+  const prevEnd = prevStart ? prevStart.add(days, 'day') : null; // exclusive
+  const endEx = end.add(1, 'day');
   const toUtc = (d) => d.subtract(tz, 'minute').toDate();
+  const f = {};
+  for (const k of FILTER_KEYS) { const v = filters[k]; if (typeof v === 'string' && v && v !== 'all' && v.length <= 80) f[k] = v; }
+  const range = { from: start.format('YYYY-MM-DD'), to: end.format('YYYY-MM-DD'), days, previousFrom: prevStart?.format('YYYY-MM-DD') || null, previousTo: prevEnd ? prevEnd.subtract(1, 'day').format('YYYY-MM-DD') : null, compare };
+  if (vcardIds && !vcardIds.length) return empty(range, f);
   const cardWhere = vcardIds ? { vcard_id: { [Op.in]: vcardIds } } : {};
-  if (vcardIds && !vcardIds.length) return empty(days, start, today);
-  const since = { created_at: { [Op.gte]: toUtc(prevStart), [Op.lt]: toUtc(today.add(1, 'day')) } };
+  const spans = [{ [Op.gte]: toUtc(start), [Op.lt]: toUtc(endEx) }];
+  if (prevStart) spans.push({ [Op.gte]: toUtc(prevStart), [Op.lt]: toUtc(prevEnd) });
+  const since = { [Op.or]: spans.map((s) => ({ created_at: s })) };
 
   const [views, events, enquiries, appointments, subscribers] = await Promise.all([
     M.VcardView.findAll({ where: { ...cardWhere, ...since }, attributes: ['vcard_id', 'ip_hash', 'user_agent', 'referrer', 'device', 'created_at'], limit: MAX_ROWS, order: [['created_at', 'DESC']], raw: true }),
@@ -78,23 +102,50 @@ async function report(vcardIds, { days = 30, tz = 0, now = new Date() } = {}) {
   ]);
   const truncated = views.length >= MAX_ROWS || events.length >= MAX_ROWS;
 
-  const startMs = toUtc(start).getTime();
-  const inPeriod = (r) => new Date(r.created_at).getTime() >= startMs;
-  const cur = { v: views.filter(inPeriod), e: events.filter(inPeriod), q: enquiries.filter(inPeriod), a: appointments.filter(inPeriod), s: subscribers.filter(inPeriod) };
-  const prev = { v: views.filter((r) => !inPeriod(r)), e: events.filter((r) => !inPeriod(r)), q: enquiries.filter((r) => !inPeriod(r)), a: appointments.filter((r) => !inPeriod(r)), s: subscribers.filter((r) => !inPeriod(r)) };
+  const t0 = toUtc(start).getTime(); const t1 = toUtc(endEx).getTime();
+  const p0 = prevStart ? toUtc(prevStart).getTime() : 0; const p1 = prevStart ? toUtc(prevEnd).getTime() : 0;
+  const isCur = (r) => { const t = new Date(r.created_at).getTime(); return t >= t0 && t < t1; };
+  const isPrev = (r) => { if (!prevStart) return false; const t = new Date(r.created_at).getTime(); return t >= p0 && t < p1; };
+  const dayKey = (r) => local(r.created_at).format('YYYY-MM-DD');
+
+  // enrich every view once: browser, system, channel, source
+  const rich = views.map((x) => ({ ...x, ...agentOf(x.user_agent), ...sourceOf(x.referrer), dev: x.device ? x.device[0].toUpperCase() + x.device.slice(1) : 'Unknown', day: dayKey(x) }));
+  const viewFilters = ['channel', 'device', 'os', 'browser', 'source', 'visitor'].filter((k) => f[k]);
+
+  const build = (inSet) => {
+    let v = rich.filter(inSet);
+    let e = events.filter(inSet);
+    const q = enquiries.filter(inSet); const a = appointments.filter(inSet); const s = subscribers.filter(inSet);
+    if (f.channel) v = v.filter((x) => x.channel === f.channel);
+    if (f.device) v = v.filter((x) => String(x.device || 'unknown').toLowerCase() === f.device.toLowerCase());
+    if (f.os) v = v.filter((x) => x.os === f.os);
+    if (f.browser) v = v.filter((x) => x.browser === f.browser);
+    if (f.source) v = v.filter((x) => x.source === f.source);
+    // new = seen on one day in the period, returning = on two or more different days
+    const daysOf = new Map();
+    for (const x of v) { if (!x.ip_hash) continue; (daysOf.get(x.ip_hash) || daysOf.set(x.ip_hash, new Set()).get(x.ip_hash)).add(x.day); }
+    const returningIds = new Set([...daysOf].filter(([, d]) => d.size > 1).map(([k]) => k));
+    const visitorSplit = { returning: returningIds.size, fresh: daysOf.size - returningIds.size };
+    if (f.visitor === 'returning') v = v.filter((x) => returningIds.has(x.ip_hash));
+    else if (f.visitor === 'new') v = v.filter((x) => x.ip_hash && !returningIds.has(x.ip_hash));
+    if (f.action) e = e.filter((x) => x.type === f.action);
+    if (viewFilters.length) { const ok = new Set(v.map((x) => x.ip_hash).filter(Boolean)); e = e.filter((x) => ok.has(x.visitor)); }
+    return { v, e, q, a, s, visitorSplit };
+  };
+  const cur = build(isCur);
+  const prev = build(isPrev);
 
   const visitors = (rows) => new Set(rows.map((x) => x.ip_hash).filter(Boolean)).size;
-  // engagement: a view is "engaged" when the same visitor did something on the same local day
-  const dayKey = (r) => local(r.created_at).format('YYYY-MM-DD');
   const engaged = (set) => {
     const acted = new Set(set.e.map((e) => `${e.vcard_id}|${e.visitor}|${dayKey(e)}`));
-    return set.v.filter((x) => acted.has(`${x.vcard_id}|${x.ip_hash}|${dayKey(x)}`)).length;
+    return set.v.filter((x) => acted.has(`${x.vcard_id}|${x.ip_hash}|${x.day}`)).length;
   };
   const leads = (set) => set.q.length + set.a.length + set.s.length;
   const kpi = (cv, pv) => ({ value: cv, previous: pv, change: delta(cv, pv) });
   const curVisitors = visitors(cur.v); const prevVisitors = visitors(prev.v);
   const curEngaged = engaged(cur); const prevEngaged = engaged(prev);
   const rate = (a, b) => (b > 0 ? Math.round((a / b) * 1000) / 10 : 0);
+  const per = (a, b) => (b ? Math.round((a / b) * 10) / 10 : 0);
   const kpis = {
     views: kpi(cur.v.length, prev.v.length),
     visitors: kpi(curVisitors, prevVisitors),
@@ -102,20 +153,37 @@ async function report(vcardIds, { days = 30, tz = 0, now = new Date() } = {}) {
     saves: kpi(cur.e.filter((e) => e.type === 'save').length, prev.e.filter((e) => e.type === 'save').length),
     leads: kpi(leads(cur), leads(prev)),
     engagement: { value: rate(curEngaged, cur.v.length), previous: rate(prevEngaged, prev.v.length), change: null, unit: '%' },
-    viewsPerVisitor: { value: curVisitors ? Math.round((cur.v.length / curVisitors) * 10) / 10 : 0, previous: prevVisitors ? Math.round((prev.v.length / prevVisitors) * 10) / 10 : 0, change: null },
+    viewsPerVisitor: kpi(per(cur.v.length, curVisitors), per(prev.v.length, prevVisitors)),
+    returning: { value: rate(cur.visitorSplit.returning, cur.visitorSplit.returning + cur.visitorSplit.fresh), previous: rate(prev.visitorSplit.returning, prev.visitorSplit.returning + prev.visitorSplit.fresh), change: null, unit: '%' },
+    perDay: kpi(per(cur.v.length, days), per(prev.v.length, days)),
+    conversion: { value: rate(cur.e.length + leads(cur), cur.v.length), previous: rate(prev.e.length + leads(prev), prev.v.length), change: null, unit: '%' },
   };
-  kpis.engagement.change = kpis.engagement.previous ? Math.round((kpis.engagement.value - kpis.engagement.previous) * 10) / 10 : null; // percentage points
+  for (const k of ['engagement', 'returning', 'conversion']) kpis[k].change = prevStart && kpis[k].previous ? Math.round((kpis[k].value - kpis[k].previous) * 10) / 10 : null; // percentage points
   kpis.viewsPerVisitor.change = delta(kpis.viewsPerVisitor.value, kpis.viewsPerVisitor.previous);
+  if (!prevStart) for (const k of Object.keys(kpis)) { kpis[k].change = null; kpis[k].previous = null; }
 
-  // daily series: this period next to the previous one, aligned by day number
-  const idx = (r) => Math.floor(local(r.created_at).startOf('day').diff(start, 'day', true) + 0.01);
-  const series = Array.from({ length: days }, (_, i) => ({ date: start.add(i, 'day').format('YYYY-MM-DD'), label: start.add(i, 'day').format('DD MMM'), views: 0, visitors: 0, actions: 0, leads: 0, previous: 0 }));
-  const seen = Array.from({ length: days }, () => new Set());
-  for (const r of cur.v) { const i = idx(r); if (series[i]) { series[i].views += 1; if (r.ip_hash) seen[i].add(r.ip_hash); } }
-  series.forEach((p, i) => { p.visitors = seen[i].size; });
-  for (const r of cur.e) { const i = idx(r); if (series[i]) series[i].actions += 1; }
-  for (const r of [...cur.q, ...cur.a, ...cur.s]) { const i = idx(r); if (series[i]) series[i].leads += 1; }
-  for (const r of prev.v) { const i = Math.floor(local(r.created_at).startOf('day').diff(prevStart, 'day', true) + 0.01); if (series[i]) series[i].previous += 1; }
+  // bucketed series (day / week / month); the comparison period is aligned by day number
+  const g = ['day', 'week', 'month'].includes(granularity) ? granularity : days <= 62 ? 'day' : days <= 200 ? 'week' : 'month';
+  const bucketKey = (i) => (g === 'day' ? String(i) : g === 'week' ? String(Math.floor(i / 7)) : start.add(i, 'day').format('YYYY-MM'));
+  const buckets = []; const bIndex = new Map();
+  for (let i = 0; i < days; i += 1) {
+    const k = bucketKey(i);
+    if (!bIndex.has(k)) {
+      const d0 = start.add(i, 'day');
+      bIndex.set(k, buckets.length);
+      buckets.push({ date: d0.format('YYYY-MM-DD'), label: g === 'month' ? d0.format('MMM YYYY') : d0.format('DD MMM'), views: 0, visitors: 0, actions: 0, leads: 0, previous: 0, previousVisitors: 0, previousActions: 0, _v: new Set(), _pv: new Set() });
+    }
+  }
+  const idxOf = (r, base) => Math.max(0, Math.min(days - 1, Math.floor(local(r.created_at).startOf('day').diff(base, 'day', true) + 0.01)));
+  const at = (r, base) => buckets[bIndex.get(bucketKey(idxOf(r, base)))];
+  for (const r of cur.v) { const b = at(r, start); b.views += 1; if (r.ip_hash) b._v.add(r.ip_hash); }
+  for (const r of cur.e) at(r, start).actions += 1;
+  for (const r of [...cur.q, ...cur.a, ...cur.s]) at(r, start).leads += 1;
+  if (prevStart) {
+    for (const r of prev.v) { const b = at(r, prevStart); b.previous += 1; if (r.ip_hash) b._pv.add(r.ip_hash); }
+    for (const r of prev.e) at(r, prevStart).previousActions += 1;
+  }
+  const series = buckets.map(({ _v, _pv, ...b }) => ({ ...b, visitors: _v.size, previousVisitors: _pv.size }));
 
   // when do people open the card: weekday (Mon first) x hour, in the owner's clock
   const heat = Array.from({ length: 7 }, () => Array(24).fill(0));
@@ -124,15 +192,20 @@ async function report(vcardIds, { days = 30, tz = 0, now = new Date() } = {}) {
   const byWeekday = heat.map((row, i) => ({ name: WEEK[i], value: row.reduce((a, b) => a + b, 0) }));
   const byHour = Array.from({ length: 24 }, (_, h) => ({ hour: h, value: heat.reduce((a, row) => a + row[h], 0) }));
 
-  const ua = cur.v.map((x) => ({ ...agentOf(x.user_agent), device: x.device, ...sourceOf(x.referrer) }));
-  const sources = tally(ua, (x) => x.source, 8);
-  const channels = tally(ua, (x) => x.channel, 4);
-  const devices = tally(ua, (x) => (x.device ? x.device[0].toUpperCase() + x.device.slice(1) : 'Unknown'), 4);
-  const browsers = tally(ua, (x) => x.browser, 6);
-  const systems = tally(ua, (x) => x.os, 6);
+  const sources = tally(cur.v, (x) => x.source, 10);
+  const channels = tally(cur.v, (x) => x.channel, 4);
+  const devices = tally(cur.v, (x) => x.dev, 4);
+  const browsers = tally(cur.v, (x) => x.browser, 7);
+  const systems = tally(cur.v, (x) => x.os, 7);
+  const newVsReturning = [{ name: 'New visitors', value: cur.visitorSplit.fresh }, { name: 'Returning visitors', value: cur.visitorSplit.returning }].filter((x) => x.value);
 
-  const actionCounts = ACTIONS.map((type) => ({ type, name: ACTION_LABELS[type], value: cur.e.filter((e) => e.type === type).length, previous: prev.e.filter((e) => e.type === type).length })).filter((a) => a.value || a.previous);
-  const topLinks = tally(cur.e.filter((e) => (e.type === 'social' || e.type === 'link') && e.label), (e) => e.label, 6);
+  const actionCounts = ACTIONS.map((type) => ({ type, name: ACTION_LABELS[type], value: cur.e.filter((e) => e.type === type).length, previous: prevStart ? prev.e.filter((e) => e.type === type).length : null })).filter((a) => a.value || a.previous);
+  const topLinks = tally(cur.e.filter((e) => (e.type === 'social' || e.type === 'link') && e.label), (e) => e.label, 8);
+  const leadParts = [
+    { name: 'Enquiries', value: cur.q.length, previous: prevStart ? prev.q.length : null },
+    { name: 'Appointments', value: cur.a.length, previous: prevStart ? prev.a.length : null },
+    { name: 'Newsletter sign-ups', value: cur.s.length, previous: prevStart ? prev.s.length : null },
+  ];
 
   // cards table
   const ids = [...new Set([...cur.v, ...cur.e, ...cur.q, ...cur.a, ...cur.s].map((r) => r.vcard_id))];
@@ -141,8 +214,8 @@ async function report(vcardIds, { days = 30, tz = 0, now = new Date() } = {}) {
     const v = cur.v.filter((x) => x.vcard_id === c.id); const e = cur.e.filter((x) => x.vcard_id === c.id);
     const l = cur.q.filter((x) => x.vcard_id === c.id).length + cur.a.filter((x) => x.vcard_id === c.id).length + cur.s.filter((x) => x.vcard_id === c.id).length;
     const pv = prev.v.filter((x) => x.vcard_id === c.id).length;
-    return { id: c.id, name: c.name, alias: c.url_alias, live: !!c.status, views: v.length, visitors: visitors(v), actions: e.length, saves: e.filter((x) => x.type === 'save').length, leads: l, change: delta(v.length, pv), conversion: pct(e.length + l, v.length) };
-  }).sort((a, b) => b.views - a.views || b.actions - a.actions).slice(0, 10);
+    return { id: c.id, name: c.name, alias: c.url_alias, live: !!c.status, views: v.length, visitors: visitors(v), actions: e.length, saves: e.filter((x) => x.type === 'save').length, leads: l, change: prevStart ? delta(v.length, pv) : null, conversion: pct(e.length + l, v.length), share: pct(v.length, cur.v.length) };
+  }).sort((a, b) => b.views - a.views || b.actions - a.actions).slice(0, 50);
 
   const funnel = [
     { name: 'Views', value: cur.v.length },
@@ -151,29 +224,42 @@ async function report(vcardIds, { days = 30, tz = 0, now = new Date() } = {}) {
     { name: 'Leads', value: leads(cur) },
   ];
 
-  const insights = buildInsights({ kpis, byWeekday, byHour, channels, sources, days, devices, actionCounts, series });
+  const best = [...series].sort((a, b) => b.views - a.views)[0];
+  const topDay = [...byWeekday].sort((a, b) => b.value - a.value)[0];
+  const topHour = [...byHour].sort((a, b) => b.value - a.value)[0];
+  const dailyViews = new Map(); for (const r of cur.v) dailyViews.set(r.day, (dailyViews.get(r.day) || 0) + 1);
+  const highlights = {
+    bestBucket: best?.views ? { label: best.label, value: best.views } : null,
+    busiestWeekday: topDay?.value ? topDay : null,
+    peakHour: topHour?.value ? { hour: topHour.hour, value: topHour.value } : null,
+    activeDays: dailyViews.size, days,
+    topSource: sources[0] && sources[0].name !== 'Other' ? sources[0] : null,
+  };
+
+  const insights = buildInsights({ kpis, byWeekday, byHour, channels, sources, days, devices, actionCounts, series, compare, filtered: viewFilters.length > 0 || !!f.action });
   return {
-    range: { days, from: start.format('YYYY-MM-DD'), to: today.format('YYYY-MM-DD'), previousFrom: prevStart.format('YYYY-MM-DD') },
-    kpis, series, heatmap: heat, byWeekday, byHour, sources, channels, devices, browsers, systems, actions: actionCounts, topLinks, topCards, funnel, insights,
+    range, granularity: g, filters: f, leadsNotFiltered: viewFilters.length > 0,
+    kpis, series, heatmap: heat, byWeekday, byHour, sources, channels, devices, browsers, systems, newVsReturning, actions: actionCounts, topLinks, leadParts, topCards, funnel, highlights, insights,
     hasData: cur.v.length + cur.e.length + leads(cur) > 0, truncated,
   };
 }
 
-function empty(days, start, today) {
+function empty(range, f) {
   const zero = { value: 0, previous: 0, change: 0 };
+  const pctz = { ...zero, unit: '%' };
   return {
-    range: { days, from: start.format('YYYY-MM-DD'), to: today.format('YYYY-MM-DD') },
-    kpis: { views: zero, visitors: zero, actions: zero, saves: zero, leads: zero, engagement: { ...zero, unit: '%' }, viewsPerVisitor: zero },
-    series: [], heatmap: Array.from({ length: 7 }, () => Array(24).fill(0)), byWeekday: [], byHour: [], sources: [], channels: [], devices: [], browsers: [], systems: [], actions: [], topLinks: [], topCards: [], funnel: [], insights: [], hasData: false, truncated: false,
+    range, granularity: 'day', filters: f, leadsNotFiltered: false,
+    kpis: { views: zero, visitors: zero, actions: zero, saves: zero, leads: zero, engagement: pctz, viewsPerVisitor: zero, returning: pctz, perDay: zero, conversion: pctz },
+    series: [], heatmap: Array.from({ length: 7 }, () => Array(24).fill(0)), byWeekday: [], byHour: [], sources: [], channels: [], devices: [], browsers: [], systems: [], newVsReturning: [], actions: [], topLinks: [], leadParts: [], topCards: [], funnel: [], highlights: {}, insights: [], hasData: false, truncated: false,
   };
 }
 
 const hr = (h) => `${((h + 11) % 12) + 1} ${h < 12 ? 'AM' : 'PM'}`;
-function buildInsights({ kpis, byWeekday, byHour, channels, sources, days, devices, actionCounts, series }) {
+function buildInsights({ kpis, byWeekday, byHour, channels, sources, days, devices, actionCounts, series, compare, filtered }) {
   const out = [];
   const v = kpis.views;
-  if (v.value === 0) return [{ tone: 'info', text: 'No views in this period yet. Share your card link, QR code or NFC card to start collecting data.' }];
-  if (v.change !== null && Math.abs(v.change) >= 10) out.push({ tone: v.change > 0 ? 'good' : 'warn', text: `Views are ${v.change > 0 ? 'up' : 'down'} ${Math.abs(v.change)}% compared with the previous ${days} days.` });
+  if (v.value === 0) return [{ tone: 'info', text: filtered ? 'No views match these filters. Try removing one.' : 'No views in this period yet. Share your card link, QR code or NFC card to start collecting data.' }];
+  if (v.change !== null && Math.abs(v.change) >= 10) out.push({ tone: v.change > 0 ? 'good' : 'warn', text: `Views are ${v.change > 0 ? 'up' : 'down'} ${Math.abs(v.change)}% compared with ${compare === 'year' ? 'the same period last year' : `the previous ${days} days`}.` });
   const topDay = [...byWeekday].sort((a, b) => b.value - a.value)[0];
   const topHour = [...byHour].sort((a, b) => b.value - a.value)[0];
   if (topDay?.value > 0 && v.value >= 10) out.push({ tone: 'info', text: `Most views arrive on ${topDay.name}, especially around ${hr(topHour.hour)}. Share your card shortly before then.` });
@@ -185,8 +271,15 @@ function buildInsights({ kpis, byWeekday, byHour, channels, sources, days, devic
   if (kpis.views.value >= 20 && e.value < 5 && !actionCounts.length) out.push({ tone: 'warn', text: 'Few visitors tap anything yet. Make sure your phone, WhatsApp and Save contact buttons are visible near the top of the card.' });
   else if (e.value >= 20) out.push({ tone: 'good', text: `${e.value}% of views lead to an action (save, call, message or link tap). That is a strong result.` });
   const best = [...series].sort((a, b) => b.views - a.views)[0];
-  if (best?.views > 0 && series.length > 7) out.push({ tone: 'info', text: `Your best day was ${dayjs.utc(best.date).format('D MMMM')} with ${best.views} views.` });
+  if (best?.views > 0 && series.length > 7) out.push({ tone: 'info', text: `Your best ${series.length && dayjs.utc(series[1]?.date).diff(dayjs.utc(series[0].date), 'day') >= 7 ? 'period' : 'day'} was ${dayjs.utc(best.date).format('D MMMM')} with ${best.views} views.` });
   return out.slice(0, 5);
 }
 
-module.exports = { report, sourceOf, agentOf, ACTIONS, ACTION_LABELS };
+/** request query -> report options (the one place that reads the filter parameters) */
+function optionsFrom(q = {}) {
+  const filters = {};
+  for (const k of FILTER_KEYS) if (typeof q[k] === 'string') filters[k] = q[k];
+  return { days: q.days, from: q.from, to: q.to, tz: q.tz, compare: q.compare, granularity: q.granularity, filters };
+}
+
+module.exports = { report, optionsFrom, sourceOf, agentOf, ACTIONS, ACTION_LABELS };

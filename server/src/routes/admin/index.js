@@ -106,7 +106,7 @@ r.get('/dashboard/card-analytics', wrap(async (req, res) => {
   if (req.query.vcard && req.query.vcard !== 'all') where.id = int(req.query.vcard);
   const filtered = Object.keys(where).length > 0;
   const ids = filtered ? (await M.Vcard.findAll({ where, attributes: ['id'], raw: true })).map((c) => c.id) : null;
-  const data = await require('../../services/analytics').report(ids, { days: req.query.days, tz: req.query.tz });
+  const data = await require('../../services/analytics').report(ids, require('../../services/analytics').optionsFrom(req.query));
   const totals = { cards: await M.Vcard.count(), live: await M.Vcard.count({ where: { status: true } }) };
   res.json({ data, totals });
 }));
