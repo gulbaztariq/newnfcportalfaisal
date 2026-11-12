@@ -7,6 +7,7 @@ import { useAuth } from '@/lib/auth';
 import { money, fmtDate, fullName } from '@/lib/format';
 import { PageHeader, StatCard, Card, CardHeader, CardBody, Segmented, UserCell, StatusBadge, EmptyState, Skeleton, ButtonLink, Reveal } from '@/components/ui';
 import { AreaTrend, Donut } from '@/components/ui/charts';
+import { AnalyticsDashboard } from '../user/Analytics';
 
 function Loading() {
   return (
@@ -61,7 +62,7 @@ export default function Dashboard() {
         </Reveal>
       )}
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+      <div className="grid auto-rows-fr gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
         <StatCard index={0} icon={Users} color="violet" label="Active users" value={stats.activeUsers} hint="Currently able to sign in" to="/admin/users" />
         <StatCard index={1} icon={IdCard} color="pink" label="Active vCards" value={stats.activeVcards} hint="Published and public" to="/admin/vcards" />
         <StatCard index={2} icon={UserX} color="amber" label="Deactivated users" value={stats.inactiveUsers} to="/admin/users" />
@@ -70,7 +71,10 @@ export default function Dashboard() {
         <StatCard index={5} icon={Store} color="rose" label="WhatsApp stores" value={stats.stores || 0} hint="Product catalogues" to="/admin/whatsapp-stores" />
       </div>
 
-      <div className="mt-6 grid gap-6 xl:grid-cols-3">
+      {/* platform-wide card analytics: every card on the platform */}
+      <section className="mt-10"><AnalyticsDashboard endpoint="/admin/dashboard/card-analytics" admin embedded /></section>
+
+      <div className="mt-10 grid gap-6 xl:grid-cols-3">
         <Reveal className="xl:col-span-2">
           <Card className="h-full">
             <CardHeader icon={Wallet} title="Income overview" description="Paid transactions over the last 12 months"

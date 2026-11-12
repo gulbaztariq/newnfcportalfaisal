@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'motion/react';
-import { IdCard, Eye, MessageSquareText, Sparkles, Plus, ArrowUpRight, Monitor, Smartphone, Tablet, Nfc, Crown } from 'lucide-react';
+import { MessageSquareText, Sparkles, Plus, ArrowUpRight, Nfc } from 'lucide-react';
 import api from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { fmtDate, fmtDateTime } from '@/lib/format';
-import { PageHeader, StatCard, Card, CardHeader, CardBody, ButtonLink, EmptyState, Skeleton, Reveal, Ripples } from '@/components/ui';
-import { Bars, Donut } from '@/components/ui/charts';
+import { Card, CardHeader, CardBody, ButtonLink, EmptyState, Skeleton, Reveal, Ripples } from '@/components/ui';
+import { AnalyticsDashboard } from './Analytics';
 
 export default function UserDashboard() {
   const { user } = useAuth();
@@ -15,11 +15,9 @@ export default function UserDashboard() {
   if (!d) return <div className="space-y-6"><Skeleton className="h-44 rounded-3xl" /><div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">{[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-32 rounded-2xl" />)}</div></div>;
   const sub = d.subscription;
   const days = sub ? Math.max(0, Math.ceil((new Date(sub.ends_at) - Date.now()) / 864e5)) : 0;
-  const chart = d.chart.labels.map((label, i) => ({ label, value: d.chart.data[i] }));
-  const devices = Object.entries(d.devices).map(([name, value]) => ({ name: name[0].toUpperCase() + name.slice(1), value }));
-  return (
+    return (
     <>
-      <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="relative mb-6 overflow-hidden rounded-3xl bg-zinc-950 p-8 text-white md:p-10">
+      <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="relative mb-8 overflow-hidden rounded-3xl bg-zinc-950 p-6 text-white md:p-8">
         <div className="absolute -top-24 -right-10 size-80 rounded-full bg-violet-600/50 blur-[100px]" />
         <div className="absolute -bottom-24 left-1/3 size-72 rounded-full bg-fuchsia-600/40 blur-[100px]" />
         <div className="bg-grid absolute inset-0 opacity-15" />
@@ -27,7 +25,7 @@ export default function UserDashboard() {
           <div>
             <p className="text-sm text-white/60">Welcome back</p>
             <h1 className="mt-1 font-display text-3xl font-bold md:text-4xl">Hey {user.first_name} 👋</h1>
-            <p className="mt-2 max-w-md text-white/65">Your cards were viewed <b className="text-white">{d.stats.views.toLocaleString()}</b> times. Keep sharing!</p>
+            <p className="mt-2 max-w-md text-white/65">Here is how your cards are performing. Share your link, QR code or NFC card to grow these numbers.</p>
             <div className="mt-6 flex flex-wrap gap-3">
               <ButtonLink as={Link} to="/user/vcards/create" variant="white"><Plus />New vCard</ButtonLink>
               <ButtonLink as={Link} to="/user/nfc-orders" className="border border-white/20 bg-white/10 text-white hover:bg-white/20"><Nfc />Order NFC card</ButtonLink>
@@ -37,26 +35,10 @@ export default function UserDashboard() {
         </div>
       </motion.div>
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard index={0} icon={IdCard} color="violet" label="My vCards" value={d.stats.vcards} hint={`${d.stats.active} published`} to="/user/vcards" />
-        <StatCard index={1} icon={Eye} color="pink" label="Total views" value={d.stats.views} />
-        <StatCard index={2} icon={MessageSquareText} color="sky" label="Enquiries" value={d.stats.enquiries} to="/user/enquiries" />
-        <StatCard index={3} icon={Crown} color="amber" label="Plan" value={sub?.plan?.name || 'None'} hint={sub ? `${days} days left` : undefined} to="/user/plans" />
-      </div>
+      {/* the dashboard is the analytics dashboard: headline numbers, traffic, sources, heatmap, top cards */}
+      <AnalyticsDashboard endpoint="/user/analytics" embedded />
 
-      <div className="mt-6 grid gap-6 xl:grid-cols-3">
-        <Reveal className="xl:col-span-2">
-          <Card className="h-full"><CardHeader icon={Eye} title="Views" description="Last 30 days across all your cards" /><CardBody><Bars data={chart} name="Views" height={290} /></CardBody></Card>
-        </Reveal>
-        <Reveal delay={0.1}>
-          <Card className="h-full">
-            <CardHeader icon={Monitor} title="Devices" description="Where visitors open your cards" />
-            <CardBody>{devices.length ? <Donut data={devices} center="views" height={220} /> : <EmptyState icon={Smartphone} title="No views yet" description="Share your card link or QR code to see stats here." />}</CardBody>
-          </Card>
-        </Reveal>
-      </div>
-
-      <div className="mt-6 grid gap-6 xl:grid-cols-3">
+      <div className="mt-8 grid gap-6 xl:grid-cols-3">
         <Reveal className="xl:col-span-2">
           <Card className="overflow-hidden">
             <CardHeader icon={MessageSquareText} title="Latest enquiries" actions={<Link to="/user/enquiries" className="text-sm font-medium text-primary hover:underline">View all</Link>} />
@@ -95,4 +77,3 @@ export default function UserDashboard() {
   );
 }
 
-export { Tablet };

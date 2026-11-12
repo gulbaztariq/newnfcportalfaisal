@@ -183,8 +183,9 @@ function exportCsv(d, name) {
 /**
  * @param endpoint  '/user/analytics' or '/admin/dashboard/card-analytics'
  * @param admin     platform view: no card picker, shows platform totals
+ * @param embedded  used inside the Dashboard page: a section heading instead of the page header
  */
-export function AnalyticsDashboard({ endpoint, admin = false, initialCard = 'all' }) {
+export function AnalyticsDashboard({ endpoint, admin = false, initialCard = 'all', embedded = false }) {
   const [days, setDays] = useState('30');
   const [card, setCard] = useState(initialCard);
   const [res, setRes] = useState(null);
@@ -212,7 +213,13 @@ export function AnalyticsDashboard({ endpoint, admin = false, initialCard = 'all
 
   return (
     <>
-      <PageHeader title={admin ? 'Card analytics' : 'Analytics'} description={d ? `${cardName[0].toUpperCase()}${cardName.slice(1)} · ${periodText} · compared with the ${days} days before` : 'How visitors find and use your digital cards.'}>{controls}</PageHeader>
+      {(() => {
+        const title = embedded ? 'Traffic & engagement' : admin ? 'Card analytics' : 'Analytics';
+        const description = d ? `${cardName[0].toUpperCase()}${cardName.slice(1)} · ${periodText} · compared with the ${days} days before` : 'How visitors find and use your digital cards.';
+        return embedded
+          ? <div className="mb-5 flex flex-wrap items-end justify-between gap-3"><div className="min-w-0"><h2 className="font-display text-xl font-bold tracking-tight">{title}</h2><p className="text-sm text-muted-foreground">{description}</p></div>{controls}</div>
+          : <PageHeader title={title} description={description}>{controls}</PageHeader>;
+      })()}
 
       {err ? <Card><EmptyState icon={AlertTriangle} title="Could not load analytics" description={err} action={<Button onClick={() => setTick((n) => n + 1)}>Try again</Button>} /></Card>
         : !d ? <AnalyticsSkeleton />
