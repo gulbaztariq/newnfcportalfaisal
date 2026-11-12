@@ -10,6 +10,8 @@
     "dev:server": "npm --prefix server run dev",
     "dev:client": "npm --prefix client run dev",
     "build": "npm --prefix server ci --omit=dev && npm --prefix client ci --include=dev && npm --prefix client run build",
-    "start": "node server/src/scripts/sync.js --safe && node server/src/scripts/seed.js && node server/src/index.js"
+    "start": "node server/src/scripts/sync.js --safe && node server/src/scripts/seed.js && node server/src/index.js",
+    "start:host": "node server/src/index.js",
+    "db:update": "node server/src/scripts/sync.js --safe && node server/src/scripts/seed.js"
   }
 }

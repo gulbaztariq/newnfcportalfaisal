@@ -63,7 +63,16 @@ async function overdueInvoices() {
   await M.Invoice.update({ status: 'overdue' }, { where: { status: { [Op.in]: ['sent', 'partial'] }, due_date: { [Op.lt]: dayjs().format('YYYY-MM-DD') } } });
 }
 
+/** Everything the hourly timer does, awaitable (used by scripts/cron.js on hosts that cannot keep timers alive) */
+async function runHourly() {
+  for (const [name, fn] of [['expiryReminders', expiryReminders], ['weeklyProductSync', weeklyProductSync], ['overdueInvoices', overdueInvoices]]) {
+    try { await fn(); } catch (e) { console.error(`job ${name}`, e.message); }
+  }
+}
+
 function start() {
+  // JOBS_MODE=cron: the host cannot keep timers running (idle apps are stopped); run `node server/src/scripts/cron.js` from its cron scheduler instead
+  if (process.env.JOBS_MODE === 'cron') { console.log('background timers off (JOBS_MODE=cron); run scripts/cron.js from cron'); return; }
   const hourly = () => {
     expiryReminders().catch((e) => console.error('job expiryReminders', e.message));
     weeklyProductSync().catch((e) => console.error('job weeklyProductSync', e.message));
@@ -76,4 +85,4 @@ function start() {
   setInterval(courier, 30 * 60 * 1000).unref();
 }
 
-module.exports = { start, weeklyProductSync, expiryReminders, courierSync, overdueInvoices };
+module.exports = { start, runHourly, weeklyProductSync, expiryReminders, courierSync, overdueInvoices };
