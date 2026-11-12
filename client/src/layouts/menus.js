@@ -94,7 +94,7 @@ export const adminMenu = (user) => filterMenu([
 ], (perm) => (perm === 'super' ? user?.role === 'super_admin' : !perm || can(user, `${perm}.view`)));
 
 export const userMenu = (user) => filterMenu([
-  { group: 'Overview', items: [{ label: 'Dashboard', icon: LayoutDashboard, to: '/user/dashboard', perm: 'vcards' }, { label: 'Analytics', icon: BarChart3, to: '/user/analytics', perm: 'vcards' }] },
+  { group: 'Overview', items: [{ label: 'Dashboard', icon: LayoutDashboard, to: '/user/dashboard', perm: 'vcards' }, { label: 'Analytics', icon: BarChart3, to: '/user/analytics', perm: 'vcards' }, ...(user?.is_organisation || ['manager', 'supervisor'].includes(user?.company_role) ? [{ label: 'Company analytics', icon: Building2, to: '/user/company-analytics', perm: 'analytics' }] : [])] },
   {
     group: 'My Cards', items: [
       { label: 'vCards', icon: IdCard, to: '/user/vcards', perm: 'vcards' },

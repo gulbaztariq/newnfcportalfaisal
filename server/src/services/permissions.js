@@ -87,7 +87,7 @@ const ADMIN_PATHS = [
 ];
 const COMPANY_PATHS = [
   [/^\/(vcards|features)/, 'vcards'], [/^\/(enquiries|appointments|subscribers)/, 'leads'], [/^\/(stores|store-orders)/, 'stores'],
-  [/^\/short-links/, 'shortlinks'], [/^\/(nfc-cards|nfc-orders|orders)/, 'orders'], [/^\/invoices/, 'billing'], [/^\/dashboard/, 'vcards'], [/^\/export/, 'analytics'],
+  [/^\/short-links/, 'shortlinks'], [/^\/(nfc-cards|nfc-orders|orders)/, 'orders'], [/^\/invoices/, 'billing'], [/^\/dashboard/, 'vcards'], [/^\/export/, 'analytics'], [/^\/analytics/, 'analytics'],
   [/^\/(plans|subscribe|coupon|payment|transactions|affiliation|withdrawals)/, 'billing'], [/^\/organisation/, 'members'], [/^\/ai\//, 'vcards'],
   [/^\/announcements/, null],
 ];

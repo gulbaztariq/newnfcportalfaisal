@@ -343,6 +343,37 @@ r.get('/analytics', wrap(async (req, res) => {
   res.json({ data, cards: mine.map((c) => ({ id: c.id, name: c.name, alias: c.url_alias, live: !!c.status })) });
 }));
 
+/* company analytics: the owner's own cards plus every member's, with a per-person breakdown (?member=userId to focus on one person) */
+r.get('/analytics/company', wrap(async (req, res) => {
+  if (!req.user.is_organisation) fail(403, 'Only organisation accounts have company analytics');
+  const analytics = require('../../services/analytics');
+  const [profile, limit, members] = await Promise.all([org.profileOf(req.user), org.seatLimit(req.user), M.User.findAll({ where: { organisation_id: req.user.id }, attributes: ['id', 'first_name', 'last_name', 'email', 'company_role', 'org_status'], raw: true })]);
+  const owner = { id: req.user.id, first_name: req.user.first_name, last_name: req.user.last_name, email: req.user.email, company_role: 'owner', org_status: 'active' };
+  const everyone = [owner, ...members];
+  const cards = await M.Vcard.findAll({ where: { user_id: everyone.map((u) => u.id) }, attributes: ['id', 'name', 'url_alias', 'status', 'user_id'], order: [['id', 'ASC']], raw: true });
+  const who = (u) => `${u.first_name} ${u.last_name || ''}`.trim() || u.email;
+  const people = everyone.map((u) => ({ id: u.id, name: u.id === req.user.id ? `${who(u)} (owner)` : who(u), email: u.email, role: u.company_role || 'member', status: u.org_status || 'active', cardIds: cards.filter((c) => c.user_id === u.id).map((c) => c.id) }));
+  const rawMember = req.query.member; const memberId = rawMember && rawMember !== 'all' ? Number(rawMember) : null;
+  if (rawMember && rawMember !== 'all' && (!Number.isInteger(memberId) || !people.some((p) => p.id === memberId))) fail(404, 'Member not found');
+  const rawCard = req.query.vcard; const cardId = rawCard && rawCard !== 'all' ? Number(rawCard) : null;
+  if (rawCard && rawCard !== 'all' && (!Number.isInteger(cardId) || !cards.some((c) => c.id === cardId))) fail(404, 'vCard not found');
+  let ids = cards.map((c) => c.id);
+  if (memberId) ids = people.find((p) => p.id === memberId).cardIds;
+  if (cardId) ids = ids.filter((i) => i === cardId);
+  const data = await analytics.report(ids, { ...analytics.optionsFrom(req.query), people });
+  const ownerOf = Object.fromEntries(everyone.map((u) => [u.id, people.find((p) => p.id === u.id).name]));
+  res.json({
+    data,
+    cards: cards.filter((c) => !memberId || c.user_id === memberId).map((c) => ({ id: c.id, name: c.name, alias: c.url_alias, live: !!c.status, owner: ownerOf[c.user_id] })),
+    people: people.map((p) => ({ id: p.id, name: p.name })),
+    company: {
+      name: profile.name, seats: { limit, used: members.length },
+      members: { total: members.length, active: members.filter((m) => (m.org_status || 'active') === 'active').length, locked: members.filter((m) => m.org_status === 'locked').length, blocked: members.filter((m) => m.org_status === 'blocked').length },
+      cards: { total: cards.length, live: cards.filter((c) => c.status).length },
+    },
+  });
+}));
+
 /* per-vCard analytics (older, simpler view) */
 r.get('/vcards/:id/analytics', wrap(async (req, res) => {
   const v = await ownVcard(req);
