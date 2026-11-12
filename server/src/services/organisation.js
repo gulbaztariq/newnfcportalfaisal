@@ -10,6 +10,7 @@ const mail = require('./mail');
 const subs = require('./subscription');
 const onboarding = require('./onboarding');
 const perms = require('./permissions');
+const invite = require('./invite');
 
 const M = () => require('../models');
 
@@ -71,7 +72,8 @@ const credentialsMail = (user, password) => mail.sendTemplate('welcome', user.em
  */
 async function createMember(owner, input, { notify = true, company } = {}) {
   const email = String(input.email || '').toLowerCase().trim();
-  const password = input.password ? String(input.password) : randomPassword();
+  const chosen = !!input.password; // no password given: the person gets an invitation link and chooses their own
+  const password = chosen ? String(input.password) : randomPassword();
   const role = ROLES.includes(input.company_role) ? input.company_role : 'member';
   const member = await M().User.create({
     first_name: String(input.first_name).trim().slice(0, 100), last_name: String(input.last_name || '').trim().slice(0, 100), email,
@@ -92,8 +94,13 @@ async function createMember(owner, input, { notify = true, company } = {}) {
       await v.update({ company: org.name, job_title: input.job_title ? String(input.job_title).slice(0, 150) : v.job_title, location: [org.address, org.city, org.country].filter(Boolean).join(', ') || null, social_links: social });
     }
   }
-  if (notify) credentialsMail(member, password);
-  return { member, password };
+  if (chosen) {
+    if (notify) credentialsMail(member, password);
+    return { member, password, invite_url: null };
+  }
+  const inviter = company?.name || (await M().Organisation.findOne({ where: { owner_id: owner.id } }))?.name || owner.fullName();
+  const link = notify ? await invite.send(member, { inviter }) : { ...(await invite.issue(member)), sent: false }; // notify off: the owner shares the link themselves
+  return { member, password: null, invite_url: link.url, invite_sent: link.sent };
 }
 
 /* ------------------------------------------------------------------ CSV */
@@ -150,9 +157,9 @@ async function importMembers(owner, text, { notify = true, defaultRole = 'member
     if (await M().User.findOne({ where: { email }, attributes: ['id'] })) { fail('This e-mail is already registered'); continue; }
     const role = ROLES.includes(String(r.company_role || '').toLowerCase()) ? String(r.company_role).toLowerCase() : defaultRole;
     try {
-      const { member, password } = await createMember(owner, { ...r, email, company_role: role }, { notify, company });
+      const { member, password, invite_url: inviteUrl } = await createMember(owner, { ...r, email, company_role: role }, { notify, company });
       used += 1;
-      created.push({ id: member.id, name: `${member.first_name} ${member.last_name}`.trim(), email, password, role });
+      created.push({ id: member.id, name: `${member.first_name} ${member.last_name}`.trim(), email, password, invite_url: inviteUrl, role });
     } catch (e) { fail(e.message); }
   }
   return { created, errors };

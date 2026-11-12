@@ -1,15 +1,16 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'motion/react';
-import { MessageSquareText, Sparkles, Plus, ArrowUpRight, Nfc } from 'lucide-react';
+import { MessageSquareText, Sparkles, Plus, ArrowUpRight, Nfc, Pencil, ChevronDown } from 'lucide-react';
 import api from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { fmtDate, fmtDateTime } from '@/lib/format';
-import { Card, CardHeader, CardBody, ButtonLink, EmptyState, Skeleton, Reveal, Ripples, Segmented } from '@/components/ui';
+import { Card, CardHeader, CardBody, ButtonLink, EmptyState, Skeleton, Reveal, Ripples, Segmented, Menu, MenuTrigger, MenuContent, MenuItem, MenuLabel } from '@/components/ui';
 import { AnalyticsDashboard } from './Analytics';
 
 export default function UserDashboard() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [d, setD] = useState(null);
   const [scope, setScope] = useState('mine');
   const isCompany = !!user.is_organisation || ['manager', 'supervisor'].includes(user.company_role);
@@ -29,7 +30,17 @@ export default function UserDashboard() {
             <h1 className="mt-1 font-display text-3xl font-bold md:text-4xl">Hey {user.first_name} 👋</h1>
             <p className="mt-2 max-w-md text-white/65">Here is how your cards are performing. Share your link, QR code or NFC card to grow these numbers.</p>
             <div className="mt-6 flex flex-wrap gap-3">
-              <ButtonLink as={Link} to="/user/vcards/create" variant="white"><Plus />New vCard</ButtonLink>
+              {d.vcards?.length === 1 && <ButtonLink as={Link} to={`/user/vcards/${d.vcards[0].id}/edit`} variant="white"><Pencil />Edit my vCard</ButtonLink>}
+              {d.vcards?.length > 1 && (
+                <Menu>
+                  <MenuTrigger asChild><button type="button" className="inline-flex h-11 cursor-pointer items-center gap-2 rounded-xl bg-white px-5 text-sm font-medium text-zinc-900 transition hover:bg-white/90"><Pencil className="size-4" />Edit a vCard<ChevronDown className="size-4 opacity-60" /></button></MenuTrigger>
+                  <MenuContent align="start">
+                    <MenuLabel>Choose a card to edit</MenuLabel>
+                    {d.vcards.map((v) => <MenuItem key={v.id} icon={Pencil} onSelect={() => navigate(`/user/vcards/${v.id}/edit`)}>{v.name}{!v.live && ' (hidden)'}</MenuItem>)}
+                  </MenuContent>
+                </Menu>
+              )}
+              <ButtonLink as={Link} to="/user/vcards/create" variant={d.vcards?.length ? 'ghost' : 'white'} className={d.vcards?.length ? 'border border-white/20 bg-white/10 text-white hover:bg-white/20' : ''}><Plus />New vCard</ButtonLink>
               <ButtonLink as={Link} to="/user/nfc-orders" className="border border-white/20 bg-white/10 text-white hover:bg-white/20"><Nfc />Order NFC card</ButtonLink>
             </div>
           </div>

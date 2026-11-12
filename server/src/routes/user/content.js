@@ -261,14 +261,20 @@ r.post('/organisation/members', wrap(async (req, res) => {
   if ((await org.seatsUsed(owner)) >= limit) fail(422, `Your organisation allows ${limit} user(s). Contact the administrator for more seats.`);
   const email = String(req.body.email).toLowerCase().trim();
   if (await M.User.findOne({ where: { email } })) fail(422, 'Validation failed', { email: 'This e-mail is already registered' });
-  const { member, password } = await org.createMember(owner, {
+  const { member, password, invite_url, invite_sent } = await org.createMember(owner, {
     ...pick(req.body, ['first_name', 'last_name', 'contact', 'region_code', 'job_title', 'password']), email,
     company_role: COMPANY_STAFF.includes(req.body.company_role) ? req.body.company_role : 'member',
     permissions: req.body.permissions !== undefined ? listOf(req.body.permissions) : undefined,
   }, { notify: req.body.notify === undefined ? true : toBool(req.body.notify) });
   org.logEvent(owner.id, req.actor || req.user, 'member_added', `Added ${member.fullName()} as ${member.company_role}`, { member_id: member.id });
   // the password goes back to the manager once (they keep the members' logins); it is never stored in plain text
-  res.status(201).json({ data: memberJson(member), password, message: 'User added' });
+  res.status(201).json({ data: memberJson(member), password, invite_url, invite_sent, message: invite_url ? (invite_sent ? 'User added. An invitation to choose a password was e-mailed.' : 'User added. Share the invitation link with them.') : 'User added' });
+}));
+r.post('/organisation/members/:mid/resend-invite', wrap(async (req, res) => {
+  const m = await memberOf(req);
+  const link = await require('../../services/invite').send(m, { inviter: (await org.profileOf(req.user)).name });
+  org.logEvent(m.organisation_id, req.actor || req.user, 'invite_resent', `Sent a new invitation to ${m.fullName()}`, { member_id: m.id });
+  res.json({ invite_url: link.url, invite_sent: link.sent, message: link.sent ? 'A new invitation was e-mailed' : 'Invitation link created. Share it with them.' });
 }));
 r.post('/organisation/members/import', wrap(async (req, res) => {
   const owner = await orgOwner(req);
