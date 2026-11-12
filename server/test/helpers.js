@@ -20,6 +20,7 @@ async function boot() {
   await M.sequelize.query('PRAGMA foreign_keys = ON');
   await M.sequelize.sync({ force: true });
   const app = require('../src/index');
+  await require('../src/services/settings').set({ login_otp_enable: '0' }); // the product default is ON; ordinary tests log in with a password only (auth.test.js covers the code)
   const server = await new Promise((res) => { const s = app.listen(0, '127.0.0.1', () => res(s)); });
   const base = `http://127.0.0.1:${server.address().port}`;
   return { server, base };
