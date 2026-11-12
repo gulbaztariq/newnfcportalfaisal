@@ -16,9 +16,9 @@ const SIG = TEMPLATES.filter((t) => signature.ARCH[t.layout]);
 const app = { app_name: 'Test', favicon: '/f.svg' };
 const HOURS = Object.fromEntries(['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'].map((d) => [d, { open: true, from: '09:00', to: '17:00' }]));
 const FULL = {
-  url_alias: 'alex', name: 'Alex Morgan', first_name: 'Alex', last_name: 'Morgan', occupation: 'Product Designer', company: 'Acme Studio', description: 'I design products. I also teach.',
-  email: 'alex@example.com', phone: '5550100', region_code: '1', location: 'San Francisco, CA', is_verified: true, show_qr_code: true, enable_enquiry_form: true, profile_image: '/uploads/vcards/a.jpg', cover_image: '/uploads/vcards/c.jpg',
-  social_links: { website: 'https://example.com', instagram: 'https://instagram.com/alex', linkedin: 'https://linkedin.com/in/alex', whatsapp: 'https://wa.me/15550100' },
+  url_alias: 'sarah', name: 'Sarah Morgan', first_name: 'Sarah', last_name: 'Morgan', occupation: 'Product Designer', company: 'Acme Studio', description: 'I design products. I also teach.',
+  email: 'sarah@example.com', phone: '5550100', region_code: '1', location: 'San Francisco, CA', is_verified: true, show_qr_code: true, enable_enquiry_form: true, profile_image: '/uploads/vcards/a.jpg', cover_image: '/uploads/vcards/c.jpg',
+  social_links: { website: 'https://example.com', instagram: 'https://instagram.com/sarah', linkedin: 'https://linkedin.com/in/sarah', whatsapp: 'https://wa.me/15550100' },
   custom_links: [{ label: 'Portfolio', url: 'https://example.com/work' }], business_hours: HOURS, sections: {}, theme: {},
   appointment_settings: { enabled: true, slots: { mon: [{ from: '09:00', to: '10:00' }] } },
 };
@@ -55,10 +55,10 @@ for (const t of SIG) {
     assert.ok(html.includes(`l-${t.layout}`));
     assert.ok(body.includes('Morgan'), 'name'); assert.ok(body.includes('Product Designer'), 'role');
     assert.equal(count(html, /id="share"/g), 1, 'one share control'); assert.equal(count(html, /id="save"/g), 1, 'one save control');
-    assert.ok(/href="\/alex\/contact\.vcf"/.test(html), 'save contact link');
-    assert.ok(body.includes('href="tel:+15550100"'), 'phone link'); assert.ok(body.includes('href="mailto:alex@example.com"'), 'e-mail link');
-    assert.ok(body.includes('https://wa.me/15550100'), 'whatsapp link'); assert.ok(body.includes('https://instagram.com/alex'), 'social link');
-    assert.ok(body.includes('/uploads/vcards/a.jpg'), 'profile image'); assert.ok(body.includes('/alex/qr.png'), 'qr code');
+    assert.ok(/href="\/sarah\/contact\.vcf"/.test(html), 'save contact link');
+    assert.ok(body.includes('href="tel:+15550100"'), 'phone link'); assert.ok(body.includes('href="mailto:sarah@example.com"'), 'e-mail link');
+    assert.ok(body.includes('https://wa.me/15550100'), 'whatsapp link'); assert.ok(body.includes('https://instagram.com/sarah'), 'social link');
+    assert.ok(body.includes('/uploads/vcards/a.jpg'), 'profile image'); assert.ok(body.includes('/sarah/qr.png'), 'qr code');
     assert.ok(body.includes('id="enq"'), 'enquiry form'); assert.ok(body.includes('id="appt"'), 'appointments'); assert.ok(body.includes('Brand identity'), 'services');
     assert.ok(!/undefined|\[object Object\]|>NaN</.test(body), 'no undefined text');
   });
@@ -80,7 +80,7 @@ for (const t of SIG) {
 test('sections follow the owner order, hidden sections disappear and custom headings are used', () => {
   for (const t of SIG) {
     const html = bodyOf(page(t, { ...FULL, sections: { social: false, qr: false }, section_order: ['enquiry', 'about'], section_titles: { about: 'My story' } }, extras));
-    assert.ok(!html.includes('/alex/qr.png') || t.layout === 'sxcard', `${t.layout} qr hidden`);
+    assert.ok(!html.includes('/sarah/qr.png') || t.layout === 'sxcard', `${t.layout} qr hidden`);
     assert.ok(!html.includes('s-social'), `${t.layout} social section hidden`);
     assert.ok(html.includes('My story') || t.layout === 'sxletter', `${t.layout} custom heading`);
     if (!['sxsheet', 'sxletter'].includes(t.layout)) assert.ok(html.indexOf('s-enquiry') < html.indexOf('s-about'), `${t.layout} order`);

@@ -233,9 +233,9 @@ api.post('/stores/:alias/orders', orderLimiter, wrap(async (req, res) => {
 
 /* ======================================================= vCard pages */
 const SAMPLE = {
-  url_alias: 'preview', profile_image: '/brand/sample-portrait.svg', name: 'Alex Morgan', first_name: 'Alex', last_name: 'Morgan', occupation: 'Product Designer', company: 'Acme Studio',
+  url_alias: 'preview', profile_image: '/brand/sample-portrait.svg', name: 'Sarah Morgan', first_name: 'Sarah', last_name: 'Morgan', occupation: 'Product Designer', company: 'Acme Studio',
   description: 'I design delightful digital products and brand experiences. Let’s build something great together.',
-  email: 'alex@example.com', phone: '5550100', region_code: '1', location: 'San Francisco, CA', is_verified: true, show_qr_code: false, enable_enquiry_form: true, sticky_bar: false,
+  email: 'sarah@example.com', phone: '5550100', region_code: '1', location: 'San Francisco, CA', is_verified: true, show_qr_code: false, enable_enquiry_form: true, sticky_bar: false,
   social_links: { website: 'https://example.com', linkedin: 'https://linkedin.com', instagram: 'https://instagram.com', twitter: 'https://x.com', whatsapp: 'https://wa.me/15550100' },
   custom_links: [{ label: 'My Portfolio', url: 'https://example.com', desc: 'Selected work and case studies' }, { label: 'Book a table', url: 'https://example.com', desc: 'Reserve in 30 seconds', badge: 'New', icon: 'ri-calendar-event-line', featured: true }],
   business_hours: { mon: { open: true, from: '09:00', to: '17:00' }, tue: { open: true, from: '09:00', to: '17:00' }, wed: { open: true, from: '09:00', to: '17:00' }, thu: { open: true, from: '09:00', to: '17:00' }, fri: { open: true, from: '09:00', to: '15:00' } },
