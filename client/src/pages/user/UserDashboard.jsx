@@ -5,12 +5,14 @@ import { MessageSquareText, Sparkles, Plus, ArrowUpRight, Nfc } from 'lucide-rea
 import api from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { fmtDate, fmtDateTime } from '@/lib/format';
-import { Card, CardHeader, CardBody, ButtonLink, EmptyState, Skeleton, Reveal, Ripples } from '@/components/ui';
+import { Card, CardHeader, CardBody, ButtonLink, EmptyState, Skeleton, Reveal, Ripples, Segmented } from '@/components/ui';
 import { AnalyticsDashboard } from './Analytics';
 
 export default function UserDashboard() {
   const { user } = useAuth();
   const [d, setD] = useState(null);
+  const [scope, setScope] = useState('mine');
+  const isCompany = !!user.is_organisation || ['manager', 'supervisor'].includes(user.company_role);
   useEffect(() => { api.get('/user/dashboard').then((r) => setD(r.data)); }, []);
   if (!d) return <div className="space-y-6"><Skeleton className="h-44 rounded-3xl" /><div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">{[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-32 rounded-2xl" />)}</div></div>;
   const sub = d.subscription;
@@ -36,7 +38,8 @@ export default function UserDashboard() {
       </motion.div>
 
       {/* the dashboard is the analytics dashboard: headline numbers, traffic, sources, heatmap, top cards */}
-      <AnalyticsDashboard endpoint="/user/analytics" embedded />
+      {isCompany && <div className="mb-5 flex justify-end"><Segmented id="dash-scope" size="sm" value={scope} onChange={setScope} options={[{ value: 'mine', label: 'My cards' }, { value: 'company', label: 'Whole company' }]} /></div>}
+      {scope === 'company' && isCompany ? <AnalyticsDashboard key="company" endpoint="/user/analytics/company" company embedded /> : <AnalyticsDashboard key="mine" endpoint="/user/analytics" embedded />}
 
       <div className="mt-8 grid gap-6 xl:grid-cols-3">
         <Reveal className="xl:col-span-2">

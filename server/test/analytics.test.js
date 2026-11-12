@@ -200,6 +200,29 @@ test('user dashboard API: only your own cards, anonymous refused, other people\'
   r = await c.get('/api/user/analytics?vcard=1%20OR%201=1'); assert.equal(r.status, 404); r = await c.get('/api/user/analytics?vcard=all'); assert.equal(r.status, 200);
 });
 
+test('company analytics: owner sees every member, per-person rows include quiet people, others are refused', async () => {
+  const owner = await subscribed(); await owner.update({ is_organisation: true, company_role: 'owner' });
+  const anna = await makeUser({ first_name: 'Anna', organisation_id: owner.id, company_role: 'member' });
+  const ben = await makeUser({ first_name: 'Ben', organisation_id: owner.id, company_role: 'member' });
+  const outsider = await subscribed(); const outCard = await card(outsider);
+  const ownCard = await card(owner); const annaCard = await card(anna); await card(ben);
+  await M.VcardView.bulkCreate([view(ownCard, 0, { real: true }), view(annaCard, 0, { real: true }), view(annaCard, 1, { who: 2, real: true }), view(outCard, 0, { real: true })]);
+  const c = await login(owner);
+  let r = await c.get('/api/user/analytics/company?days=30&tz=0'); assert.equal(r.status, 200);
+  assert.equal(r.body.data.kpis.views.value, 3, 'owner + members only, never another account');
+  assert.equal(r.body.cards.length, 3); assert.equal(r.body.company.members.total, 2); assert.equal(r.body.company.cards.total, 3);
+  const rows = r.body.data.members; assert.equal(rows.length, 3, 'owner, Anna and Ben');
+  assert.ok(rows[0].name.startsWith('Anna')); assert.equal(rows[0].views, 2, 'ranked by views');
+  const ben_ = rows.find((x) => x.name.startsWith('Ben')); assert.equal(ben_.views, 0); assert.equal(ben_.cards, 1);
+  assert.ok(r.body.data.teamInsights.some((t) => /no views/.test(t.text)));
+  r = await c.get(`/api/user/analytics/company?member=${anna.id}`); assert.equal(r.body.data.kpis.views.value, 2); assert.equal(r.body.cards.length, 1);
+  assert.equal((await c.get(`/api/user/analytics/company?member=${outsider.id}`)).status, 404, 'not a member');
+  assert.equal((await c.get(`/api/user/analytics/company?vcard=${outCard.id}`)).status, 404);
+  assert.equal((await c.get('/api/user/analytics/company?member=abc')).status, 404);
+  const plain = await login(outsider); assert.equal((await plain.get('/api/user/analytics/company')).status, 403);
+  assert.equal((await client(ctx.base).get('/api/user/analytics/company')).status, 401);
+});
+
 test('admin analytics API: admins see the platform, ordinary users are refused', async () => {
   const u = await subscribed(); const v = await card(u); await M.VcardView.bulkCreate([view(v, 0, { real: true }), view(v, 1, { who: 2, real: true })]);
   await settings.set({ enforce_2fa_staff: '0' }); const admin = await makeUser({ role: 'super_admin' });

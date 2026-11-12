@@ -44,6 +44,7 @@ const U = {
   Affiliation: lazyNamed(() => import('@/pages/user/Billing'), 'Affiliation'),
   Analytics: lazyNamed(() => import('@/pages/user/Analytics'), 'UserAnalytics'),
   LegacyAnalytics: lazyNamed(() => import('@/pages/user/Analytics'), 'LegacyCardAnalytics'),
+  CompanyAnalytics: lazyNamed(() => import('@/pages/user/Analytics'), 'CompanyAnalytics'),
   AdminAnalytics: lazyNamed(() => import('@/pages/user/Analytics'), 'AdminCardAnalytics'),
   Appointments: lazyNamed(() => import('@/pages/user/UserExtras'), 'Appointments'),
   Subscribers: lazyNamed(() => import('@/pages/user/UserExtras'), 'Subscribers'),
@@ -213,6 +214,7 @@ export default function App() {
                 <Route path="vcards/create" element={<U.VcardCreate />} />
                 <Route path="vcards/:id/edit" element={<U.Editor />} />
                 <Route path="analytics" element={<U.Analytics />} />
+                <Route path="company-analytics" element={<U.CompanyAnalytics />} />
                 <Route path="vcards/:id/analytics" element={<U.LegacyAnalytics />} />
                 <Route path="appointments" element={<U.Appointments />} />
                 <Route path="subscribers" element={<U.Subscribers />} />

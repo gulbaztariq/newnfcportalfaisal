@@ -63,7 +63,7 @@ const DATE = /^\d{4}-\d{2}-\d{2}$/;
  *   compare 'previous' | 'year' | 'none', granularity 'auto' | 'day' | 'week' | 'month',
  *   filters { channel, device, os, browser, source, visitor ('new'|'returning'), action }
  */
-async function report(vcardIds, { days = 30, from, to, tz = 0, now = new Date(), compare = 'previous', granularity = 'auto', filters = {} } = {}) {
+async function report(vcardIds, { days = 30, from, to, tz = 0, now = new Date(), compare = 'previous', granularity = 'auto', filters = {}, people = null } = {}) {
   tz = Math.max(-840, Math.min(840, Math.round(Number(tz) || 0)));
   const local = (d) => dayjs.utc(d).add(tz, 'minute'); // the owner's wall clock, built with UTC maths so the server's own time zone never matters
   const today = local(now).startOf('day');
@@ -236,10 +236,32 @@ async function report(vcardIds, { days = 30, from, to, tz = 0, now = new Date(),
     topSource: sources[0] && sources[0].name !== 'Other' ? sources[0] : null,
   };
 
+  // company view: one row per person (their cards added together), including people with no activity
+  let members;
+  let teamInsights;
+  if (people) {
+    members = people.map((p) => {
+      const ids = new Set(p.cardIds);
+      const v = cur.v.filter((x) => ids.has(x.vcard_id)); const e = cur.e.filter((x) => ids.has(x.vcard_id));
+      const l = [cur.q, cur.a, cur.s].reduce((n, rows) => n + rows.filter((x) => ids.has(x.vcard_id)).length, 0);
+      const pv = prev.v.filter((x) => ids.has(x.vcard_id)).length;
+      return { id: p.id, name: p.name, email: p.email, role: p.role, status: p.status, cards: p.cardIds.length, views: v.length, visitors: visitors(v), actions: e.length, saves: e.filter((x) => x.type === 'save').length, leads: l, change: prevStart ? delta(v.length, pv) : null, conversion: pct(e.length + l, v.length), share: pct(v.length, cur.v.length) };
+    }).sort((a, b) => b.views - a.views || b.actions - a.actions || a.name.localeCompare(b.name));
+    const active = members.filter((m) => m.views > 0);
+    teamInsights = [];
+    if (active.length) teamInsights.push({ tone: 'good', text: `${active[0].name} leads with ${nf(active[0].views)} views (${active[0].share ?? 0}% of the company total).` });
+    const quiet = members.filter((m) => m.cards > 0 && m.views === 0);
+    if (quiet.length) teamInsights.push({ tone: 'warn', text: `${quiet.length} ${quiet.length === 1 ? 'person has' : 'people have'} a card but no views in this period${quiet.length <= 3 ? `: ${quiet.map((m) => m.name).join(', ')}` : ''}. A reminder to share it may help.` });
+    const nocard = members.filter((m) => m.cards === 0);
+    if (nocard.length) teamInsights.push({ tone: 'info', text: `${nocard.length} ${nocard.length === 1 ? 'person has' : 'people have'} no card yet.` });
+    const best = [...active].filter((m) => m.views >= 10 && m.conversion !== null).sort((a, b) => b.conversion - a.conversion)[0];
+    if (best) teamInsights.push({ tone: 'info', text: `${best.name} converts best: ${best.conversion}% of views lead to an action or lead.` });
+  }
+
   const insights = buildInsights({ kpis, byWeekday, byHour, channels, sources, days, devices, actionCounts, series, compare, filtered: viewFilters.length > 0 || !!f.action });
   return {
     range, granularity: g, filters: f, leadsNotFiltered: viewFilters.length > 0,
-    kpis, series, heatmap: heat, byWeekday, byHour, sources, channels, devices, browsers, systems, newVsReturning, actions: actionCounts, topLinks, leadParts, topCards, funnel, highlights, insights,
+    members, teamInsights, kpis, series, heatmap: heat, byWeekday, byHour, sources, channels, devices, browsers, systems, newVsReturning, actions: actionCounts, topLinks, leadParts, topCards, funnel, highlights, insights,
     hasData: cur.v.length + cur.e.length + leads(cur) > 0, truncated,
   };
 }
@@ -254,6 +276,7 @@ function empty(range, f) {
   };
 }
 
+const nf = (n) => new Intl.NumberFormat('en-US').format(n);
 const hr = (h) => `${((h + 11) % 12) + 1} ${h < 12 ? 'AM' : 'PM'}`;
 function buildInsights({ kpis, byWeekday, byHour, channels, sources, days, devices, actionCounts, series, compare, filtered }) {
   const out = [];

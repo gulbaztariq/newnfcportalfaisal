@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, Navigate, useParams, useSearchParams } from 'react-router-dom';
 import { motion } from 'motion/react';
 import { ResponsiveContainer, ComposedChart, Area, Line, XAxis, YAxis, CartesianGrid, Tooltip, AreaChart, PieChart, Pie, Cell, BarChart, Bar } from 'recharts';
-import { Eye, Users, MousePointerClick, UserPlus, MessageSquareText, Percent, TrendingUp, TrendingDown, Minus, Download, Lightbulb, Globe2, Smartphone, Clock, Filter, Link2, BarChart3, Share2, AlertTriangle, Info, CheckCircle2, ExternalLink, RefreshCw, ChevronDown, X, Printer, SlidersHorizontal, Search, ArrowUp, ArrowDown, ArrowUpDown, Repeat, Target, Layers, CalendarDays } from 'lucide-react';
+import { Eye, Users, MousePointerClick, UserPlus, MessageSquareText, Percent, TrendingUp, TrendingDown, Minus, Download, Lightbulb, Globe2, Smartphone, Clock, Filter, Link2, BarChart3, Share2, AlertTriangle, Info, CheckCircle2, ExternalLink, RefreshCw, ChevronDown, X, Printer, SlidersHorizontal, Search, ArrowUp, ArrowDown, ArrowUpDown, Repeat, Target, Layers, CalendarDays, Building2, Armchair, UserCheck, IdCard, Trophy } from 'lucide-react';
 import api from '@/lib/api';
 import { cn } from '@/lib/cn';
 import { PageHeader, Card, CardHeader, CardBody, Segmented, Select, Button, Badge, Skeleton, EmptyState, Tip, CountUp, Input, Menu, MenuTrigger, MenuContent, MenuItem, MenuLabel, MenuSeparator } from '@/components/ui';
@@ -186,7 +186,7 @@ const FILTERS = [
   { key: 'visitor', label: 'Visitors', options: [{ value: 'new', label: 'New (one day)' }, { value: 'returning', label: 'Returning (2+ days)' }] },
   { key: 'action', label: 'Action', options: [['save', 'Saved contact'], ['call', 'Calls'], ['email', 'E-mails'], ['whatsapp', 'WhatsApp'], ['map', 'Directions'], ['share', 'Shares'], ['social', 'Social links'], ['link', 'Custom links']].map(([value, label]) => ({ value, label })) },
 ];
-const INITIAL = { preset: '30', custom: { from: iso(addDays(new Date(), -29)), to: iso(new Date()) }, compare: 'previous', granularity: 'auto', card: 'all', cardName: '', channel: 'all', device: 'all', os: 'all', browser: 'all', source: 'all', visitor: 'all', action: 'all' };
+const INITIAL = { preset: '30', custom: { from: iso(addDays(new Date(), -29)), to: iso(new Date()) }, compare: 'previous', granularity: 'auto', card: 'all', cardName: '', member: 'all', channel: 'all', device: 'all', os: 'all', browser: 'all', source: 'all', visitor: 'all', action: 'all' };
 const FILTER_KEYS = ['channel', 'device', 'os', 'browser', 'source', 'visitor', 'action'];
 const fmtDay = (s, o = { day: 'numeric', month: 'short' }) => new Date(`${s}T12:00:00`).toLocaleDateString('en-GB', o);
 
@@ -339,13 +339,86 @@ function CardsTable({ rows, admin, onFocus, focusId }) {
   );
 }
 
+function CompanyStrip({ c, d }) {
+  const withCards = (d.members || []).filter((m) => m.cards > 0).length;
+  const active = (d.members || []).filter((m) => m.views > 0).length;
+  const seatPct = c.seats.limit ? Math.min(100, Math.round((c.seats.used / c.seats.limit) * 100)) : 0;
+  const items = [
+    { icon: Users, label: 'Team members', value: nf.format(c.members.total), note: `${c.members.active} active${c.members.locked ? ` · ${c.members.locked} locked` : ''}${c.members.blocked ? ` · ${c.members.blocked} blocked` : ''}` },
+    { icon: Armchair, label: 'Seats used', value: c.seats.limit ? `${c.seats.used} / ${c.seats.limit}` : nf.format(c.seats.used), note: c.seats.limit ? `${seatPct}% of your plan` : 'No seat limit set', bar: c.seats.limit ? seatPct : null },
+    { icon: IdCard, label: 'Company cards', value: nf.format(c.cards.total), note: `${c.cards.live} live · ${c.cards.total - c.cards.live} hidden` },
+    { icon: UserCheck, label: 'People with views', value: `${active} / ${withCards}`, note: withCards ? `${Math.round((active / withCards) * 100)}% of people with a card` : 'Nobody has a card yet', bar: withCards ? Math.round((active / withCards) * 100) : null },
+  ];
+  return (
+    <div className="grid auto-rows-fr gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      {items.map((x, i) => (
+        <motion.div key={x.label} className="h-full" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}>
+          <Card className="flex h-full min-h-[7.5rem] flex-col justify-between p-4">
+            <p className="flex items-center gap-1.5 text-[13px] font-medium text-muted-foreground"><span className="grid size-6 place-items-center rounded-lg bg-primary-soft text-primary"><x.icon className="size-3.5" /></span>{x.label}</p>
+            <div><p className="mt-2 font-display text-2xl leading-none font-bold tracking-tight">{x.value}</p>
+              {x.bar !== null && x.bar !== undefined && <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-linear-to-r from-violet-500 to-fuchsia-500" style={{ width: `${x.bar}%` }} /></div>}
+              <p className="mt-1.5 text-xs text-muted-foreground">{x.note}</p></div>
+          </Card>
+        </motion.div>
+      ))}
+    </div>
+  );
+}
+
+function TeamTable({ rows, onFocus, focusId, onExport }) {
+  const [q, setQ] = useState('');
+  const [sort, setSort] = useState({ key: 'views', dir: -1 });
+  const [page, setPage] = useState(0);
+  const per = 10;
+  const list = useMemo(() => {
+    const t = q.trim().toLowerCase();
+    return rows.filter((m) => !t || m.name.toLowerCase().includes(t) || (m.email || '').toLowerCase().includes(t))
+      .sort((a, b) => ((a[sort.key] ?? -1) > (b[sort.key] ?? -1) ? 1 : (a[sort.key] ?? -1) < (b[sort.key] ?? -1) ? -1 : 0) * sort.dir);
+  }, [rows, q, sort]);
+  useEffect(() => setPage(0), [q, sort, rows]);
+  const pages = Math.max(1, Math.ceil(list.length / per));
+  const maxViews = Math.max(1, ...rows.map((r) => r.views));
+  const th = (key, label, first) => (
+    <th className={cn('py-2.5 font-medium', first ? 'px-5 text-left' : 'px-3 text-right')} aria-sort={sort.key === key ? (sort.dir > 0 ? 'ascending' : 'descending') : 'none'}>
+      <button type="button" onClick={() => setSort((s) => ({ key, dir: s.key === key ? -s.dir : -1 }))} className={cn('inline-flex items-center gap-1 hover:text-foreground', sort.key === key && 'text-foreground')}>{label}{sort.key === key ? (sort.dir > 0 ? <ArrowUp className="size-3" /> : <ArrowDown className="size-3" />) : <ArrowUpDown className="size-3 opacity-40" />}</button>
+    </th>
+  );
+  const tone = { active: 'success', locked: 'warning', blocked: 'danger' };
+  return (
+    <Card>
+      <CardHeader icon={Building2} title="Team performance" description="Every person's cards added together. Click a column to sort."
+        actions={<div className="flex items-center gap-2">{rows.length > 5 && <div className="w-48"><Input icon={Search} placeholder="Search people" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search people" /></div>}<Button variant="outline" onClick={onExport}><Download />CSV</Button></div>} />
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[860px] text-sm">
+          <thead><tr className="border-y border-border bg-muted/40 text-xs text-muted-foreground">{th('name', 'Person', true)}{th('cards', 'Cards')}{th('views', 'Views')}{th('change', 'Change')}{th('visitors', 'Visitors')}{th('actions', 'Actions')}{th('saves', 'Saved')}{th('leads', 'Leads')}{th('conversion', 'Action rate')}<th className="px-5 py-2.5" /></tr></thead>
+          <tbody>
+            {list.slice(page * per, page * per + per).map((m) => (
+              <tr key={m.id} className={cn('border-b border-border/60 last:border-0 hover:bg-muted/30', String(focusId) === String(m.id) && 'bg-primary-soft/50')}>
+                <td className="px-5 py-3"><p className="flex items-center gap-2 font-medium">{m.name}{m.status !== 'active' && <Badge tone={tone[m.status] || 'neutral'}>{m.status}</Badge>}</p><p className="text-xs text-muted-foreground"><span className="capitalize">{m.role}</span>{m.email ? ` · ${m.email}` : ''}</p></td>
+                <td className="px-3 py-3 text-right tabular-nums">{nf.format(m.cards)}</td>
+                <td className="px-3 py-3 text-right"><span className="font-semibold tabular-nums">{nf.format(m.views)}</span><div className="mt-1 ml-auto h-1 w-20 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-primary" style={{ width: `${(m.views / maxViews) * 100}%` }} /></div></td>
+                <td className="px-3 py-3 text-right">{m.change === null ? <span className="text-xs text-muted-foreground">-</span> : <Delta change={m.change} />}</td>
+                <td className="px-3 py-3 text-right tabular-nums">{nf.format(m.visitors)}</td><td className="px-3 py-3 text-right tabular-nums">{nf.format(m.actions)}</td><td className="px-3 py-3 text-right tabular-nums">{nf.format(m.saves)}</td><td className="px-3 py-3 text-right tabular-nums">{nf.format(m.leads)}</td>
+                <td className="px-3 py-3 text-right tabular-nums">{m.conversion === null ? '-' : `${m.conversion}%`}</td>
+                <td className="px-5 py-3 text-right"><Tip content={String(focusId) === String(m.id) ? 'Showing only this person' : 'Show only this person'}><Button variant={String(focusId) === String(m.id) ? 'soft' : 'ghost'} size="icon" onClick={() => onFocus(m)} aria-label={`Filter to ${m.name}`}><Filter /></Button></Tip></td>
+              </tr>
+            ))}
+            {!list.length && <tr><td colSpan={10} className="px-5 py-10 text-center text-muted-foreground">No people match your search</td></tr>}
+          </tbody>
+        </table>
+      </div>
+      {pages > 1 && <div className="flex items-center justify-between border-t border-border px-5 py-3 text-xs text-muted-foreground"><span>{list.length} people · page {page + 1} of {pages}</span><span className="flex gap-1"><Button variant="outline" size="sm" disabled={page === 0} onClick={() => setPage((p) => p - 1)}>Previous</Button><Button variant="outline" size="sm" disabled={page >= pages - 1} onClick={() => setPage((p) => p + 1)}>Next</Button></span></div>}
+    </Card>
+  );
+}
+
 /* ------------------------------------------------------------------ the dashboard */
 /**
  * @param endpoint  '/user/analytics' or '/admin/dashboard/card-analytics'
  * @param admin     platform view: no card picker, shows platform totals
  * @param embedded  used inside the Dashboard page: a section heading instead of the page header
  */
-export function AnalyticsDashboard({ endpoint, admin = false, initialCard = 'all', embedded = false }) {
+export function AnalyticsDashboard({ endpoint, admin = false, company = false, initialCard = 'all', embedded = false }) {
   const [f, setF] = useState({ ...INITIAL, card: initialCard });
   const [res, setRes] = useState(null);
   const [err, setErr] = useState(null);
@@ -355,11 +428,11 @@ export function AnalyticsDashboard({ endpoint, admin = false, initialCard = 'all
   const set = (patch) => setF((x) => ({ ...x, ...patch }));
   const range = useMemo(() => rangeFor(f.preset, f.custom), [f.preset, f.custom]);
   const validRange = range.from && range.to && range.from <= range.to;
-  const key = JSON.stringify([endpoint, range, f.compare, f.granularity, f.card, ...FILTER_KEYS.map((k) => f[k]), tick]);
+  const key = JSON.stringify([endpoint, range, f.compare, f.granularity, f.card, f.member, ...FILTER_KEYS.map((k) => f[k]), tick]);
   useEffect(() => {
     if (!validRange) return undefined;
     let live = true; setErr(null); setBusy(true);
-    const params = { from: range.from, to: range.to, compare: f.compare, granularity: f.granularity, tz: tzNow(), vcard: f.card === 'all' ? undefined : f.card };
+    const params = { from: range.from, to: range.to, compare: f.compare, granularity: f.granularity, tz: tzNow(), vcard: f.card === 'all' ? undefined : f.card, member: company && f.member !== 'all' ? f.member : undefined };
     for (const k of FILTER_KEYS) if (f[k] !== 'all') params[k] = f[k];
     api.get(endpoint, { params }).then(({ data }) => { if (live) { setRes(data); setBusy(false); } }).catch((e) => { if (live) { setErr(e.message || 'Could not load analytics'); setBusy(false); } });
     return () => { live = false; };
@@ -368,17 +441,20 @@ export function AnalyticsDashboard({ endpoint, admin = false, initialCard = 'all
 
   const d = res?.data;
   const cards = res?.cards || [];
-  const cardName = f.card === 'all' ? (admin ? 'all cards' : 'all your cards') : cards.find((c) => String(c.id) === String(f.card))?.name || f.cardName || 'this card';
+  const cardName = f.card === 'all' ? (admin ? 'all cards' : company ? (f.member === 'all' ? 'the whole company' : `${memberName}'s cards`) : 'all your cards') : cards.find((c) => String(c.id) === String(f.card))?.name || f.cardName || 'this card';
   const periodText = d ? (d.range.from === d.range.to ? fmtDay(d.range.from, { day: 'numeric', month: 'short', year: 'numeric' }) : `${fmtDay(d.range.from)} - ${fmtDay(d.range.to, { day: 'numeric', month: 'short', year: 'numeric' })}`) : '';
   const compareText = !d ? '' : d.range.compare === 'none' ? 'comparison off' : d.range.compare === 'year' ? `compared with ${fmtDay(d.range.previousFrom)} - ${fmtDay(d.range.previousTo, { day: 'numeric', month: 'short', year: 'numeric' })}` : `compared with the ${d.range.days} ${d.range.days === 1 ? 'day' : 'days'} before`;
   const compareOn = d ? d.range.compare !== 'none' : true;
+  const people = res?.people || [];
+  const memberName = people.find((x) => String(x.id) === String(f.member))?.name || 'this person';
   const active = [
+    ...(company && f.member !== 'all' ? [{ key: 'member', label: 'Person', value: memberName }] : []),
     ...(f.card !== 'all' ? [{ key: 'card', label: 'Card', value: cardName }] : []),
     ...FILTERS.filter((x) => f[x.key] !== 'all').map((x) => ({ key: x.key, label: x.label, value: x.options.find((o) => o.value === f[x.key])?.label || f[x.key] })),
     ...(f.source !== 'all' ? [{ key: 'source', label: 'Source', value: f.source }] : []),
   ];
-  const clear = (k) => set(k === 'card' ? { card: 'all', cardName: '' } : { [k]: 'all' });
-  const clearAll = () => set({ card: 'all', cardName: '', ...Object.fromEntries(FILTER_KEYS.map((k) => [k, 'all'])) });
+  const clear = (k) => set(k === 'card' ? { card: 'all', cardName: '' } : { [k]: 'all', ...(k === 'member' ? { card: 'all', cardName: '' } : {}) });
+  const clearAll = () => set({ card: 'all', cardName: '', member: 'all', ...Object.fromEntries(FILTER_KEYS.map((k) => [k, 'all'])) });
   const pick = (k, v) => v && v !== 'Other' && v !== 'Unknown' && set({ [k]: f[k] === v ? 'all' : v });
   const toggleMetric = (m) => setMetrics((cur) => (cur.includes(m) ? (cur.length > 1 ? cur.filter((x) => x !== m) : cur) : [...cur, m]));
   const exportAs = (what) => { if (!d) return; const [n, rows] = exporters[what](d); download(`analytics-${n.toLowerCase()}-${cardName.replace(/\W+/g, '-')}-${d.range.from}-to-${d.range.to}.csv`, rows); };
@@ -394,6 +470,7 @@ export function AnalyticsDashboard({ endpoint, admin = false, initialCard = 'all
           </div>
         )}
         <div className="w-full sm:w-52"><p className="mb-1 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">Compare with</p><Select value={f.compare} onChange={(x) => set({ compare: x })} options={COMPARE} /></div>
+        {company && people.length > 1 && <div className="w-full sm:w-52"><p className="mb-1 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">Person</p><Select value={String(f.member)} onChange={(x) => set({ member: x || 'all', card: 'all', cardName: '' })} options={[{ value: 'all', label: 'Everyone' }, ...people.map((x) => ({ value: String(x.id), label: x.name }))]} /></div>}
         {!admin && cards.length > 1 && <div className="w-full sm:w-52"><p className="mb-1 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">Card</p><Select value={String(f.card)} onChange={(x) => set({ card: x || 'all', cardName: '' })} options={[{ value: 'all', label: 'All cards' }, ...cards.map((c) => ({ value: String(c.id), label: c.name }))]} /></div>}
         <div className="ml-auto flex items-center gap-2">
           <Tip content="Refresh"><Button variant="outline" size="icon" onClick={() => setTick((n) => n + 1)} aria-label="Refresh" disabled={busy}><RefreshCw className={cn(busy && 'animate-spin')} /></Button></Tip>
@@ -421,7 +498,7 @@ export function AnalyticsDashboard({ endpoint, admin = false, initialCard = 'all
     </Card>
   );
 
-  const title = embedded ? 'Analytics' : admin ? 'Card analytics' : 'Analytics';
+  const title = embedded ? (company ? 'Company analytics' : 'Analytics') : admin ? 'Card analytics' : company ? 'Company analytics' : 'Analytics';
   const description = d ? `${cardName[0].toUpperCase()}${cardName.slice(1)} · ${periodText} · ${compareText}` : 'How visitors find and use your digital cards.';
   const head = embedded
     ? <div className="mb-5 min-w-0"><h2 className="font-display text-xl font-bold tracking-tight">{title}</h2><p className="text-sm text-muted-foreground">{description}</p></div>
@@ -447,6 +524,7 @@ export function AnalyticsDashboard({ endpoint, admin = false, initialCard = 'all
                     </div>
                   )}
 
+                  {company && res.company && <CompanyStrip c={res.company} d={d} />}
                   <Hero d={d} label={periodText} />
 
                   {/* headline numbers: six cards, one grid, one height */}
@@ -518,6 +596,18 @@ export function AnalyticsDashboard({ endpoint, admin = false, initialCard = 'all
                     <Section icon={Smartphone} title="Operating systems" description="Click to filter"><BarList rows={d.systems} total={total} onPick={(n) => pick('os', n)} active={f.os} /></Section>
                   </div>
 
+                  {company && d.members && (
+                    <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
+                      <Section className="xl:col-span-2" icon={Trophy} title="Team leaderboard" description="Views by person. Click a person to focus on their cards">
+                        <BarList rows={d.members.filter((m) => m.views > 0).slice(0, 8).map((m) => ({ name: m.name, value: m.views, id: m.id }))} total={total} empty="No views yet" onPick={(n) => { const m = d.members.find((x) => x.name === n); if (m) set({ member: String(m.id), card: 'all', cardName: '' }); }} />
+                      </Section>
+                      <Section icon={Lightbulb} title="Team insights" description="Who needs attention">
+                        <ul className="space-y-3">{(d.teamInsights || []).map((x, i) => { const [I, c] = TONE[x.tone] || TONE.info; return <li key={i} className="flex gap-3 text-sm"><span className={cn('grid size-7 shrink-0 place-items-center rounded-lg', c)}><I className="size-4" /></span><span className="pt-0.5 leading-snug">{x.text}</span></li>; })}{!(d.teamInsights || []).length && <li className="text-sm text-muted-foreground">Insights appear once your team has some traffic.</li>}</ul>
+                      </Section>
+                    </div>
+                  )}
+                  {company && d.members && <TeamTable rows={d.members} onFocus={(m) => set({ member: String(f.member) === String(m.id) ? 'all' : String(m.id), card: 'all', cardName: '' })} focusId={f.member} onExport={() => { const rows = [['Person', 'E-mail', 'Role', 'Status', 'Cards', 'Views', 'Change %', 'Visitors', 'Actions', 'Saved', 'Leads', 'Action rate %', 'Share of views %'], ...d.members.map((m) => [m.name, m.email, m.role, m.status, m.cards, m.views, m.change, m.visitors, m.actions, m.saves, m.leads, m.conversion, m.share])]; download(`company-team-${d.range.from}-to-${d.range.to}.csv`, rows); }} />}
+
                   <CardsTable rows={d.topCards} admin={admin} onFocus={(c) => (String(f.card) === String(c.id) ? clear('card') : cardFor(c))} focusId={f.card} />
 
                   <p className="flex items-start gap-2 text-xs text-muted-foreground"><Info className="mt-0.5 size-3.5 shrink-0" /><span>Visitors are counted by an anonymised, salted hash of the network address. No cookies are set and no personal data is stored. Times use your local time zone. {d.truncated && 'This period has more activity than can be shown in full, so the oldest data is left out.'}</span></p>
@@ -543,6 +633,7 @@ export function UserAnalytics() {
   const [params] = useSearchParams();
   return <AnalyticsDashboard endpoint="/user/analytics" initialCard={params.get('card') || 'all'} />;
 }
+export function CompanyAnalytics() { return <AnalyticsDashboard endpoint="/user/analytics/company" company />; }
 export function AdminCardAnalytics() { return <AnalyticsDashboard endpoint="/admin/dashboard/card-analytics" admin />; }
 /** the old per-card address now opens the new dashboard filtered to that card */
 export function LegacyCardAnalytics() { const { id } = useParams(); return <Navigate to={`/user/analytics?card=${id}`} replace />; }
