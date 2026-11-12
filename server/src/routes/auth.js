@@ -41,8 +41,46 @@ async function sendVerification(user) {
   await mail.sendTemplate('verify_email', user.email, { name: user.first_name, verify_url: url });
 }
 
+/* ------------------------------------------------ extra layer for super admin, staff and company admins */
+// Their accounts can reach everyone's data, so a mailbox alone is not enough: after the e-mailed code they must also
+// give a code from an authenticator app (set up on the first sign-in). Emergency off switch: DISABLE_REQUIRED_TOTP=1.
+const isPrivileged = (u) => STAFF_ROLES.includes(u.role) || !!u.is_organisation || u.company_role === 'manager';
+async function needsAuthenticator(user) {
+  if (process.env.DISABLE_REQUIRED_TOTP === '1' || user.two_factor_enabled || !isPrivileged(user)) return false;
+  const s = await settings.all();
+  return STAFF_ROLES.includes(user.role) ? s.require_totp_staff !== '0' : s.require_totp_company !== '0';
+}
+
+/** one line in the audit log for every sign-in; privileged accounts are e-mailed when it is a device or network they have not used before */
+async function recordLogin(req, user) {
+  try {
+    const ua = String(req.get('user-agent') || '').slice(0, 250);
+    const { ActivityLog } = require('../models');
+    const where = { user_id: user.id, action: 'auth.login' };
+    const before = await ActivityLog.count({ where });
+    const known = before ? await ActivityLog.count({ where: { ...where, ip: req.ip, user_agent: ua } }) : 1;
+    await security.audit({ ip: req.ip, get: (h) => req.get(h), user }, 'auth.login', 'user', user.id, {});
+    if (!known && isPrivileged(user)) {
+      const { browser, os } = require('../services/analytics').agentOf(ua);
+      mail.sendTemplate('login_alert', user.email, { name: user.first_name, when: new Date().toUTCString(), ip: String(req.ip || 'unknown'), device: `${browser} on ${os}` }).catch((e) => console.error('[login alert]', e.message));
+    }
+  } catch (e) { console.error('[record login]', e.message); }
+}
+
+/** the last step of every sign-in: ask a privileged account to set up its authenticator first, otherwise start the session */
+async function startSession(req, res, user) {
+  if (await needsAuthenticator(user)) {
+    return res.json({ setup_required: true, setup_token: jwt.sign({ sub: user.id, v: user.token_version || 0, p: '2fa-setup' }, jwtSecret, { expiresIn: '15m' }) });
+  }
+  await user.update({ last_login_at: new Date(), ...(user.email_verified_at ? {} : { email_verified_at: new Date() }) });
+  res.clearCookie(IMP_COOKIE, { path: '/' });
+  issueToken(res, user);
+  recordLogin(req, user);
+  return res.json({ user: publicUser(user) });
+}
+
 /** Finish a login: 2FA challenge when enabled, otherwise start the session */
-async function completeLogin(res, user) {
+async function completeLogin(req, res, user) {
   const s = await settings.all();
   if (s.email_verification_enable === '1' && !user.email_verified_at && user.role === 'user') {
     fail(403, 'Please verify your e-mail address first. Check your inbox or request a new link.');
@@ -61,10 +99,7 @@ async function completeLogin(res, user) {
     const [n, d] = String(user.email).split('@');
     return res.json({ two_factor: true, method: 'email', challenge, email_hint: `${n.slice(0, 2)}***@${d}` });
   }
-  await user.update({ last_login_at: new Date() });
-  res.clearCookie(IMP_COOKIE, { path: '/' });
-  issueToken(res, user);
-  return res.json({ user: publicUser(user) });
+  return startSession(req, res, user);
 }
 
 r.post('/login', authLimiter, wrap(async (req, res) => {
@@ -81,7 +116,7 @@ r.post('/login', authLimiter, wrap(async (req, res) => {
   if (!user.is_active) fail(403, 'Your account is deactivated. Please contact the administrator.');
   if (!org.canSignIn(user)) fail(403, org.LOCKED_MESSAGE);
   await security.clearFailures(user);
-  await completeLogin(res, user);
+  await completeLogin(req, res, user);
 }));
 
 /**
@@ -125,16 +160,16 @@ r.post('/two-factor', codeLimiter, wrap(async (req, res) => {
   if (!payload.sub) { security.strike(req.ip, 2); fail(422, 'Validation failed', { code: 'The code is invalid or expired' }); }
   if (!user || !user.is_active || (user.token_version || 0) !== payload.v) fail(422, 'Invalid request');
   if (!org.canSignIn(user)) fail(403, org.LOCKED_MESSAGE);
+  const locked = await security.lockoutState(user);
+  if (locked) fail(429, `Too many failed attempts. Try again in ${locked} minute(s).`);
   const code = String(req.body.code || '').trim();
   if (payload.m === 'email') {
-    if (!(await security.checkLoginCode(user, code))) { security.strike(req.ip, 2); fail(422, 'Validation failed', { code: 'The code is invalid or expired' }); }
+    if (!(await security.checkLoginCode(user, code))) { security.strike(req.ip, 2); await security.registerFailure(user); fail(422, 'Validation failed', { code: 'The code is invalid or expired' }); }
     if (user.two_factor_enabled && payload.via === 'code') { // authenticator users still give their app code after the e-mailed one
       return res.json({ two_factor: true, method: 'totp', challenge: jwt.sign({ sub: user.id, v: user.token_version || 0, p: '2fa', m: 'totp' }, jwtSecret, { expiresIn: '5m' }) });
     }
-    await user.update({ last_login_at: new Date(), ...(user.email_verified_at ? {} : { email_verified_at: new Date() }) });
-    res.clearCookie(IMP_COOKIE, { path: '/' });
-    issueToken(res, user);
-    return res.json({ user: publicUser(user) });
+    await security.clearFailures(user);
+    return startSession(req, res, user);
   }
   let ok = totp.verify(user.two_factor_secret, code);
   if (!ok && code.length > 6) {
@@ -142,11 +177,37 @@ r.post('/two-factor', codeLimiter, wrap(async (req, res) => {
     const list = user.two_factor_recovery || [];
     if (list.includes(h)) { ok = true; await user.update({ two_factor_recovery: list.filter((x) => x !== h) }); }
   }
-  if (!ok) { security.strike(req.ip, 2); fail(422, 'Validation failed', { code: 'The code is invalid or expired' }); }
-  await user.update({ last_login_at: new Date() });
+  if (!ok) { security.strike(req.ip, 2); await security.registerFailure(user); fail(422, 'Validation failed', { code: 'The code is invalid or expired' }); }
+  await security.clearFailures(user);
+  return startSession(req, res, user);
+}));
+
+/** First sign-in of a privileged account: set up the authenticator app before the session starts */
+async function userFromSetup(token) {
+  let payload;
+  try { payload = jwt.verify(String(token || ''), jwtSecret); } catch { fail(422, 'Your sign-in session expired, please sign in again'); }
+  if (payload.p !== '2fa-setup') fail(422, 'Invalid request');
+  const user = await User.scope('withSecrets').findByPk(payload.sub);
+  if (!user || !user.is_active || (user.token_version || 0) !== payload.v || user.two_factor_enabled) fail(422, 'Invalid request');
+  return user;
+}
+r.post('/2fa/setup-login', codeLimiter, wrap(async (req, res) => {
+  const user = await userFromSetup(req.body.setup_token);
+  const secret = totp.generateSecret();
+  await user.update({ two_factor_secret: secret });
+  const url = totp.otpauthUrl(secret, user.email, (await settings.get('app_name')) || 'NFC Profile');
+  res.json({ secret, qr: await QRCode.toDataURL(url, { margin: 1, width: 240 }) });
+}));
+r.post('/2fa/enable-login', codeLimiter, wrap(async (req, res) => {
+  const user = await userFromSetup(req.body.setup_token);
+  if (!user.two_factor_secret) fail(422, 'Start the setup first');
+  if (!totp.verify(user.two_factor_secret, req.body.code)) { security.strike(req.ip, 2); fail(422, 'Validation failed', { code: 'The code is invalid, check your authenticator app' }); }
+  const { codes, hashes } = totp.recoveryCodes();
+  await user.update({ two_factor_enabled: true, two_factor_recovery: hashes, last_login_at: new Date() });
   res.clearCookie(IMP_COOKIE, { path: '/' });
   issueToken(res, user);
-  res.json({ user: publicUser(user) });
+  recordLogin(req, user);
+  res.json({ user: publicUser(user), recovery_codes: codes });
 }));
 
 async function checkBotAndDomain(req) {
@@ -221,7 +282,7 @@ r.post('/google', authLimiter, wrap(async (req, res) => {
   } else if (!user.email_verified_at) await user.update({ email_verified_at: new Date() });
   if (!user.is_active) fail(403, 'Your account is deactivated. Please contact the administrator.');
   if (!org.canSignIn(user)) fail(403, org.LOCKED_MESSAGE);
-  await completeLogin(res, user);
+  await completeLogin(req, res, user);
 }));
 
 r.post('/logout', (req, res) => { clearTokens(res); res.json({ message: 'Logged out' }); });
@@ -297,6 +358,10 @@ r.post('/2fa/recovery-codes', requireAuth, codeLimiter, wrap(async (req, res) =>
   res.json({ recovery_codes: codes, message: 'New recovery codes generated' });
 }));
 r.post('/2fa/disable', requireAuth, codeLimiter, wrap(async (req, res) => {
+  if (isPrivileged(req.user) && process.env.DISABLE_REQUIRED_TOTP !== '1') {
+    const s = await settings.all();
+    if ((STAFF_ROLES.includes(req.user.role) ? s.require_totp_staff : s.require_totp_company) !== '0') fail(403, 'The authenticator app is required for your role and cannot be turned off.');
+  }
   validate(req.body, { password: 'required' });
   if (!(await bcrypt.compare(String(req.body.password), req.user.password))) fail(422, 'Validation failed', { password: 'Password is incorrect' });
   await req.user.update({ two_factor_enabled: false, two_factor_secret: null, two_factor_recovery: [] });

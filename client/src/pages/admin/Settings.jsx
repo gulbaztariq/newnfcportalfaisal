@@ -305,7 +305,7 @@ function MailSettings({ st }) {
 }
 
 function Integrations({ st }) {
-  const keys = ['login_otp_enable', 'enforce_2fa_staff', 'max_login_attempts', 'lockout_minutes', 'email_verification_enable', 'blocked_email_domains', 'recaptcha_enable', 'recaptcha_site_key', 'recaptcha_secret', 'recaptcha_min_score',
+  const keys = ['login_otp_enable', 'enforce_2fa_staff', 'require_totp_staff', 'require_totp_company', 'max_login_attempts', 'lockout_minutes', 'email_verification_enable', 'blocked_email_domains', 'recaptcha_enable', 'recaptcha_site_key', 'recaptcha_secret', 'recaptcha_min_score',
     'google_login_enable', 'google_client_id', 'slack_enable', 'slack_webhook_url', 'slack_events', 'ai_enable', 'anthropic_api_key'];
   const events = String(st.s.slack_events || '').split(',').filter(Boolean);
   const toggleEvent = (e) => st.set('slack_events', (events.includes(e) ? events.filter((x) => x !== e) : [...events, e]).join(','));
@@ -319,6 +319,8 @@ function Integrations({ st }) {
         <CardBody className="space-y-4">
           <SwitchRow title="E-mail code on every sign-in (all users)" description="After the password, a 6-digit code is e-mailed. Users with an authenticator app use that instead. Needs the SMTP server (Mail tab)." {...st.flag('login_otp_enable')} />
           <SwitchRow title="Two-step sign-in for staff" description="Super admin, admins, managers and supervisors always need a second step (authenticator app or e-mailed code)" {...st.flag('enforce_2fa_staff')} />
+          <SwitchRow title="Authenticator app required for staff" description="Super admin, admins, managers and supervisors must also enter a code from an authenticator app after the e-mailed code. They set it up on their next sign-in." {...st.flag('require_totp_staff')} />
+          <SwitchRow title="Authenticator app required for company admins" description="Company owners and managers must also use an authenticator app. They set it up on their next sign-in." {...st.flag('require_totp_company')} />
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Failed attempts before lock" hint="Per account"><Input {...st.input('max_login_attempts')} type="number" min="3" max="20" /></Field>
             <Field label="Lock duration (minutes)"><Input {...st.input('lockout_minutes')} type="number" min="1" max="1440" /></Field>

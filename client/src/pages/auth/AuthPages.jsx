@@ -105,12 +105,14 @@ function GoogleSignIn({ text, referral, onError }) {
     renderGoogleButton(ref.current, settings, async (credential) => {
       try {
         const { data } = await api.post('/auth/google', { credential, referral });
+        if (data.setup_required) return setChallenge({ setup: data.setup_token });
         if (data.two_factor) return setChallenge({ id: data.challenge, method: data.method, hint: data.email_hint });
         setUser(data.user); navigate(afterLogin(data.user));
       } catch (ex) { onError?.(ex.message); }
     }, text).catch(() => {});
   }, [settings.google_client_id]); // eslint-disable-line
   if (!googleEnabled(settings)) return null;
+  if (challenge?.setup) return <SetupAuthenticator token={challenge.setup} onBack={() => setChallenge(null)} />;
   if (challenge) return <TwoFactorStep challenge={challenge.id} method={challenge.method} hint={challenge.hint} onBack={() => setChallenge(null)} />;
   return (
     <div className="mt-6">
@@ -120,8 +122,57 @@ function GoogleSignIn({ text, referral, onError }) {
   );
 }
 
-function TwoFactorStep({ challenge, method = 'totp', hint, onBack }) {
+/** First sign-in of staff and company admins: connect an authenticator app, save the recovery codes, then continue */
+function SetupAuthenticator({ token, onBack }) {
   const { setUser } = useAuth();
+  const navigate = useNavigate();
+  const [info, setInfo] = useState(null);
+  const [code, setCode] = useState('');
+  const [err, setErr] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState(null); // { user, codes }
+  const [saved, setSaved] = useState(false);
+  useEffect(() => { api.post('/auth/2fa/setup-login', { setup_token: token }).then(({ data }) => setInfo(data)).catch((ex) => setErr(ex.message)); }, [token]);
+  const submit = async (e) => {
+    e.preventDefault(); setBusy(true); setErr('');
+    try { const { data } = await api.post('/auth/2fa/enable-login', { setup_token: token, code }); setDone({ user: data.user, codes: data.recovery_codes }); } catch (ex) { setErr(ex.errors?.code || ex.message); } finally { setBusy(false); }
+  };
+  if (done) {
+    const text = done.codes.join('\n');
+    return (
+      <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}>
+        <div className="mb-5 flex items-start gap-3 rounded-2xl bg-success-soft p-4 text-sm text-success"><CheckCircle2 className="mt-0.5 size-5 shrink-0" />Authenticator connected. Save these recovery codes now. Each one signs you in once if you lose your phone, and they are shown only this once.</div>
+        <div className="grid grid-cols-2 gap-2 rounded-2xl border border-border bg-muted/40 p-4 font-mono text-sm">{done.codes.map((c) => <span key={c}>{c}</span>)}</div>
+        <div className="mt-3 flex gap-2">
+          <Button type="button" variant="outline" size="sm" onClick={() => navigator.clipboard?.writeText(text)}>Copy</Button>
+          <Button type="button" variant="outline" size="sm" onClick={() => { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type: 'text/plain' })); a.download = 'recovery-codes.txt'; a.click(); }}>Download</Button>
+        </div>
+        <label className="mt-5 flex cursor-pointer items-start gap-2 text-sm"><input type="checkbox" checked={saved} onChange={(e) => setSaved(e.target.checked)} className="mt-1" />I have saved my recovery codes somewhere safe</label>
+        <Button size="lg" className="mt-5 w-full" disabled={!saved} onClick={() => { setUser(done.user); navigate(afterLogin(done.user)); }}>Continue <ArrowRight /></Button>
+      </motion.div>
+    );
+  }
+  return (
+    <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}>
+      <div className="mb-5 flex items-start gap-3 rounded-2xl bg-primary-soft p-4 text-sm text-primary"><ShieldCheck className="mt-0.5 size-5 shrink-0" />Your role needs an extra layer of protection. Scan this with an authenticator app (Google Authenticator, Microsoft Authenticator, Authy), then type the 6-digit code it shows.</div>
+      <Alert>{err}</Alert>
+      {info && (
+        <form onSubmit={submit} noValidate className="space-y-5">
+          <div className="flex flex-col items-center gap-2"><img src={info.qr} alt="QR code to add this account to your authenticator app" className="size-48 rounded-xl border border-border bg-white p-2" /><p className="text-xs text-muted-foreground">Cannot scan? Enter this key: <span className="font-mono text-foreground">{info.secret}</span></p></div>
+          <Field label="Code from the app" htmlFor="setup-code"><Input id="setup-code" value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))} inputMode="numeric" autoComplete="one-time-code" placeholder="123456" className="text-center font-mono text-lg tracking-[0.5em]" autoFocus /></Field>
+          <Button type="submit" size="lg" className="w-full" loading={busy} disabled={code.length !== 6}>Turn on and continue <ArrowRight /></Button>
+        </form>
+      )}
+      <div className="mt-5 text-right text-sm"><button type="button" onClick={onBack} className="cursor-pointer text-muted-foreground hover:text-foreground">Back</button></div>
+    </motion.div>
+  );
+}
+
+function TwoFactorStep({ challenge: firstChallenge, method: firstMethod = 'totp', hint, onBack }) {
+  const { setUser } = useAuth();
+  const [step, setStep] = useState({ challenge: firstChallenge, method: firstMethod }); // the e-mailed code can be followed by the authenticator code
+  const [setupToken, setSetupToken] = useState(null);
+  const { challenge, method } = step;
   const navigate = useNavigate();
   const [code, setCode] = useState('');
   const [recovery, setRecovery] = useState(false);
@@ -132,8 +183,14 @@ function TwoFactorStep({ challenge, method = 'totp', hint, onBack }) {
   const resend = async () => { try { await api.post('/auth/two-factor/resend', { challenge }); setSent(Date.now()); setErr(''); } catch (ex) { setErr(ex.message); } };
   const submit = async (e) => {
     e.preventDefault(); setBusy(true); setErr('');
-    try { const { data } = await api.post('/auth/two-factor', { challenge, code }); setUser(data.user); navigate(afterLogin(data.user)); } catch (ex) { setErr(ex.errors?.code || ex.message); setBusy(false); }
+    try {
+      const { data } = await api.post('/auth/two-factor', { challenge, code });
+      if (data.setup_required) { setSetupToken(data.setup_token); setBusy(false); return; }
+      if (data.two_factor) { setStep({ challenge: data.challenge, method: data.method }); setCode(''); setRecovery(false); setBusy(false); return; }
+      setUser(data.user); navigate(afterLogin(data.user));
+    } catch (ex) { setErr(ex.errors?.code || ex.message); setBusy(false); }
   };
+  if (setupToken) return <SetupAuthenticator token={setupToken} onBack={onBack} />;
   return (
     <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}>
       <div className="mb-6 flex items-center gap-3 rounded-2xl bg-primary-soft p-4 text-sm text-primary">{email ? <Mail className="size-5 shrink-0" /> : <ShieldCheck className="size-5 shrink-0" />}{email ? `We e-mailed a 6-digit sign-in code to ${hint || 'your address'}. It expires in 10 minutes.` : recovery ? 'Enter one of your saved recovery codes.' : 'Enter the 6-digit code from your authenticator app.'}</div>
@@ -167,6 +224,7 @@ export function Login() {
   const [busy, setBusy] = useState(false);
   const [challenge, setChallenge] = useState(null);
   const [unverified, setUnverified] = useState(false);
+  const [setup, setSetup] = useState(null);
   const [pwFallback, setPwFallback] = useState(false); // only when the server cannot e-mail codes (mail not set up yet)
   const emailMode = settings.email_login !== false && !pwFallback; // the normal way in: e-mail, then the code we send
   useEffect(() => { if (!loading && user) navigate(afterLogin(user), { replace: true }); }, [user, loading]); // eslint-disable-line
@@ -174,6 +232,7 @@ export function Login() {
     e.preventDefault(); setBusy(true); setUnverified(false);
     try {
       const { data } = await api.post(emailMode ? '/auth/login-code' : '/auth/login', emailMode ? { email: f.email } : f);
+      if (data.setup_required) { setSetup(data.setup_token); setBusy(false); return; }
       if (data.two_factor) { setChallenge({ id: data.challenge, method: data.method, hint: data.email_hint }); setBusy(false); return; }
       setUser(data.user); navigate(afterLogin(data.user));
     } catch (ex) {
@@ -183,6 +242,7 @@ export function Login() {
   };
   const resend = async () => { try { const { data } = await api.post('/auth/resend-verification', { email: f.email }); setErr({ message: '', errors: {} }); setUnverified(false); setOk(data.message); } catch (ex) { setErr({ message: ex.message, errors: ex.errors || {} }); } };
   const [ok, setOk] = useState('');
+  if (setup) return <Shell title="Secure your account" subtitle="One-time setup for administrator accounts."><SetupAuthenticator token={setup} onBack={() => setSetup(null)} /></Shell>;
   if (challenge) return <Shell title={emailMode && challenge.method === 'email' ? 'Check your e-mail' : 'Two-step verification'} subtitle={emailMode && challenge.method === 'email' ? 'Enter the code we just sent to sign in. No password needed.' : 'One more step to keep your account safe.'}><TwoFactorStep challenge={challenge.id} method={challenge.method} hint={challenge.hint} onBack={() => setChallenge(null)} /></Shell>;
   return (
     <Shell title="Welcome back" subtitle={emailMode ? 'Enter your e-mail and we will send you a sign-in code.' : 'Sign in to manage your digital business cards.'}

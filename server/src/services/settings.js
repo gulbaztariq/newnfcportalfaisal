@@ -69,7 +69,7 @@ const DEFAULTS = {
   invoice_logo: '', invoice_bank_details: '', invoice_notes: 'Thank you for your business!', invoice_terms: '', invoice_footer: '',
   invoice_due_days: '7', invoice_auto_orders: '1', invoice_auto_subscriptions: '1',
   // security
-  login_otp_enable: '1', enforce_2fa_staff: '1', max_login_attempts: '5', lockout_minutes: '15',
+  login_otp_enable: '1', enforce_2fa_staff: '1', require_totp_staff: '1', require_totp_company: '1', max_login_attempts: '5', lockout_minutes: '15',
   // default vCard for new users
   default_vcard_enable: '1', default_vcard_template: 'vcard1',
 };

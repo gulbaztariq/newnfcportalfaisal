@@ -7,9 +7,12 @@ const COOKIE = 'vc_session';
 const IMP_COOKIE = 'vc_admin_session';
 const cookieOpts = { httpOnly: true, sameSite: 'strict', secure: isProd, path: '/', maxAge: 1000 * 60 * 60 * 24 * 7 };
 
+// accounts that can reach other people's data (staff, company owners and managers) stay signed in for 8 hours, everyone else 7 days
+const privileged = (u) => ['super_admin', 'admin', 'manager', 'supervisor'].includes(u.role) || !!u.is_organisation || u.company_role === 'manager';
 function issueToken(res, user, cookie = COOKIE) {
-  const token = jwt.sign({ sub: user.id, v: user.token_version || 0 }, jwtSecret, { expiresIn: '7d' });
-  res.cookie(cookie, token, cookieOpts);
+  const short = privileged(user);
+  const token = jwt.sign({ sub: user.id, v: user.token_version || 0 }, jwtSecret, { expiresIn: short ? '8h' : '7d' });
+  res.cookie(cookie, token, short ? { ...cookieOpts, maxAge: 1000 * 60 * 60 * 8 } : cookieOpts);
   return token;
 }
 const clearTokens = (res) => { res.clearCookie(COOKIE, { path: '/' }); res.clearCookie(IMP_COOKIE, { path: '/' }); };
