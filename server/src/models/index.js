@@ -334,7 +334,14 @@ const VcardView = sequelize.define('vcard_view', {
   referrer: T.STRING(255),
   device: T.STRING(20),
 }, { updatedAt: false });
-for (const M of [VcardService, VcardGallery, VcardTestimonial, VcardEnquiry, VcardView, VcardProduct, Appointment, VcardBlog, VcardPage, VcardSubscriber]) {
+/** what visitors do on a card: save contact, call, e-mail, WhatsApp, directions, share, social / custom link taps (no personal data, no IP) */
+const VcardEvent = sequelize.define('vcard_event', {
+  type: { type: T.STRING(20), allowNull: false },
+  label: T.STRING(80),
+  visitor: T.STRING(64), // same hash as the view, so one visitor can be followed across views and actions
+  device: T.STRING(20),
+}, { updatedAt: false, indexes: [{ fields: ['vcard_id', 'created_at'] }] });
+for (const M of [VcardService, VcardGallery, VcardTestimonial, VcardEnquiry, VcardView, VcardEvent, VcardProduct, Appointment, VcardBlog, VcardPage, VcardSubscriber]) {
   Vcard.hasMany(M, { foreignKey: 'vcard_id', onDelete: 'CASCADE' }); M.belongsTo(Vcard, { foreignKey: 'vcard_id' });
 }
 
@@ -574,7 +581,7 @@ const business = require('./business')(sequelize, json, { User, Vcard, NfcCard, 
 module.exports = {
   sequelize, PLAN_FEATURES, STAFF_ROLES, COMPANY_ROLES, ...business,
   User, Organisation, Currency, Country, State, City, Language, Template, Plan, CouponCode, Transaction, Subscription,
-  Vcard, VcardService, VcardGallery, VcardTestimonial, VcardEnquiry, VcardView, VcardProduct, Appointment, VcardBlog, VcardPage, VcardSubscriber,
+  Vcard, VcardService, VcardGallery, VcardTestimonial, VcardEnquiry, VcardView, VcardEvent, VcardProduct, Appointment, VcardBlog, VcardPage, VcardSubscriber,
   FrontBlog, WhatsappStore, StoreCategory, StoreProduct, StoreOrder,
   NfcCard, NfcOrder, AffiliateUser, Withdrawal,
   Setting, Feature, AboutUs, FrontTestimonial, FrontFaq, Enquiry, EmailSubscription, SentEmail,

@@ -98,6 +98,19 @@ r.patch('/templates/:id', wrap(async (req, res) => {
 }));
 
 /* =================================================================== vcards */
+/* platform-wide card analytics (dashboard permission): all cards, one user's cards (?user=id) or one card (?vcard=id) */
+r.get('/dashboard/card-analytics', wrap(async (req, res) => {
+  const where = {};
+  const int = (x) => (/^\d+$/.test(String(x)) ? Number(x) : 0); // anything that is not a whole number matches nothing
+  if (req.query.user) where.user_id = int(req.query.user);
+  if (req.query.vcard && req.query.vcard !== 'all') where.id = int(req.query.vcard);
+  const filtered = Object.keys(where).length > 0;
+  const ids = filtered ? (await M.Vcard.findAll({ where, attributes: ['id'], raw: true })).map((c) => c.id) : null;
+  const data = await require('../../services/analytics').report(ids, { days: req.query.days, tz: req.query.tz });
+  const totals = { cards: await M.Vcard.count(), live: await M.Vcard.count({ where: { status: true } }) };
+  res.json({ data, totals });
+}));
+
 r.get('/vcards', wrap(async (req, res) => {
   const p = paginate(req);
   const where = {};

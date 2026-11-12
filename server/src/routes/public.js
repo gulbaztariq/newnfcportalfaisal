@@ -5,6 +5,7 @@ const rateLimit = require('express-rate-limit');
 const QRCode = require('qrcode');
 const dayjs = require('dayjs');
 const { Op, fn, col } = require('sequelize');
+const analytics = require('../services/analytics');
 const M = require('../models');
 const { wrap, fail, validate } = require('../utils/http');
 const settings = require('../services/settings');
@@ -125,6 +126,15 @@ async function liveVcard(alias) {
 }
 
 const enquiryUpload = makeUpload('enquiries', { types: DOC_TYPES, maxMb: 5 }).single('attachment');
+/* analytics: taps on call / e-mail / WhatsApp / directions / share / social / custom links (sent by the card page; no cookies, no personal data) */
+const eventLimiter = rateLimit({ windowMs: 60 * 1000, limit: 90, standardHeaders: true, legacyHeaders: false, message: { message: 'Too many requests.' } });
+api.post('/vcards/:alias/event', eventLimiter, wrap(async (req, res) => {
+  const v = await findVcard(String(req.params.alias || ''));
+  const type = String(req.body?.type || '');
+  if (v && analytics.ACTIONS.includes(type) && type !== 'save') countEvent(req, v, type, req.body?.label);
+  res.status(204).end();
+}));
+
 api.post('/vcards/:alias/enquiry', formLimiter, enquiryUpload, wrap(async (req, res) => {
   if (req.body.website) return res.json({ message: 'Thank you!' });
   const v = await liveVcard(req.params.alias);
@@ -251,16 +261,26 @@ const unlockSig = (v) => crypto.createHmac('sha256', jwtSecret).update(`${v.id}:
 const recentViews = new Map(); // ip+vcard -> timestamp (de-duplicate view counting)
 const BOT = /bot|crawl|spider|preview|facebookexternalhit|whatsapp|slurp|curl|wget/i;
 
+const visitorHash = (req) => crypto.createHash('sha256').update(`${req.ip}:${jwtSecret}`).digest('hex');
+const deviceOf = (ua) => (/mobile|android|iphone/i.test(ua) ? 'mobile' : /ipad|tablet/i.test(ua) ? 'tablet' : 'desktop');
+
+/** a visitor action on a card (analytics): anonymous, bots are ignored */
+function countEvent(req, v, type, label) {
+  const ua = String(req.get('user-agent') || '');
+  if (BOT.test(ua) || !analytics.ACTIONS.includes(type)) return;
+  M.VcardEvent.create({ vcard_id: v.id, type, label: label ? String(label).slice(0, 80) : null, visitor: visitorHash(req), device: deviceOf(ua) }).catch(() => {});
+}
+
 function countView(req, v) {
   const ua = String(req.get('user-agent') || '');
   if (BOT.test(ua)) return;
-  const ipHash = crypto.createHash('sha256').update(`${req.ip}:${jwtSecret}`).digest('hex');
+  const ipHash = visitorHash(req);
   const key = `${v.id}:${ipHash}`;
   const now = Date.now();
   if (recentViews.get(key) > now - 30 * 60 * 1000) return;
   recentViews.set(key, now);
   if (recentViews.size > 50000) recentViews.clear();
-  const device = /mobile|android|iphone/i.test(ua) ? 'mobile' : /ipad|tablet/i.test(ua) ? 'tablet' : 'desktop';
+  const device = deviceOf(ua);
   M.Vcard.increment('views', { where: { id: v.id } }).catch(() => {});
   M.VcardView.create({ vcard_id: v.id, ip_hash: ipHash, user_agent: ua.slice(0, 255), referrer: String(req.get('referer') || '').slice(0, 255), device }).catch(() => {});
 }
@@ -514,6 +534,7 @@ pages.post('/:alias/unlock', formLimiter, express.urlencoded({ extended: false }
 pages.get('/:alias/contact.vcf', wrap(async (req, res, next) => {
   const v = await findVcard(req.params.alias);
   if (!v || locked(req, v)) return next();
+  countEvent(req, v, 'save');
   res.set('Content-Type', 'text/vcard; charset=utf-8').set('Content-Disposition', `attachment; filename="${v.url_alias}.vcf"`).send(vcardFile(v));
 }));
 

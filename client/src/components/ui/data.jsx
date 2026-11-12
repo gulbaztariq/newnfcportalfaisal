@@ -218,19 +218,20 @@ const TILE = {
 };
 export function StatCard({ icon: Icon, label, value, format, color = 'violet', hint, to, index = 0 }) {
   const body = (
-    <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.07, duration: 0.5, ease: [0.16, 1, 0.3, 1] }}>
-      <Card hover className="group relative overflow-hidden p-5">
+    <motion.div className="h-full" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.07, duration: 0.5, ease: [0.16, 1, 0.3, 1] }}>
+      <Card hover className="group relative flex h-full min-h-[8.25rem] flex-col overflow-hidden p-5">
         <div className={cn('pointer-events-none absolute -top-10 -right-10 size-32 rounded-full bg-linear-to-br opacity-10 blur-2xl transition-opacity duration-500 group-hover:opacity-25', TILE[color])} />
-        <div className="flex items-start justify-between">
-          <div>
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
             <p className="text-[13px] font-medium text-muted-foreground">{label}</p>
             <p className="mt-2 font-display text-3xl font-bold tracking-tight">{typeof value === 'number' ? <CountUp value={value} format={format} /> : value}</p>
           </div>
           <span className={cn('grid size-11 place-items-center rounded-2xl bg-linear-to-br text-white shadow-lg transition-transform duration-500 group-hover:scale-110 group-hover:rotate-6', TILE[color])}><Icon className="size-5" /></span>
         </div>
-        {hint && <p className="mt-3 flex items-center gap-1.5 text-xs text-muted-foreground"><TrendingUp className="size-3.5 text-success" />{hint}</p>}
+        {/* the hint row is always reserved, so cards with and without a hint line up in a grid */}
+        <p className="mt-auto flex min-h-4 items-center gap-1.5 pt-3 text-xs text-muted-foreground">{hint ? <><TrendingUp className="size-3.5 shrink-0 text-success" /><span className="truncate">{hint}</span></> : <span aria-hidden="true">&nbsp;</span>}</p>
       </Card>
     </motion.div>
   );
-  return to ? <Link to={to} className="block">{body}</Link> : body;
+  return to ? <Link to={to} className="block h-full">{body}</Link> : body;
 }

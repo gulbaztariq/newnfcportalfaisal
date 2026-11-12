@@ -394,6 +394,19 @@ ${v.newsletter_popup ? `<div class="modal" id="nlm"><div class="sheet"><h4>${L.n
     $('.mv-x').addEventListener('click',mclose);$('.mv-n.prev').addEventListener('click',function(){mgo(cur-1)});$('.mv-n.next').addEventListener('click',function(){mgo(cur+1)});
     sl.forEach(function(x){x.addEventListener('click',function(e){if(e.target.tagName==='IMG')x.classList.toggle('z')})});
     document.addEventListener('keydown',function(e){if(!mv.classList.contains('show'))return;if(e.key==='Escape')mclose();else if(e.key==='ArrowRight')mgo(cur+1);else if(e.key==='ArrowLeft')mgo(cur-1)})}
+  ${preview ? '' : `  /* analytics: anonymous taps on contact buttons and links (saves are counted by the server when the .vcf is downloaded) */
+  (function(){var last={};function send(t,l){var k=t+'|'+l,n=Date.now();if(last[k]&&n-last[k]<4000)return;last[k]=n;try{fetch('/api/public/vcards/'+encodeURIComponent(A)+'/event',{method:'POST',keepalive:true,headers:{'Content-Type':'application/json','X-Requested-With':'XMLHttpRequest'},body:JSON.stringify({type:t,label:l})}).catch(function(){})}catch(e){}}
+    var SOC=['facebook','instagram','twitter','x.com','linkedin','youtube','youtu.be','tiktok','pinterest','snapchat','reddit','threads','telegram','t.me','discord','github','dribbble','behance'];
+    document.addEventListener('click',function(e){var a=e.target.closest&&e.target.closest('a[href],button');if(!a)return;var h=(a.getAttribute('href')||'').toLowerCase();
+      if(a.id==='share'||a.hasAttribute('data-share'))return send('share','');
+      if(h.indexOf('tel:')===0)return send('call','');if(h.indexOf('mailto:')===0)return send('email','');
+      if(h.indexOf('wa.me')>-1||h.indexOf('whatsapp.com')>-1)return send('whatsapp','');
+      if(h.indexOf('maps.google')>-1||h.indexOf('google.com/maps')>-1||h.indexOf('goo.gl/maps')>-1||h.indexOf('maps.app')>-1)return send('map','');
+      if(h.indexOf('http')!==0||h.indexOf('/contact.vcf')>-1)return;
+      var box=a.closest('.social,.lcards,.links,.pays,.stk-fab,.x-socs,.x-sats,.x-hl');if(!box)return;
+      var label=(a.getAttribute('aria-label')||a.getAttribute('title')||(a.querySelector('b,span')||a).textContent||'').replace(/\\s+/g,' ').trim().slice(0,60);
+      var social=SOC.some(function(d){return h.indexOf(d)>-1});send(social?'social':'link',label)})})();
+  `}
   /* PWA */
   ${v.pwa_enable ? `if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js').catch(function(){});var dp,ib=$('#install');window.addEventListener('beforeinstallprompt',function(e){e.preventDefault();dp=e;if(ib)ib.style.display='flex'});if(ib)ib.addEventListener('click',function(){if(!dp)return;dp.prompt();dp.userChoice.finally(function(){ib.style.display='none';dp=null})});window.addEventListener('appinstalled',function(){if(ib)ib.style.display='none'});` : ''}
 })();
