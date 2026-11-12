@@ -333,7 +333,17 @@ r.post('/vcards/:id/cover-video', videoUpload, trackStorage, wrap(async (req, re
   res.json({ data: v.toJSON(), message: 'Cover video uploaded' });
 }));
 
-/* per-vCard analytics */
+/* analytics dashboard: every card of this user, or one (?vcard=id) */
+r.get('/analytics', wrap(async (req, res) => {
+  const mine = await M.Vcard.findAll({ where: { user_id: req.user.id }, attributes: ['id', 'name', 'url_alias', 'status'], order: [['id', 'ASC']], raw: true });
+  const raw = req.query.vcard;
+  const want = raw && raw !== 'all' ? Number(raw) : null;
+  if (raw && raw !== 'all' && (!Number.isInteger(want) || !mine.some((c) => c.id === want))) fail(404, 'vCard not found');
+  const data = await require('../../services/analytics').report(want ? [want] : mine.map((c) => c.id), { days: req.query.days, tz: req.query.tz });
+  res.json({ data, cards: mine.map((c) => ({ id: c.id, name: c.name, alias: c.url_alias, live: !!c.status })) });
+}));
+
+/* per-vCard analytics (older, simpler view) */
 r.get('/vcards/:id/analytics', wrap(async (req, res) => {
   const v = await ownVcard(req);
   const days = Math.min(365, Math.max(7, Number(req.query.days) || 30));

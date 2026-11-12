@@ -42,7 +42,9 @@ const U = {
   Transactions: lazyNamed(() => import('@/pages/user/Billing'), 'UserTransactions'),
   NfcOrders: lazyNamed(() => import('@/pages/user/Billing'), 'UserNfcOrders'),
   Affiliation: lazyNamed(() => import('@/pages/user/Billing'), 'Affiliation'),
-  Analytics: lazyNamed(() => import('@/pages/user/UserExtras'), 'VcardAnalytics'),
+  Analytics: lazyNamed(() => import('@/pages/user/Analytics'), 'UserAnalytics'),
+  LegacyAnalytics: lazyNamed(() => import('@/pages/user/Analytics'), 'LegacyCardAnalytics'),
+  AdminAnalytics: lazyNamed(() => import('@/pages/user/Analytics'), 'AdminCardAnalytics'),
   Appointments: lazyNamed(() => import('@/pages/user/UserExtras'), 'Appointments'),
   Subscribers: lazyNamed(() => import('@/pages/user/UserExtras'), 'Subscribers'),
   VirtualBg: lazyNamed(() => import('@/pages/user/UserExtras'), 'VirtualBackground'),
@@ -160,6 +162,7 @@ export default function App() {
                 <Route path="short-links" element={<BZ.ShortLinks />} />
                 <Route path="announcements" element={<BZ.Announcements />} />
                 <Route path="logs" element={<BZ.Logs />} />
+                <Route path="card-analytics" element={<U.AdminAnalytics />} />
                 <Route path="analytics" element={<FN.FinanceOverview />} />
                 <Route path="finance" element={<FN.FinanceOverview />} />
                 <Route path="finance/ledger" element={<FN.Ledger />} />
@@ -209,7 +212,8 @@ export default function App() {
                 <Route path="vcards" element={<U.VcardList />} />
                 <Route path="vcards/create" element={<U.VcardCreate />} />
                 <Route path="vcards/:id/edit" element={<U.Editor />} />
-                <Route path="vcards/:id/analytics" element={<U.Analytics />} />
+                <Route path="analytics" element={<U.Analytics />} />
+                <Route path="vcards/:id/analytics" element={<U.LegacyAnalytics />} />
                 <Route path="appointments" element={<U.Appointments />} />
                 <Route path="subscribers" element={<U.Subscribers />} />
                 <Route path="virtual-background" element={<U.VirtualBg />} />

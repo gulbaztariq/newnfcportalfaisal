@@ -2,7 +2,7 @@ import {
   LayoutDashboard, ShieldCheck, Users, LayoutTemplate, IdCard, Nfc, Package, Receipt, Banknote, ArrowLeftRight, TicketPercent,
   Network, Coins, Globe2, Languages, Mail, Newspaper, Settings, MessageSquareText, UserCircle, Wallet, Store, Link2, CalendarClock, MailCheck, MonitorPlay, Building2,
   ShoppingBag, FileText, TrendingUp, BookOpen, Boxes, Truck, Megaphone, History, QrCode, Landmark,
-  UserRound,
+  UserRound, BarChart3,
 } from 'lucide-react';
 import { can } from '@/lib/perms';
 
@@ -17,7 +17,7 @@ function filterMenu(groups, allowed) {
 
 /* Super admin menu: InfyVCards super admin documentation + business modules (orders, finance, inventory) */
 export const adminMenu = (user) => filterMenu([
-  { group: 'Overview', items: [{ label: 'Dashboard', icon: LayoutDashboard, to: '/admin/dashboard', perm: 'dashboard' }, { label: 'Profit analytics', icon: TrendingUp, to: '/admin/analytics', perm: 'analytics' }] },
+  { group: 'Overview', items: [{ label: 'Dashboard', icon: LayoutDashboard, to: '/admin/dashboard', perm: 'dashboard' }, { label: 'Card analytics', icon: BarChart3, to: '/admin/card-analytics', perm: 'dashboard' }, { label: 'Profit analytics', icon: TrendingUp, to: '/admin/analytics', perm: 'analytics' }] },
   {
     group: 'Sales', items: [
       { label: 'Orders', icon: ShoppingBag, to: '/admin/orders', perm: 'orders' },
@@ -94,7 +94,7 @@ export const adminMenu = (user) => filterMenu([
 ], (perm) => (perm === 'super' ? user?.role === 'super_admin' : !perm || can(user, `${perm}.view`)));
 
 export const userMenu = (user) => filterMenu([
-  { group: 'Overview', items: [{ label: 'Dashboard', icon: LayoutDashboard, to: '/user/dashboard', perm: 'vcards' }] },
+  { group: 'Overview', items: [{ label: 'Dashboard', icon: LayoutDashboard, to: '/user/dashboard', perm: 'vcards' }, { label: 'Analytics', icon: BarChart3, to: '/user/analytics', perm: 'vcards' }] },
   {
     group: 'My Cards', items: [
       { label: 'vCards', icon: IdCard, to: '/user/vcards', perm: 'vcards' },
