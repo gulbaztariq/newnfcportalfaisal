@@ -9,6 +9,7 @@ import { cn } from '@/lib/cn';
 import { fmtDate, fmtDateTime } from '@/lib/format';
 import { PageHeader, Card, Button, ButtonLink, Field, Input, Textarea, Badge, StatusBadge, EmptyState, Skeleton, Menu, MenuTrigger, MenuContent, MenuItem, MenuSeparator, TableCard, DataTable, Action, Actions, useList, useForm, run, confirm } from '@/components/ui';
 import { Preview } from '../admin/VcardsAdmin';
+import TemplateGallery from './TemplateGallery';
 
 export function VcardList() {
   const [rows, setRows] = useState(null);
@@ -68,31 +69,8 @@ export function VcardList() {
   );
 }
 
-/** Template grid with live previews */
-export function TemplatePicker({ templates, value, onChange }) {
-  const [q, setQ] = useState('');
-  const shown = templates.filter((t) => !q || `${t.name} ${t.profession}`.toLowerCase().includes(q.toLowerCase()));
-  return (
-    <>
-      <Input icon={Search} placeholder="Search by profession, e.g. doctor, lawyer, developer" value={q} onChange={(e) => setQ(e.target.value)} className="mb-5 max-w-md" />
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
-        {shown.map((t) => {
-          const on = value === t.id;
-          const locked = t.allowed === false;
-          return (
-            <motion.button type="button" key={t.id} whileHover={{ y: locked ? 0 : -4 }} onClick={() => !locked && onChange(t.id)}
-              className={cn('group relative overflow-hidden rounded-3xl border-2 bg-card text-left transition', on ? 'border-primary shadow-glow' : 'border-border hover:border-primary/40', locked ? 'cursor-not-allowed' : 'cursor-pointer')}>
-              <Preview src={`/t/preview/${t.slug}`} title={t.name} scale={0.55} className={locked ? 'opacity-50 grayscale' : ''} />
-              <AnimatePresence>{on && <motion.span initial={{ scale: 0 }} animate={{ scale: 1 }} exit={{ scale: 0 }} className="absolute top-3 right-3 grid size-8 place-items-center rounded-full bg-primary text-white shadow-lg"><Check className="size-4" strokeWidth={3} /></motion.span>}</AnimatePresence>
-              {locked && <span className="absolute top-3 right-3"><Badge tone="warning"><Lock className="size-3" />Upgrade</Badge></span>}
-              <div className="p-3.5"><p className="font-display text-sm font-semibold">{t.name}</p><p className="text-xs text-muted-foreground">{t.profession}</p></div>
-            </motion.button>
-          );
-        })}
-      </div>
-    </>
-  );
-}
+/** Template gallery (search, categories, favourites, full-screen preview) */
+export const TemplatePicker = TemplateGallery;
 
 export function VcardCreate() {
   const navigate = useNavigate();

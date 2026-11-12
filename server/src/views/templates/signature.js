@@ -221,6 +221,7 @@ const CSS = String.raw`
 .l-sxcard .x-chip{position:absolute;left:24px;top:40%;width:44px;height:33px;border-radius:7px;background:var(--foil);box-shadow:inset 0 0 0 1px rgba(0,0,0,.25)}
 .l-sxcard .x-chip:before{content:"";position:absolute;inset:0;background:linear-gradient(90deg,transparent 31%,rgba(0,0,0,.35) 31% 34%,transparent 34% 66%,rgba(0,0,0,.35) 66% 69%,transparent 69%),linear-gradient(transparent 46%,rgba(0,0,0,.35) 46% 54%,transparent 54%)}
 .l-sxcard .x-cid{position:relative}
+@media(max-width:350px){.l-sxcard .x-chip{display:none}.l-sxcard .x-face{padding:16px 18px}}
 .l-sxcard .name{display:block;text-align:start;font-size:clamp(21px,6.6vw,30px);font-weight:500;letter-spacing:.02em;line-height:1.1;animation:none}
 .l-sxcard .name i{font-size:.6em;margin-inline-start:6px;color:var(--p);vertical-align:middle}
 .l-sxcard .role{margin-top:5px;text-align:start;font-size:10.5px;letter-spacing:.3em;text-transform:uppercase;color:var(--p);font-weight:600}

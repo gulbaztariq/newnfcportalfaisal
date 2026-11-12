@@ -8,7 +8,9 @@ import api, { toFormData } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { cn } from '@/lib/cn';
 import { PageHeader, Card, CardHeader, CardBody, Button, ButtonLink, Field, Input, Textarea, Select, Switch, SwitchRow, ImageUpload, ColorInput, Dialog, EmptyState, Skeleton, Badge, Tip, useForm, run, confirm } from '@/components/ui';
-import { TemplatePicker } from './Vcards';
+import TemplateGallery from './TemplateGallery';
+import DesignStudio, { LivePreview, useDesignHistory, designOf, themePayload } from './DesignStudio';
+import { toast } from 'sonner';
 import AiButton from '@/components/AiButton';
 import { MediaTab, PaymentLinksTab, LegalTab, QrTab, AppointmentsTab, ProductsTab, BlogTab, PagesTab, AdvancedExtras } from './EditorExtras';
 import { GripVertical, Eye, EyeOff, BookOpen, Upload } from 'lucide-react';
@@ -61,15 +63,20 @@ export default function VcardEditor() {
   const [rev, setRev] = useState(0);
   const [saving, setSaving] = useState(false);
   const [snapshot, setSnapshot] = useState('');
+  const [schema, setSchema] = useState(null);
+  const [bgFile, setBgFile] = useState(null);
+  const [mobilePv, setMobilePv] = useState(false);
   const form = useForm({});
+  // undo / redo over the design (template, theme, sections); must run on every render, before the loading return
+  const history = useDesignHistory(form.values, (d) => form.setValues((x) => ({ ...x, ...d })), !!data);
 
   const load = async () => {
     const [{ data: d }, { data: t }] = await Promise.all([api.get(`/user/vcards/${id}`), api.get('/user/vcards/templates')]);
     const v = { ...d.data, password: '', theme: d.data.theme || {}, social_links: d.data.social_links || {}, custom_links: d.data.custom_links || [], business_hours: d.data.business_hours || {}, sections: d.data.sections || {}, section_order: d.data.section_order || [], section_titles: d.data.section_titles || {}, iframes: d.data.iframes || [], payment_links: d.data.payment_links || [], qr_settings: d.data.qr_settings || {}, appointment_settings: d.data.appointment_settings || {} };
-    setData(d.data); setFeatures(d.features); setTemplates(t.data); form.setValues(v); setSnapshot(JSON.stringify(v));
+    setData(d.data); setFeatures(d.features); setTemplates(t.data); setSchema(t.schema || null); form.setValues(v); setSnapshot(JSON.stringify(v));
   };
   useEffect(() => { load(); }, [id]); // eslint-disable-line
-  const dirty = useMemo(() => snapshot && JSON.stringify(form.values) !== snapshot, [form.values, snapshot]);
+  const dirty = useMemo(() => snapshot && (JSON.stringify(form.values) !== snapshot || !!bgFile), [form.values, snapshot, bgFile]);
 
   if (!data) return <div className="grid gap-6 xl:grid-cols-[220px_1fr_340px]"><Skeleton className="h-96 rounded-2xl" /><Skeleton className="h-[600px] rounded-2xl" /><Skeleton className="h-[640px] rounded-[3rem]" /></div>;
   const v = form.values;
@@ -88,11 +95,22 @@ export default function VcardEditor() {
     for (const f of fields) payload[f] = typeof v[f] === 'boolean' ? (v[f] ? '1' : '0') : v[f] ?? '';
     if (v.password || v.remove_password) payload.password = v.remove_password ? '' : v.password;
     for (const f of ['profile_image', 'cover_image']) if (v[f] instanceof File) payload[f] = v[f];
+    payload.theme = themePayload(v.theme, schema?.keys); // every option is sent; '' puts an option back to the template default
+    if (bgFile) payload.bg_image = bgFile;
     try {
       const d = await run(api.put(`/user/vcards/${id}`, toFormData(payload)), 'Card saved');
       const nv = { ...v, ...d.data, password: '', remove_password: false };
-      setData((x) => ({ ...x, ...d.data })); form.setValues(nv); setSnapshot(JSON.stringify(nv)); setRev((r) => r + 1);
+      setData((x) => ({ ...x, ...d.data })); form.setValues(nv); setSnapshot(JSON.stringify(nv)); setBgFile(null); setRev((r) => r + 1);
     } catch (e) { form.setErrors(e.errors); } finally { setSaving(false); }
+  };
+  const template = templates.find((t) => t.id === v.template_id);
+  // switching template: the content stays, the colours and fonts follow the new design (Undo brings the old look back)
+  const applyTemplate = (tid) => {
+    const next = templates.find((t) => t.id === tid);
+    if (!next || tid === v.template_id) return;
+    const before = designOf(v);
+    form.setValues((x) => ({ ...x, template_id: tid, theme: { ...(next.defaults || {}) } }));
+    toast.success(`${next.name} applied`, { description: 'Your content is unchanged. Colours and fonts now follow this template.', action: { label: 'Undo', onClick: () => form.setValues((x) => ({ ...x, ...before })) } });
   };
   const Upgrade = ({ what }) => (
     <div className="flex items-center gap-4 rounded-2xl border border-warning/30 bg-warning-soft p-4">
@@ -117,10 +135,10 @@ export default function VcardEditor() {
           <p>Fields marked with <Lock className="inline size-3 text-warning" /> are managed by your organisation. Contact your organisation administrator to change them.</p>
         </div>
       )}
-      <div className="grid gap-6 xl:grid-cols-[220px_1fr] 2xl:grid-cols-[220px_1fr_360px]">
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_350px] 2xl:grid-cols-[200px_minmax(0,1fr)_350px]">
         {/* section nav */}
-        <Card className="h-fit min-w-0 p-2 xl:sticky xl:top-24">
-          <div className="flex gap-1 overflow-x-auto xl:flex-col">
+        <Card className="h-fit min-w-0 p-2 xl:col-span-2 2xl:sticky 2xl:top-24 2xl:col-span-1">
+          <div className="flex gap-1 overflow-x-auto 2xl:flex-col">
             {TABS.map(([k, I, l]) => (
               <button key={k} type="button" onClick={() => setTab(k)} className={cn('relative flex shrink-0 cursor-pointer items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-medium transition', tab === k ? 'text-primary' : 'text-muted-foreground hover:bg-muted hover:text-foreground')}>
                 {tab === k && <motion.span layoutId="ed-tab" className="absolute inset-0 rounded-xl bg-primary-soft" transition={{ type: 'spring', stiffness: 400, damping: 32 }} />}
@@ -172,34 +190,16 @@ export default function VcardEditor() {
 
             {tab === 'design' && (
               <>
-                {lk('theme', <Card>
-                  <CardHeader icon={Palette} title={ll('Colours & font', 'theme')} actions={<Button size="sm" variant="ghost" onClick={() => form.set('theme', templates.find((t) => t.id === v.template_id)?.defaults || {})}><RotateCcw />Reset</Button>} />
-                  <CardBody className="space-y-5">
-                    <div>
-                      <p className="mb-2 text-[13px] font-medium">Quick palettes</p>
-                      <div className="flex flex-wrap gap-2">
-                        {PALETTES.map(([a, b]) => (
-                          <button key={a} type="button" onClick={() => form.set('theme', { ...v.theme, primary: a, secondary: b })} className={cn('size-10 cursor-pointer rounded-full ring-offset-2 ring-offset-card transition hover:scale-110', v.theme.primary === a && 'ring-2 ring-primary')} style={{ background: `linear-gradient(135deg, ${a}, ${b})` }} aria-label="Palette" />
-                        ))}
-                      </div>
-                    </div>
-                    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                      {[['primary', 'Primary'], ['secondary', 'Secondary'], ['background', 'Background'], ['text', 'Text']].map(([k, l]) => <ColorInput key={k} label={l} value={v.theme[k]} onChange={(x) => setIn('theme', k, x)} />)}
-                    </div>
-                    <div className="grid gap-4 sm:grid-cols-2">
-                      <Field label="Font"><Select value={v.theme.font} onChange={(x) => setIn('theme', 'font', x)} allowEmpty placeholder="Template default" options={FONTS.map((f) => ({ value: f, label: f.split(',')[0].replace(/'/g, '') }))} /></Field>
-                      <Field label="Corners"><Select value={v.theme.radius} onChange={(x) => setIn('theme', 'radius', x)} allowEmpty placeholder="Template default" options={RADII} /></Field>
-                    </div>
-                  </CardBody>
-                </Card>)}
+                {orgLocks.has('theme') ? <div className="flex items-center gap-3 rounded-2xl border border-warning/30 bg-warning-soft p-4 text-sm"><Lock className="size-5 shrink-0 text-warning" />Colours, fonts and design options are managed by your organisation.</div>
+                  : <DesignStudio v={v} form={form} template={template} schema={schema} history={history} bgFile={bgFile} onBgFile={setBgFile} />}
                 <Card>
                   <CardHeader title="Sections" description="Drag to reorder, rename the headings, and show or hide each part of your card"
                     actions={<Button size="sm" variant="ghost" onClick={() => { form.set('section_order', []); form.set('section_titles', {}); }}><RotateCcw />Reset</Button>} />
                   <CardBody><SectionsEditor v={v} form={form} /></CardBody>
                 </Card>
                 {lk('template_id', <Card>
-                  <CardHeader title={ll('Template', 'template_id')} description="Your content stays when you switch" />
-                  <CardBody><TemplatePicker templates={templates} value={v.template_id} onChange={(tid) => form.set('template_id', tid)} /></CardBody>
+                  <CardHeader title={ll('Template', 'template_id')} description="Browse, preview and switch. Your content stays when you switch." />
+                  <CardBody><TemplateGallery templates={templates} value={v.template_id} onChange={applyTemplate} /></CardBody>
                 </Card>)}
               </>
             )}
@@ -357,20 +357,29 @@ export default function VcardEditor() {
           </motion.div>
         </AnimatePresence>
 
-        {/* live preview */}
-        <div className="hidden 2xl:block">
+        {/* live preview: the real card with the unsaved design */}
+        <div className="hidden xl:block">
           <div className="sticky top-24">
-            <div className="mb-3 flex items-center justify-between"><p className="flex items-center gap-2 text-sm font-medium"><Smartphone className="size-4" />Live preview</p><Tip content="Reload"><button type="button" onClick={() => setRev((r) => r + 1)} className="grid size-8 cursor-pointer place-items-center rounded-lg text-muted-foreground hover:bg-muted"><RefreshCw className="size-4" /></button></Tip></div>
-            <div className="relative mx-auto w-fit rounded-[3rem] bg-zinc-900 p-3 shadow-[0_30px_80px_-30px_rgba(76,29,149,.55)] ring-1 ring-white/10">
-              <div className="absolute top-5 left-1/2 z-10 h-6 w-24 -translate-x-1/2 rounded-full bg-zinc-900" />
-              <div className="relative h-[640px] w-[310px] overflow-hidden rounded-[2.4rem] bg-white">
-                <iframe key={rev} src={link} title="Preview" className="absolute top-0 left-0 h-[826px] w-[400px] origin-top-left scale-[0.775] border-0" />
-              </div>
-            </div>
-            {dirty && <p className="mt-3 text-center text-xs text-muted-foreground">Save to see your changes here</p>}
+            <LivePreview vcardId={id} design={designOf(v)} keys={schema?.keys} rev={rev} />
+            <p className="mt-3 text-center text-xs text-muted-foreground">{dirty ? 'Design changes show here straight away. Text and photos update after you save.' : 'This is how visitors see your card.'}</p>
           </div>
         </div>
       </div>
+
+      {/* phones and tablets: preview in a bottom sheet */}
+      <button type="button" onClick={() => setMobilePv(true)} className={cn('fixed right-4 z-30 flex cursor-pointer items-center gap-2 rounded-full bg-primary px-4 py-3 text-sm font-medium text-white shadow-glow xl:hidden', dirty ? 'bottom-24' : 'bottom-5')}><Smartphone className="size-4" />Preview</button>
+      <AnimatePresence>
+        {mobilePv && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 flex items-end bg-zinc-950/60 backdrop-blur-sm xl:hidden" onClick={() => setMobilePv(false)}>
+            <motion.div initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }} transition={{ type: 'spring', stiffness: 320, damping: 34 }} onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label="Live preview"
+              className="max-h-[92vh] w-full overflow-y-auto rounded-t-3xl bg-card p-4 pb-6 shadow-2xl">
+              <div className="mx-auto mb-3 h-1.5 w-10 rounded-full bg-border" />
+              <LivePreview vcardId={id} design={designOf(v)} keys={schema?.keys} rev={rev} tall />
+              <div className="mt-4 flex justify-center gap-2"><Button variant="outline" onClick={() => setMobilePv(false)}>Back to editing</Button>{dirty && <Button onClick={save} loading={saving}><Save />Save</Button>}</div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <AnimatePresence>
         {dirty && (
@@ -378,7 +387,7 @@ export default function VcardEditor() {
             className="fixed inset-x-0 bottom-5 z-40 mx-auto flex w-[calc(100%-2rem)] max-w-md items-center justify-between gap-3 rounded-2xl bg-zinc-900 p-2 pl-5 text-white shadow-2xl dark:bg-white dark:text-zinc-900">
             <span className="flex items-center gap-2 text-sm font-medium"><span className="size-2 animate-pulse rounded-full bg-amber-400" />Unsaved changes</span>
             <div className="flex gap-2">
-              <Button size="sm" variant="ghost" className="text-inherit hover:bg-white/10" onClick={() => form.setValues(JSON.parse(snapshot))}>Discard</Button>
+              <Button size="sm" variant="ghost" className="text-inherit hover:bg-white/10" onClick={() => { form.setValues(JSON.parse(snapshot)); setBgFile(null); }}>Discard</Button>
               <Button size="sm" onClick={save} loading={saving}><Save />Save</Button>
             </div>
           </motion.div>
