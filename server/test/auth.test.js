@@ -142,3 +142,9 @@ test('OTP: resend has a cooldown (no code flood)', async () => {
   const r = await c.post('/api/auth/two-factor/resend', { challenge: l.body.challenge });
   assert.equal(r.status, 429);
 });
+
+test('login code: the product default is ON for everyone (users, company admins and staff)', async () => {
+  const defaults = Object.fromEntries(Object.entries(require('../src/services/settings').DEFAULTS || {}));
+  assert.equal(defaults.login_otp_enable, '1');
+  assert.equal(defaults.enforce_2fa_staff, '1');
+});
