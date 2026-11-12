@@ -123,7 +123,7 @@ test('report: insights are written in plain words and handle an empty period', a
 
 test('report: bad periods and time zones are clamped, not trusted', async () => {
   const u = await makeUser(); const v = await card(u);
-  assert.equal((await analytics.report([v.id], { days: 100000, now: NOW })).range.days, 365);
+  assert.equal((await analytics.report([v.id], { days: 100000, now: NOW })).range.days, 366);
   assert.equal((await analytics.report([v.id], { days: -5, now: NOW })).range.days, 1);
   assert.equal((await analytics.report([v.id], { days: 'abc', now: NOW })).range.days, 30);
   await analytics.report([v.id], { days: 7, tz: 'DROP TABLE', now: NOW });
@@ -131,6 +131,54 @@ test('report: bad periods and time zones are clamped, not trusted', async () => 
 });
 
 /* ------------------------------------------------ who can see it */
+test('report: custom range, previous-year comparison, no comparison and weekly buckets', async () => {
+  const u = await makeUser(); const v = await card(u);
+  await M.VcardView.bulkCreate([view(v, 3), view(v, 4, { who: 2 }), view(v, 20, { who: 3 })]);
+  const r = await analytics.report([v.id], { from: '2026-06-10', to: '2026-06-14', now: NOW });
+  assert.equal(r.range.days, 5); assert.equal(r.kpis.views.value, 2); assert.equal(r.series[0].date, '2026-06-10');
+  assert.equal(r.range.previousFrom, '2026-06-05');
+  const none = await analytics.report([v.id], { days: 30, compare: 'none', now: NOW });
+  assert.equal(none.kpis.views.previous, null); assert.equal(none.kpis.views.change, null);
+  const yr = await analytics.report([v.id], { days: 30, compare: 'year', now: NOW });
+  assert.equal(yr.range.previousFrom, '2025-05-17');
+  const wk = await analytics.report([v.id], { days: 30, granularity: 'week', now: NOW });
+  assert.equal(wk.series.length, 5); assert.equal(wk.series.reduce((a, p) => a + p.views, 0), 3);
+  const future = await analytics.report([v.id], { from: '2026-06-10', to: '2030-01-01', now: NOW });
+  assert.equal(future.range.to, '2026-06-15', 'the range never runs into the future');
+  const junk = await analytics.report([v.id], { from: 'abc', to: 'def', now: NOW });
+  assert.equal(junk.range.days, 30);
+});
+
+test('report: filters narrow views, their actions and visitors; leads are not attributed', async () => {
+  const u = await makeUser(); const v = await card(u);
+  await M.VcardView.bulkCreate([
+    view(v, 0, { who: 1 }), view(v, 1, { who: 1 }), // phone visitor, returns on a second day
+    view(v, 0, { who: 2, ua: WIN_CHROME, device: 'desktop', ref: 'https://www.google.com/' }),
+    view(v, 2, { who: 3, ref: 'https://www.instagram.com/' }),
+  ]);
+  await M.VcardEvent.bulkCreate([event(v, 0, 'call', { who: 1 }), event(v, 0, 'save', { who: 2 })]);
+  await M.VcardEnquiry.create({ vcard_id: v.id, name: 'L', email: 'l@x.co', message: 'hi', created_at: at(0) });
+  const base = { days: 7, now: NOW };
+  assert.equal((await analytics.report([v.id], base)).kpis.views.value, 4);
+  const desk = await analytics.report([v.id], { ...base, filters: { device: 'desktop' } });
+  assert.equal(desk.kpis.views.value, 1); assert.equal(desk.kpis.actions.value, 1); assert.equal(desk.kpis.leads.value, 1); assert.equal(desk.leadsNotFiltered, true);
+  assert.equal((await analytics.report([v.id], { ...base, filters: { channel: 'Search' } })).kpis.views.value, 1);
+  assert.equal((await analytics.report([v.id], { ...base, filters: { channel: 'Social' } })).kpis.views.value, 1);
+  assert.equal((await analytics.report([v.id], { ...base, filters: { os: 'iOS' } })).kpis.views.value, 3);
+  assert.equal((await analytics.report([v.id], { ...base, filters: { browser: 'Chrome' } })).kpis.views.value, 1);
+  assert.equal((await analytics.report([v.id], { ...base, filters: { visitor: 'returning' } })).kpis.views.value, 2);
+  assert.equal((await analytics.report([v.id], { ...base, filters: { visitor: 'new' } })).kpis.views.value, 2);
+  const act = await analytics.report([v.id], { ...base, filters: { action: 'save' } });
+  assert.equal(act.kpis.views.value, 4); assert.equal(act.kpis.actions.value, 1);
+  const none = await analytics.report([v.id], { ...base, filters: { device: 'tablet' } });
+  assert.equal(none.kpis.views.value, 0); assert.match(none.insights[0].text, /filters/);
+  const split = await analytics.report([v.id], base);
+  assert.equal(split.newVsReturning.find((x) => x.name === 'Returning visitors').value, 1);
+  assert.equal(split.leadParts[0].value, 1);
+  const q = analytics.optionsFrom({ days: '7', device: 'desktop', evil: 'x', channel: ['a'] });
+  assert.deepEqual(q.filters, { device: 'desktop' });
+});
+
 async function login(user, plain = 'Passw0rd!x') {
   const c = client(ctx.base); const r = await c.post('/api/auth/login', { email: user.email, password: plain }); assert.equal(r.status, 200, r.text); return c;
 }
