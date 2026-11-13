@@ -45,7 +45,7 @@ app.use(helmet({
 }));
 app.use(compression());
 app.use(cookieParser());
-app.use(express.json({ limit: '1mb' }));
+app.use(express.json({ limit: '1mb', verify: (req, _res, buf) => { if (req.url.startsWith('/webhooks/')) req.rawBody = buf; } })); // webhooks are signed over the raw bytes
 app.use(express.urlencoded({ extended: false, limit: '1mb' }));
 
 /* ---------------------------------------------------------------- static */
@@ -70,6 +70,20 @@ api.use('/public', require('./routes/public').api);
 api.use('/shop', require('./routes/shop'));
 api.use((_req, _res, next) => next(new HttpError(404, 'Not found')));
 app.use('/api', api);
+
+/* ------------------------------------------- WhatsApp Cloud API webhook */
+// outside /api: Meta cannot send the CSRF header. Every delivery is checked against the Meta app secret.
+const waLimiter = rateLimit({ windowMs: 60 * 1000, limit: 300, standardHeaders: true, legacyHeaders: false });
+app.get('/webhooks/whatsapp', waLimiter, async (req, res) => {
+  const c = await require('./services/whatsapp').challenge(req.query).catch(() => null);
+  return c ? res.type('text/plain').send(c) : res.sendStatus(403);
+});
+app.post('/webhooks/whatsapp', waLimiter, async (req, res) => {
+  const wa = require('./services/whatsapp');
+  if (!(await wa.signatureOk(req.rawBody, req.get('X-Hub-Signature-256')).catch(() => false))) return res.sendStatus(403);
+  res.sendStatus(200); // answer first; Meta retries slow replies
+  wa.ingest(req.body);
+});
 
 /* ---------------------------------------------- payment gateway returns */
 // some gateways POST back to the return URL, so this lives outside /api (no CSRF header possible)

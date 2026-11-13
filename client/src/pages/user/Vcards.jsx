@@ -177,11 +177,11 @@ export function UserEnquiries() {
       <PageHeader title="Enquiries" description="Messages visitors sent from your cards." />
       <TableCard title="Inbox" list={list}>
         <DataTable loading={list.loading} rows={list.rows} empty={<EmptyState icon={MessageSquareText} title="No enquiries yet" description="Enable the enquiry form on your card to receive messages." />} columns={[
-          { key: 'from', label: 'From', render: (e) => <div className="flex items-center gap-3"><span className="grid size-9 place-items-center rounded-full bg-primary-soft font-semibold text-primary">{e.name[0]}</span><div><p className="font-medium">{e.name}</p><p className="text-xs text-muted-foreground">{e.email || e.phone}</p></div></div> },
+          { key: 'from', label: 'From', render: (e) => <div className="flex items-center gap-3"><span className="grid size-9 place-items-center rounded-full bg-primary-soft font-semibold text-primary">{e.name[0]}</span><div><p className="font-medium">{e.name}</p><p className="text-xs text-muted-foreground">{e.email || e.phone}{e.source === 'whatsapp' && <Badge tone="success" className="ml-1.5">WhatsApp</Badge>}</p></div></div> },
           { key: 'card', label: 'vCard', render: (e) => <Badge tone="outline">{e.vcard?.name}</Badge> },
           { key: 'msg', label: 'Message', className: 'whitespace-normal', render: (e) => <p className="max-w-md text-sm text-muted-foreground">{e.message}</p> },
           { key: 'date', label: 'Received', render: (e) => <span className="text-xs text-muted-foreground">{fmtDateTime(e.created_at)}</span> },
-          { key: '_a', label: '', className: 'text-right', render: (e) => <Actions>{e.email && <Action icon={ExternalLink} label="Reply" href={`mailto:${e.email}`} />}<Action icon={Trash2} label="Delete" tone="danger" onClick={() => remove(e)} /></Actions> },
+          { key: '_a', label: '', className: 'text-right', render: (e) => <Actions>{e.email && <Action icon={ExternalLink} label="Reply" href={`mailto:${e.email}`} />}{e.source === 'whatsapp' && e.wa_id && <Action icon={ExternalLink} label="Reply on WhatsApp" href={`https://wa.me/${e.wa_id}`} />}<Action icon={Trash2} label="Delete" tone="danger" onClick={() => remove(e)} /></Actions> },
         ]} />
       </TableCard>
     </>
