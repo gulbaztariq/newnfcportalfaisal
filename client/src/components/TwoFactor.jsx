@@ -67,7 +67,7 @@ export default function TwoFactor() {
               <div className="flex flex-wrap items-end gap-2">
                 <Field label="Current code (to create new recovery codes)"><CodeInput value={code} onChange={setCode} /></Field>
                 <Button variant="outline" onClick={regen} loading={busy} disabled={code.length !== 6}><KeyRound />New recovery codes</Button>
-                <Button variant="danger-soft" onClick={() => setDisable(true)}><ShieldOff />Turn off</Button>
+                {user.is_staff || user.is_organisation || user.company_role === 'manager' ? <p className="flex items-center gap-2 text-sm text-muted-foreground"><ShieldCheck className="size-4" />Required for your role, so it cannot be turned off. Lost your phone? Ask the super administrator to reset it.</p> : <Button variant="danger-soft" onClick={() => setDisable(true)}><ShieldOff />Turn off</Button>}
               </div>
             </motion.div>
           ) : (
