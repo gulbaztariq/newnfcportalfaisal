@@ -60,7 +60,7 @@ const DEFAULTS = {
   leopards_auto_sync: '1',
   // WhatsApp + SMS
   whatsapp_enable: '0', whatsapp_provider: 'meta', whatsapp_phone_number_id: '', whatsapp_access_token: '', whatsapp_api_version: 'v21.0',
-  whatsapp_template_language: 'en', whatsapp_http_url: '', whatsapp_http_method: 'POST', whatsapp_http_body: '', whatsapp_http_headers: '',
+  whatsapp_template_language: 'en', whatsapp_app_secret: '', whatsapp_verify_token: '', whatsapp_http_url: '', whatsapp_http_method: 'POST', whatsapp_http_body: '', whatsapp_http_headers: '',
   sms_enable: '0', sms_provider: 'http', sms_http_url: '', sms_http_method: 'GET', sms_http_body: '', sms_http_headers: '',
   phone_default_region: '92', twilio_sid: '', twilio_token: '', twilio_sms_from: '', twilio_whatsapp_from: '', notify_admin_numbers: '',
   // invoices
@@ -75,7 +75,7 @@ const DEFAULTS = {
 };
 const SECRET_KEYS = ['stripe_secret', 'paypal_secret', 'razorpay_secret', 'flutterwave_secret', 'paystack_secret', 'phonepe_salt_key',
   'mercadopago_access_token', 'cashfree_secret', 'sslcommerz_store_password', 'payfast_passphrase', 'iyzico_secret', 'mail_password',
-  'slack_webhook_url', 'recaptcha_secret', 'anthropic_api_key', 'leopards_api_password', 'whatsapp_access_token', 'twilio_token'];
+  'slack_webhook_url', 'recaptcha_secret', 'anthropic_api_key', 'leopards_api_password', 'whatsapp_access_token', 'whatsapp_app_secret', 'twilio_token'];
 const PUBLIC_KEYS = [
   'app_name', 'email', 'phone', 'region_code', 'address', 'app_logo', 'dashboard_logo', 'favicon', 'default_country_code',
   'default_language', 'register_enable', 'front_theme', 'banner_enable', 'banner_title', 'banner_description', 'banner_url',

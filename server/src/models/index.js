@@ -290,7 +290,22 @@ const VcardEnquiry = sequelize.define('vcard_enquiry', {
   message: T.TEXT,
   attachment: T.STRING(255),
   product_name: T.STRING(150), // enquiry about a product / service
+  source: T.STRING(20), // null = the card's form, 'whatsapp' = came in on a WhatsApp number
+  line_id: T.INTEGER, // which WhatsApp number it arrived on
+  wa_id: T.STRING(30), // sender's WhatsApp number, used to keep one lead per person per number
 });
+/** a WhatsApp Business number (Cloud API) whose incoming messages become leads on the chosen vCard */
+const WhatsappLine = sequelize.define('whatsapp_line', {
+  label: { type: T.STRING(80), allowNull: false },
+  phone_number_id: { type: T.STRING(40), allowNull: false, unique: true },
+  display_phone: T.STRING(30),
+  access_token: T.TEXT, // never sent back to the browser
+  vcard_id: T.INTEGER, // leads land on this card (so they show to its owner)
+  status: { type: T.BOOLEAN, defaultValue: true },
+  messages_count: { type: T.INTEGER, defaultValue: 0 },
+  last_message_at: T.DATE,
+});
+WhatsappLine.belongsTo(Vcard, { foreignKey: 'vcard_id', onDelete: 'SET NULL' });
 const VcardProduct = sequelize.define('vcard_product', {
   name: { type: T.STRING(150), allowNull: false },
   description: T.TEXT,
@@ -581,7 +596,7 @@ const business = require('./business')(sequelize, json, { User, Vcard, NfcCard, 
 module.exports = {
   sequelize, PLAN_FEATURES, STAFF_ROLES, COMPANY_ROLES, ...business,
   User, Organisation, Currency, Country, State, City, Language, Template, Plan, CouponCode, Transaction, Subscription,
-  Vcard, VcardService, VcardGallery, VcardTestimonial, VcardEnquiry, VcardView, VcardEvent, VcardProduct, Appointment, VcardBlog, VcardPage, VcardSubscriber,
+  Vcard, VcardService, VcardGallery, VcardTestimonial, VcardEnquiry, WhatsappLine, VcardView, VcardEvent, VcardProduct, Appointment, VcardBlog, VcardPage, VcardSubscriber,
   FrontBlog, WhatsappStore, StoreCategory, StoreProduct, StoreOrder,
   NfcCard, NfcOrder, AffiliateUser, Withdrawal,
   Setting, Feature, AboutUs, FrontTestimonial, FrontFaq, Enquiry, EmailSubscription, SentEmail,

@@ -83,7 +83,7 @@ const ADMIN_PATHS = [
   [/^\/(affiliations|withdrawals)/, 'affiliations'], [/^\/(currencies|countries|states|cities|languages)/, 'masters'],
   [/^\/(send-email|sent-emails)/, 'email'], [/^\/announcements/, 'announcements'],
   [/^\/(features|about-us|front-testimonials|front-faqs|enquiries|email-subscribers|front-blogs)/, 'cms'],
-  [/^\/(settings|email-templates)/, 'settings'], [/^\/(activity-logs|message-logs)/, 'logs'], [/^\/export\/(users)/, 'users'], [/^\/export\/(enquiries|subscribers)/, 'cms'],
+  [/^\/(settings|email-templates|whatsapp-lines)/, 'settings'], [/^\/(activity-logs|message-logs)/, 'logs'], [/^\/export\/(users)/, 'users'], [/^\/export\/(enquiries|subscribers)/, 'cms'],
 ];
 const COMPANY_PATHS = [
   [/^\/(vcards|features)/, 'vcards'], [/^\/(enquiries|appointments|subscribers)/, 'leads'], [/^\/(stores|store-orders)/, 'stores'],

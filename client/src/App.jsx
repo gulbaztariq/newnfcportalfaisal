@@ -60,6 +60,7 @@ const AX = {
   Blog: lazyNamed(() => import('@/pages/admin/AdminExtras'), 'FrontBlogs'),
 };
 const BZ = {
+  WhatsappLeads: lazyNamed(() => import('@/pages/admin/WhatsappLeads'), 'WhatsappLeads'),
   Orders: lazyNamed(() => import('@/pages/admin/Orders'), 'Orders'),
   OrderDetail: lazyNamed(() => import('@/pages/admin/Orders'), 'OrderDetail'),
   OrderWizard: lazy(() => import('@/pages/admin/OrderWizard')),
@@ -156,6 +157,7 @@ export default function App() {
                 <Route path="orders/new" element={<BZ.OrderWizard />} />
                 <Route path="orders/:id" element={<BZ.OrderDetail />} />
                 <Route path="order-sources" element={<BZ.OrderSources />} />
+                <Route path="whatsapp-leads" element={<BZ.WhatsappLeads />} />
                 <Route path="contact-tags" element={<BZ.ContactTags />} />
                 <Route path="guest-customers" element={<BZ.GuestCustomers />} />
                 <Route path="guest-customers/:id" element={<BZ.GuestDetail />} />

@@ -48,6 +48,7 @@ export const adminMenu = (user) => filterMenu([
   {
     group: 'Management', items: [
       user?.role === 'super_admin' && { label: 'Staff & roles', icon: ShieldCheck, to: '/admin/admins', perm: 'super' },
+      user?.role === 'super_admin' && { label: 'WhatsApp leads', icon: MessageSquareText, to: '/admin/whatsapp-leads', perm: 'super' },
       { label: 'Users', icon: Users, to: '/admin/users', perm: 'users' },
       { label: 'vCard Templates', icon: LayoutTemplate, to: '/admin/templates', perm: 'vcards' },
       { label: 'vCards', icon: IdCard, to: '/admin/vcards', perm: 'vcards' },

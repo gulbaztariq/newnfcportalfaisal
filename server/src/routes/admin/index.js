@@ -6,7 +6,7 @@ const sanitizeHtml = require('sanitize-html');
 const M = require('../../models');
 const crud = require('../../utils/crud');
 const { wrap, fail, validate, pick, toBool, paginate, paged } = require('../../utils/http');
-const { isAdmin, adminPermissions } = require('../../middleware/auth');
+const { isAdmin, isSuperAdmin, adminPermissions } = require('../../middleware/auth');
 const { makeUpload, fileUrl } = require('../../middleware/upload');
 const usersRouter = require('./users');
 const settings = require('../../services/settings');
@@ -80,6 +80,7 @@ async function defaultCurrency() {
 
 /* ======================================================= users and admins */
 r.use(require('./business'));
+r.use('/whatsapp-lines', isSuperAdmin, require('./whatsapp')); // tokens: super admin only
 r.use('/users', usersRouter('user'));
 r.use('/admins', usersRouter('admin'));
 
