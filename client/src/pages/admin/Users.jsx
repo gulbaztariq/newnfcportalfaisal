@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { motion } from 'motion/react';
-import { Plus, Eye, Pencil, Trash2, UserCog, ShieldCheck, Users as UsersIcon, MailCheck, Send, ArrowLeft, ExternalLink, Calendar, Clock, Phone, IdCard, Package, Building2, Globe, MapPin, Mail, Armchair, Route, Upload, ShoppingBag, Lock, LockOpen, Ban, KeyRound, Megaphone, UserPlus, UserMinus, FileSpreadsheet, Sparkles } from 'lucide-react';
+import { Plus, Eye, Pencil, Trash2, UserCog, ShieldCheck, Users as UsersIcon, MailCheck, Send, ArrowLeft, LogOut, ExternalLink, Calendar, Clock, Phone, IdCard, Package, Building2, Globe, MapPin, Mail, Armchair, Route, Upload, ShoppingBag, Lock, LockOpen, Ban, KeyRound, Megaphone, UserPlus, UserMinus, FileSpreadsheet, Sparkles } from 'lucide-react';
 import { ImportUsers } from '@/pages/user/Organisation';
 import { cn } from '@/lib/cn';
 import api, { toFormData } from '@/lib/api';
@@ -69,6 +69,8 @@ export default function Users({ role = 'user' }) {
     if (!(await confirm({ title: `Delete ${selected.length} users?`, description: 'The users and all of their vCards will be permanently deleted.' }))) return;
     await run(api.post('/admin/users/bulk-delete', { ids: selected })).catch(() => {}); setSelected([]); list.reload();
   };
+  const resetAuth = async (u) => { if (await confirm({ title: `Reset ${fullName(u)}'s authenticator?`, description: 'They are signed out and must set up a new authenticator app at their next sign-in. Use this when they lost their phone and recovery codes.', confirmText: 'Reset', tone: 'primary' })) await run(api.post(`${endpoint}/${u.id}/reset-authenticator`)).then(() => list.reload()).catch(() => {}); };
+  const signOut = async (u) => { if (await confirm({ title: `Sign ${fullName(u)} out everywhere?`, description: 'Every device they are signed in on is logged out immediately.', confirmText: 'Sign out', tone: 'primary' })) await run(api.post(`${endpoint}/${u.id}/sign-out`)).catch(() => {}); };
   const [invite, setInvite] = useState(null); // invitation link to share when e-mail could not be sent
   const reinvite = async (u) => { const res = await run(api.post(`${endpoint}/${u.id}/resend-invite`)).catch(() => null); if (res?.invite_url && !res.invite_sent) setInvite({ name: fullName(u), url: res.invite_url }); };
   const resend = (u) => run(api.post(`/admin/users/${u.id}/resend-verification`)).catch(() => {});
@@ -93,6 +95,7 @@ export default function Users({ role = 'user' }) {
     isAdmin && { key: 'perm', label: 'Access', render: (u) => <span className="text-xs text-muted-foreground">{u.role === 'admin' ? 'Everything' : `${(Array.isArray(u.permissions) ? u.permissions : meta?.defaults[u.role] || []).filter((k) => k.endsWith('.view')).length} modules`}</span> },
     !isAdmin && { key: 'plan', label: 'Plan', render: (u) => (u.plan ? <Badge tone="primary">{u.plan.name}</Badge> : <span className="text-muted-foreground">-</span>) },
     !isAdmin && { key: 'vcards', label: 'vCards', render: (u) => <span className="font-medium">{u.vcards_count}</span> },
+    isAdmin && { key: 'signin', label: 'Sign-in', render: (u) => <div className="text-xs"><Badge tone={u.two_factor_enabled ? 'success' : 'warning'}>{u.two_factor_enabled ? 'Authenticator on' : 'Authenticator not set'}</Badge><p className="mt-1 text-muted-foreground">{u.last_login_at ? `Last: ${fmtDateTime(u.last_login_at)}` : 'Never signed in'}</p></div> },
     { key: 'verified', label: 'E-mail', render: (u) => (u.email_verified_at ? <StatusBadge value="verified" /> : <div className="flex gap-1"><Button size="xs" variant="soft" onClick={() => verify(u)}><MailCheck />Verify</Button>{!isAdmin && <Button size="xs" variant="ghost" onClick={() => resend(u)} title="Resend verification e-mail"><Send /></Button>}</div>) },
     { key: 'created', label: 'Joined', render: (u) => <span className="text-muted-foreground">{fmtDate(u.created_at)}</span> },
     { key: 'active', label: 'Active', render: (u) => <Switch size="sm" checked={u.is_active} onChange={(v) => status(u, v)} /> },
@@ -102,6 +105,8 @@ export default function Users({ role = 'user' }) {
           {!isAdmin && <Action icon={Eye} label="View details" onClick={() => navigate(`/admin/users/${u.id}`)} />}
           {!isAdmin && <Action icon={UserCog} label="Impersonate" tone="warning" onClick={() => impersonate(u)} />}
           <Action icon={Send} label="Send invitation again (sets a new password link)" onClick={() => reinvite(u)} />
+          {isAdmin && <Action icon={ShieldCheck} label="Reset authenticator (lost phone)" tone="warning" onClick={() => resetAuth(u)} />}
+          {isAdmin && <Action icon={LogOut} label="Sign out of every device" tone="warning" onClick={() => signOut(u)} />}
           <Action icon={Pencil} label="Edit" tone="info" onClick={() => openForm(u)} />
           <Action icon={Trash2} label="Delete" tone="danger" onClick={() => remove(u)} />
         </Actions>
@@ -111,7 +116,7 @@ export default function Users({ role = 'user' }) {
 
   return (
     <>
-      <PageHeader title={isAdmin ? 'Staff & roles' : 'Users'} description={isAdmin ? 'Admins, managers and supervisors of the admin panel, with their permissions. Staff sign in with a second step: their authenticator app, or an e-mailed code once SMTP is set up.' : 'Everyone who has an account on the platform.'}>
+      <PageHeader title={isAdmin ? 'Staff & roles' : 'Users'} description={isAdmin ? 'Admins, managers and supervisors of the admin panel, with their permissions. Staff sign in with an e-mailed code, then a code from their authenticator app (set up on their first sign-in). Add someone with just a name and e-mail; they get an invitation. Lost phone? Reset their authenticator from this list.' : 'Everyone who has an account on the platform.'}>
         {!isAdmin && <ExportMenu what="users" base="/api/admin/export" />}
         {!isAdmin && <Button variant="outline" onClick={() => openForm(null, true)}><Building2 />Add organisation</Button>}
         <Button onClick={() => openForm()}><Plus />Add {singular.toLowerCase()}</Button>

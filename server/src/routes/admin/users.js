@@ -127,6 +127,25 @@ module.exports = function usersRouter(role) {
     res.status(201).json({ data: user, message: `${role === 'admin' ? 'Staff member' : isOrg ? 'Organisation' : 'User'} created successfully. Login details were e-mailed.` });
   }));
 
+  /* sub admins only: the super admin can reset a lost authenticator (the person sets a new one at their next sign-in) or sign them out everywhere */
+  if (role === 'admin') {
+    r.post('/:id/reset-authenticator', wrap(async (req, res) => {
+      const user = await User.scope('withSecrets').findOne({ where: { id: req.params.id, role: roleWhere } });
+      if (!user) fail(404, 'Not found');
+      await user.update({ two_factor_enabled: false, two_factor_secret: null, two_factor_recovery: [], token_version: (user.token_version || 0) + 1 });
+      audit(req, 'user.reset_authenticator', 'user', user.id, {});
+      mail.sendTemplate('security_notice', user.email, { name: user.first_name, what: 'Your authenticator app was reset by the super administrator. You will be asked to set up a new one the next time you sign in.' }).catch(() => {});
+      res.json({ message: `${user.first_name}'s authenticator was reset and they were signed out. They set up a new one at their next sign-in.` });
+    }));
+    r.post('/:id/sign-out', wrap(async (req, res) => {
+      const user = await User.scope('withSecrets').findOne({ where: { id: req.params.id, role: roleWhere } });
+      if (!user) fail(404, 'Not found');
+      await user.update({ token_version: (user.token_version || 0) + 1 });
+      audit(req, 'user.force_sign_out', 'user', user.id, {});
+      res.json({ message: `${user.first_name} was signed out of every device.` });
+    }));
+  }
+
   r.post('/:id/resend-invite', wrap(async (req, res) => {
     const user = await User.findOne({ where: { id: req.params.id, role: roleWhere } });
     if (!user) fail(404, 'Not found');
