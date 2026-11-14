@@ -8,6 +8,7 @@ const crypto = require('crypto');
 const M = require('../models');
 const settings = require('./settings');
 const mail = require('./mail');
+const safety = require('./wasafety');
 const { appUrl } = require('../config');
 
 const seen = new Set(); // message ids already handled (Meta retries deliveries)
@@ -64,7 +65,31 @@ async function addLead(line, waId, name, text) {
   return { lead, created: true };
 }
 
-/** handles one webhook body; never throws (Meta must always get a 200) */
+/**
+ * One incoming message from either connection type (official API webhook or QR gateway).
+ * Records the contact + message, honours STOP, and turns a new sender into a lead.
+ */
+async function receive(line, { waId, jid, name, text, msgId }) {
+  if (msgId && seen.has(msgId)) return { duplicate: true };
+  if (msgId) { remember(msgId); if (await M.WhatsappMessage.findOne({ where: { line_id: line.id, wa_msg_id: msgId }, attributes: ['id'] })) return { duplicate: true }; }
+  const [contact] = await M.WhatsappContact.findOrCreate({ where: { line_id: line.id, wa_id: waId }, defaults: { jid: jid || null, name: name || null } });
+  const patch = { last_in_at: new Date() };
+  if (jid) patch.jid = jid;
+  if (name && !contact.name) patch.name = String(name).slice(0, 120);
+  if (safety.STOP_WORDS.test(text)) patch.opted_out = true; else if (safety.START_WORDS.test(text)) patch.opted_out = false;
+  await contact.update(patch);
+  await M.WhatsappMessage.create({ line_id: line.id, wa_id: waId, direction: 'in', body: String(text).slice(0, 4000), status: 'received', wa_msg_id: msgId || null });
+  await line.update({ messages_count: (line.messages_count || 0) + 1, last_message_at: new Date() });
+  if (!line.vcard_id) return { created: false }; // no card chosen yet: nothing to attach a lead to
+  const { lead, created } = await addLead(line, waId, name, text);
+  if (created) {
+    const card = await M.Vcard.findByPk(line.vcard_id, { include: [{ model: M.User, attributes: ['email'] }] });
+    if (card?.user?.email) mail.sendTemplate('enquiry_received', card.user.email, { vcard: card.name, customer: lead.name, contact: `${lead.phone} (WhatsApp)`, message: lead.message }).catch(() => {});
+  }
+  return { created };
+}
+
+/** handles one official-API webhook body; never throws (Meta must always get a 200) */
 async function ingest(body) {
   const out = { leads: 0, messages: 0 };
   try {
@@ -77,19 +102,11 @@ async function ingest(body) {
         if (!line || !line.status) continue;
         const names = Object.fromEntries((v.contacts || []).map((c) => [c.wa_id, c.profile?.name]));
         for (const m of v.messages) {
-          if (!m.from || (m.id && seen.has(m.id))) continue;
-          if (m.id) remember(m.id);
-          out.messages += 1;
-          line.messages_count = (line.messages_count || 0) + 1; line.last_message_at = new Date();
-          if (!line.vcard_id) continue; // no card chosen yet: nothing to attach the lead to
-          const { lead, created } = await addLead(line, String(m.from), names[m.from], textOf(m));
-          if (created) {
-            out.leads += 1;
-            const card = await M.Vcard.findByPk(line.vcard_id, { include: [{ model: M.User, attributes: ['email'] }] });
-            if (card?.user?.email) mail.sendTemplate('enquiry_received', card.user.email, { vcard: card.name, customer: lead.name, contact: `${lead.phone} (WhatsApp)`, message: lead.message }).catch(() => {});
-          }
+          if (!m.from) continue;
+          const r = await receive(line, { waId: String(m.from), jid: `${m.from}@s.whatsapp.net`, name: names[m.from], text: textOf(m), msgId: m.id });
+          if (r.duplicate) continue;
+          out.messages += 1; if (r.created) out.leads += 1;
         }
-        await line.save();
       }
     }
   } catch (e) { console.error('whatsapp webhook', e.message); }
@@ -107,4 +124,4 @@ async function check(line) {
   return { phone: j.display_phone_number, name: j.verified_name };
 }
 
-module.exports = { webhookUrl, verifyToken, challenge, signatureOk, ingest, check, textOf };
+module.exports = { webhookUrl, verifyToken, challenge, signatureOk, ingest, receive, check, textOf };

@@ -60,7 +60,7 @@ const DEFAULTS = {
   leopards_auto_sync: '1',
   // WhatsApp + SMS
   whatsapp_enable: '0', whatsapp_provider: 'meta', whatsapp_phone_number_id: '', whatsapp_access_token: '', whatsapp_api_version: 'v21.0',
-  whatsapp_template_language: 'en', whatsapp_app_secret: '', whatsapp_verify_token: '', whatsapp_http_url: '', whatsapp_http_method: 'POST', whatsapp_http_body: '', whatsapp_http_headers: '',
+  whatsapp_template_language: 'en', whatsapp_app_secret: '', whatsapp_verify_token: '', wa_qr_enable: '0', wa_timezone: 'Asia/Karachi', whatsapp_http_url: '', whatsapp_http_method: 'POST', whatsapp_http_body: '', whatsapp_http_headers: '',
   sms_enable: '0', sms_provider: 'http', sms_http_url: '', sms_http_method: 'GET', sms_http_body: '', sms_http_headers: '',
   phone_default_region: '92', twilio_sid: '', twilio_token: '', twilio_sms_from: '', twilio_whatsapp_from: '', notify_admin_numbers: '',
   // invoices
