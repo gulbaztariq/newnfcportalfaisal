@@ -71,6 +71,9 @@ api.use('/shop', require('./routes/shop'));
 api.use((_req, _res, next) => next(new HttpError(404, 'Not found')));
 app.use('/api', api);
 
+/* a tiny page for the keep-alive cron job (see Admin > WhatsApp leads) */
+app.get('/health', (_req, res) => res.type('text/plain').send('ok'));
+
 /* ------------------------------------------- WhatsApp Cloud API webhook */
 // outside /api: Meta cannot send the CSRF header. Every delivery is checked against the Meta app secret.
 const waLimiter = rateLimit({ windowMs: 60 * 1000, limit: 300, standardHeaders: true, legacyHeaders: false });
@@ -139,6 +142,7 @@ async function start() {
   await sequelize.authenticate();
   if (config.db.dialect === 'sqlite') await sequelize.query('PRAGMA foreign_keys = ON');
   require('./services/jobs').start();
+  require('./services/wagateway').start(); // WhatsApp QR numbers (idle unless switched on in Admin > WhatsApp leads)
   app.listen(config.port, '0.0.0.0', () => console.log(`Server running on ${config.appUrl} (port ${config.port})`));
 }
 if (require.main === module) start().catch((e) => { console.error('Failed to start:', e.message); process.exit(1); });

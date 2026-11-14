@@ -6,7 +6,8 @@ import api from '@/lib/api';
 import { cn } from '@/lib/cn';
 import { Whatsapp } from '@/components/BrandIcons';
 import { check } from '@/lib/validate';
-import { PageHeader, Card, CardBody, Button, Field, Input, Select, Switch, Badge, Dialog, EmptyState, Skeleton, useForm, run, confirm } from '@/components/ui';
+import { PageHeader, Card, CardBody, Button, Field, Input, Select, Switch, Badge, Dialog, EmptyState, Skeleton, Segmented, useForm, run, confirm } from '@/components/ui';
+import { QrNumbers, WaInbox } from './WhatsappQr';
 
 const when = (d) => (d ? new Date(d).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) : 'No messages yet');
 const EMPTY = { label: '', phone_number_id: '', access_token: '', vcard_id: '', status: true };
@@ -27,6 +28,7 @@ export function WhatsappLeads() {
   const [saving, setSaving] = useState(false);
   const [busy, setBusy] = useState(null);
   const [secret, setSecret] = useState('');
+  const [tab, setTab] = useState('qr');
   const form = useForm(EMPTY);
   const load = () => api.get('/admin/whatsapp-lines').then(({ data: d }) => setData(d));
   useEffect(() => { load(); }, []);
@@ -48,10 +50,14 @@ export function WhatsappLeads() {
   return (
     <>
       <PageHeader title="WhatsApp leads" description="Connect your WhatsApp Business numbers. Anyone who messages one of them becomes a lead on the card you choose, in that card owner's Enquiries.">
-        <Button onClick={() => openForm()}><Plus />Add number</Button>
+        {tab === 'api' && <Button onClick={() => openForm()}><Plus />Add number</Button>}
       </PageHeader>
+      <div className="mb-5"><Segmented value={tab} onChange={setTab} options={[{ value: 'qr', label: 'QR numbers' }, { value: 'inbox', label: 'Inbox' }, { value: 'api', label: 'Official API (Meta)' }]} /></div>
+      {tab === 'qr' && data && <QrNumbers data={data} cards={data.cards} reload={load} />}
+      {tab === 'inbox' && data && <WaInbox data={data} />}
+      {(tab === 'qr' || tab === 'inbox') && !data && <Skeleton className="h-56 rounded-3xl" />}
 
-      {!data ? <Skeleton className="h-56 rounded-3xl" /> : (
+      {tab === 'api' && (!data ? <Skeleton className="h-56 rounded-3xl" /> : (
         <>
           <Card className="mb-5">
             <CardBody className="grid gap-4">
@@ -68,12 +74,12 @@ export function WhatsappLeads() {
             </CardBody>
           </Card>
 
-          <p className="mb-3 font-display font-semibold">Step 2: your numbers <span className="ml-1 text-sm font-normal text-muted-foreground">{data.leads} WhatsApp leads so far</span></p>
-          {!data.data.length ? (
+          <p className="mb-3 font-display font-semibold">Step 2: your numbers <span className="ml-1 text-sm font-normal text-muted-foreground">{data.leads} WhatsApp leads so far (all numbers)</span></p>
+          {!data.data.some((l) => l.provider !== 'qr') ? (
             <Card><EmptyState icon={Whatsapp} title="No WhatsApp numbers yet" description="Add each number with its Phone number ID and access token from Meta." action={<Button onClick={() => openForm()}><Plus />Add number</Button>} /></Card>
           ) : (
-            <div className="grid gap-4 lg:grid-cols-3">
-              {data.data.map((l) => (
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+              {data.data.filter((l) => l.provider !== 'qr').map((l) => (
                 <Card key={l.id} className={cn('h-full', !l.status && 'opacity-60')}>
                   <CardBody className="flex h-full flex-col gap-3">
                     <div className="flex items-start gap-3">
@@ -98,7 +104,7 @@ export function WhatsappLeads() {
             </div>
           )}
         </>
-      )}
+      ))}
 
       <Dialog open={!!editing} onOpenChange={(o) => !o && setEditing(null)} size="md" icon={Whatsapp} title={editing?.id ? 'Edit WhatsApp number' : 'Connect a WhatsApp number'}
         footer={<><Button variant="outline" onClick={() => setEditing(null)}>Cancel</Button><Button onClick={save} loading={saving}>{editing?.id ? 'Save changes' : 'Connect number'}</Button></>}>

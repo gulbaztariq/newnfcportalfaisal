@@ -304,8 +304,41 @@ const WhatsappLine = sequelize.define('whatsapp_line', {
   status: { type: T.BOOLEAN, defaultValue: true },
   messages_count: { type: T.INTEGER, defaultValue: 0 },
   last_message_at: T.DATE,
+  // QR-linked numbers (WhatsApp Web style, run by services/wagateway.js)
+  provider: { type: T.STRING(10), defaultValue: 'cloud' }, // 'cloud' = official API, 'qr' = linked by scanning a QR code
+  qr_status: T.STRING(20), // starting | qr | connecting | connected | disconnected | logged_out | paused
+  qr_code: T.TEXT, // the QR text while waiting for a scan
+  command: T.STRING(12), // connect | logout: picked up by whichever process runs the gateway
+  connected_at: T.DATE,
+  daily_limit: { type: T.INTEGER, defaultValue: 40 }, // messages the system may send from this number per day
+  hourly_limit: { type: T.INTEGER, defaultValue: 10 },
+  quiet_start: { type: T.STRING(5), defaultValue: '23:00' }, // no sending between quiet_start and quiet_end (local time)
+  quiet_end: { type: T.STRING(5), defaultValue: '07:00' },
 });
 WhatsappLine.belongsTo(Vcard, { foreignKey: 'vcard_id', onDelete: 'SET NULL' });
+/** one person on one number: used for the 24 hour reply window and opt-outs */
+const WhatsappContact = sequelize.define('whatsapp_contact', {
+  line_id: { type: T.INTEGER, allowNull: false },
+  wa_id: { type: T.STRING(40), allowNull: false },
+  jid: T.STRING(80),
+  name: T.STRING(120),
+  opted_out: { type: T.BOOLEAN, defaultValue: false },
+  last_in_at: T.DATE,
+}, { indexes: [{ unique: true, fields: ['line_id', 'wa_id'] }] });
+/** every message in or out of a number, and the outgoing queue the gateway works through slowly */
+const WhatsappMessage = sequelize.define('whatsapp_message', {
+  line_id: { type: T.INTEGER, allowNull: false },
+  wa_id: { type: T.STRING(40), allowNull: false },
+  direction: { type: T.STRING(3), allowNull: false }, // in | out
+  body: T.TEXT,
+  status: { type: T.STRING(10), defaultValue: 'received' }, // received | queued | sent | failed
+  wa_msg_id: T.STRING(80),
+  error: T.STRING(255),
+  user_id: T.INTEGER,
+  sent_at: T.DATE,
+}, { indexes: [{ fields: ['line_id', 'wa_id'] }, { fields: ['line_id', 'created_at'] }, { fields: ['status'] }] });
+/** one row: which server process currently owns the WhatsApp connections (only one may, or WhatsApp logs the others out) */
+const WaLease = sequelize.define('wa_lease', { holder: T.STRING(64), until: T.DATE }, { timestamps: false });
 const VcardProduct = sequelize.define('vcard_product', {
   name: { type: T.STRING(150), allowNull: false },
   description: T.TEXT,
@@ -596,7 +629,7 @@ const business = require('./business')(sequelize, json, { User, Vcard, NfcCard, 
 module.exports = {
   sequelize, PLAN_FEATURES, STAFF_ROLES, COMPANY_ROLES, ...business,
   User, Organisation, Currency, Country, State, City, Language, Template, Plan, CouponCode, Transaction, Subscription,
-  Vcard, VcardService, VcardGallery, VcardTestimonial, VcardEnquiry, WhatsappLine, VcardView, VcardEvent, VcardProduct, Appointment, VcardBlog, VcardPage, VcardSubscriber,
+  Vcard, VcardService, VcardGallery, VcardTestimonial, VcardEnquiry, WhatsappLine, WhatsappContact, WhatsappMessage, WaLease, VcardView, VcardEvent, VcardProduct, Appointment, VcardBlog, VcardPage, VcardSubscriber,
   FrontBlog, WhatsappStore, StoreCategory, StoreProduct, StoreOrder,
   NfcCard, NfcOrder, AffiliateUser, Withdrawal,
   Setting, Feature, AboutUs, FrontTestimonial, FrontFaq, Enquiry, EmailSubscription, SentEmail,
