@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { ContactTags } from './ContactTags';
+import { GuestCustomers } from './Guests';
 import { motion } from 'motion/react';
 import { toast } from 'sonner';
 import {
@@ -35,7 +36,7 @@ export function Orders() {
   const [sources, setSources] = useState([]);
   const navigate = useNavigate();
   const [sp, setSp] = useSearchParams();
-  const view = sp.get('view') === 'tags' ? 'tags' : 'orders';
+  const view = ['tags', 'guests'].includes(sp.get('view')) ? sp.get('view') : 'orders';
   useEffect(() => { api.get('/admin/order-sources', { params: { all: 1 } }).then(({ data }) => setSources(data.data)).catch(() => {}); }, []);
   useEffect(() => { if (list.extra?.counts) setMeta({ counts: list.extra.counts, labels: list.extra.labels, steps: list.extra.steps }); }, [list.extra]);
   const status = list.params.order_status || '';
@@ -48,11 +49,16 @@ export function Orders() {
         <ButtonLink as={Link} to="/admin/order-sources" variant="outline"><Globe />Order sources</ButtonLink>
         <ButtonLink as={Link} to="/admin/orders/new"><Plus />New order</ButtonLink>
       </PageHeader>
-      <div className="mb-4"><Segmented id="orders-view" value={view} onChange={(v) => setSp(v === 'tags' ? { view: 'tags' } : {}, { replace: true })} options={[{ value: 'orders', label: 'Orders' }, { value: 'tags', label: 'Contact tags' }]} /></div>
+      <div className="mb-4"><Segmented id="orders-view" value={view} onChange={(v) => setSp(v === 'orders' ? {} : { view: v }, { replace: true })} options={[{ value: 'orders', label: 'Orders' }, { value: 'guests', label: 'Guest customers' }, { value: 'tags', label: 'Contact tags' }]} /></div>
       {view === 'tags' ? (
         <>
           <p className="mb-4 text-sm text-muted-foreground">QR / NFC tags that let anyone reach the owner without seeing their phone number. Car contact tags and airport (luggage) tags, one row per tag made by an order.</p>
           <ContactTags embedded />
+        </>
+      ) : view === 'guests' ? (
+        <>
+          <p className="mb-4 text-sm text-muted-foreground">Customers who ordered without an account (mostly non-plan products). Open one to see everything they bought and reorder in one click.</p>
+          <GuestCustomers embedded />
         </>
       ) : (
         <>

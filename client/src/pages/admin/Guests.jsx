@@ -11,15 +11,17 @@ import {
 } from '@/components/ui';
 import { rs } from './Orders';
 
-export function GuestCustomers() {
+export function GuestCustomers({ embedded = false }) {
   const list = useList('/admin/guest-customers');
   const navigate = useNavigate();
   return (
     <>
-      <PageHeader title="Guest customers" description="Customers who ordered without an account (mostly non-plan products). Open one to see everything they bought and reorder in one click.">
-        <ButtonLink as={Link} to="/admin/orders/new"><Plus />New order</ButtonLink>
-      </PageHeader>
-      <TableCard title="Guests" list={list} toolbar={<SearchInput value={list.params.search} onChange={(search) => list.set({ search })} placeholder="Name, phone, e-mail, city..." />}>
+      {!embedded && (
+        <PageHeader title="Guest customers" description="Customers who ordered without an account (mostly non-plan products). Open one to see everything they bought and reorder in one click.">
+          <ButtonLink as={Link} to="/admin/orders/new"><Plus />New order</ButtonLink>
+        </PageHeader>
+      )}
+      <TableCard title={embedded ? 'Guest customers' : 'Guests'} list={list} toolbar={<SearchInput value={list.params.search} onChange={(search) => list.set({ search })} placeholder="Name, phone, e-mail, city..." />}>
         <DataTable loading={list.loading} rows={list.rows} onRowClick={(g) => navigate(`/admin/guest-customers/${g.id}`)}
           empty={<EmptyState icon={UserRound} title="No guest customers yet" description="Choose Guest in New order; returning guests are recognised by phone or e-mail." />} columns={[
             { key: 'n', label: 'Guest', render: (g) => <div className="flex items-center gap-3"><Avatar name={g.name} size={36} /><div className="min-w-0"><p className="truncate font-medium">{g.name}</p><p className="truncate text-xs text-muted-foreground">{g.company_name || g.city || '-'}</p></div></div> },
@@ -64,7 +66,7 @@ export function GuestDetail() {
   const reorder = (o, edit) => navigate(`/admin/orders/new?reorder=${o.id}${edit ? '&edit=1' : ''}`);
   return (
     <>
-      <Link to="/admin/guest-customers" className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" />All guests</Link>
+      <Link to="/admin/orders?view=guests" className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" />All guests</Link>
       <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
         <Card className="relative mb-6 overflow-hidden">
           <div className="absolute inset-0 bg-linear-to-br from-sky-500/10 via-violet-500/5 to-transparent" />
