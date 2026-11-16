@@ -34,7 +34,7 @@ function Messages({ tag, onClose, onChanged }) {
   );
 }
 
-export function ContactTags() {
+export function ContactTags({ embedded = false }) {
   const list = useList('/admin/contact-tags');
   const [open, setOpen] = useState(null);
   const toggle = async (t, status) => { await run(api.patch(`/admin/contact-tags/${t.id}`, { status })).catch(() => {}); list.reload(); };
@@ -45,10 +45,13 @@ export function ContactTags() {
   };
   return (
     <>
-      <PageHeader title="Contact tags" description="QR / NFC tags that let anyone reach the owner without seeing their phone number. Car contact tags and airport (luggage) tags, made by orders from the shop or the New order screen.">
-        <ButtonLink href="/api/admin/contact-tags/export" variant="outline"><Download />Export links (CSV)</ButtonLink>
-      </PageHeader>
-      <TableCard title="Tags" list={list} toolbar={<>
+      {!embedded && (
+        <PageHeader title="Contact tags" description="QR / NFC tags that let anyone reach the owner without seeing their phone number. Car contact tags and airport (luggage) tags, made by orders from the shop or the New order screen.">
+          <ButtonLink href="/api/admin/contact-tags/export" variant="outline"><Download />Export links (CSV)</ButtonLink>
+        </PageHeader>
+      )}
+      <TableCard title={embedded ? 'Contact tags' : 'Tags'} list={list} toolbar={<>
+        {embedded && <ButtonLink href="/api/admin/contact-tags/export" variant="outline" size="sm"><Download />Export links (CSV)</ButtonLink>}
         <FilterSelect value={list.params.status} onChange={(v) => list.set({ status: v })} placeholder="All tags" options={[{ value: '1', label: 'Active' }, { value: '0', label: 'Switched off' }]} />
         <SearchInput value={list.params.search} onChange={(search) => list.set({ search })} placeholder="Code, label, owner, phone..." />
       </>}>
