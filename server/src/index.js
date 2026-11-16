@@ -101,6 +101,15 @@ app.post('/pay/notify/payfast', (req, res) => {
   require('./services/payments').payfastNotify(req.body || {}).catch((e) => console.error('payfast itn', e.message)).finally(() => res.sendStatus(200));
 });
 
+/* a visitor comes back from a card owner's payment page: confirm with the gateway, then show the card again */
+app.get('/pay/card/:token', async (req, res) => {
+  try {
+    const o = await require('./services/userpay').confirm(req.params.token, req.query);
+    const state = o.payment_status === 'paid' ? 'paid' : req.query.cancelled ? 'cancelled' : 'pending';
+    res.redirect(303, `/${encodeURIComponent(o.vcard.url_alias)}?order=${state}&no=${encodeURIComponent(o.order_number)}`);
+  } catch { res.redirect(303, '/'); }
+});
+
 /* -------------------------------------------- dynamic short links (QR / NFC) */
 app.get('/r/:code', require('./routes/redirects').redirect);
 app.get('/invoice/:token', require('./routes/redirects').invoice);

@@ -584,6 +584,7 @@ r.get('/export/:what', wrap(async (req, res) => {
   res.type(out.type).set('Content-Disposition', `attachment; filename="${req.params.what}.${out.ext}"`).send(out.body);
 }));
 
+r.use(require('./selling'));
 r.use(require('./content'));
 r.use(require('./store'));
 r.use(require('./business'));

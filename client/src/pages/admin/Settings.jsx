@@ -87,7 +87,7 @@ export default function Settings() {
 }
 
 function General({ st }) {
-  const keys = ['app_name', 'email', 'phone', 'region_code', 'address', 'default_currency_id', 'affiliation_amount', 'min_withdrawal_amount', 'register_enable', 'hide_decimal_values', 'app_logo', 'dashboard_logo', 'favicon', 'timezone', 'date_format', 'time_format', 'nfc_tax_name', 'nfc_tax_rate', 'expiry_reminder_days', 'expiry_reminder_every_days', 'default_vcard_enable', 'default_vcard_template'];
+  const keys = ['app_name', 'email', 'phone', 'region_code', 'address', 'default_currency_id', 'affiliation_amount', 'min_withdrawal_amount', 'register_enable', 'mobile_validation', 'hide_decimal_values', 'app_logo', 'dashboard_logo', 'favicon', 'timezone', 'date_format', 'time_format', 'nfc_tax_name', 'nfc_tax_rate', 'expiry_reminder_days', 'expiry_reminder_every_days', 'default_vcard_enable', 'default_vcard_template'];
   return (
     <div className="space-y-6">
       <Card>
@@ -116,6 +116,7 @@ function General({ st }) {
             <Field label="Minimum withdrawal"><Input {...st.input('min_withdrawal_amount')} type="number" min="0" step="0.01" /></Field>
           </div>
           <SwitchRow title="User registration" description="Allow visitors to create accounts from the website" {...st.flag('register_enable')} />
+          <SwitchRow title="Phone number required" description="People must enter a phone number when they create an account" {...st.flag('mobile_validation')} />
           <SwitchRow title="Hide decimal values" description="Show prices without cents on the website" {...st.flag('hide_decimal_values')} />
         </CardBody>
       </Card>

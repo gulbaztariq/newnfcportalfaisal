@@ -112,6 +112,7 @@ export const userMenu = (user) => filterMenu([
   {
     group: 'Commerce', items: [
       { label: 'WhatsApp Stores', icon: Store, to: '/user/stores', perm: 'stores' },
+      { label: 'Product Orders', icon: Package, to: '/user/product-orders', perm: 'leads' },
       { label: 'Store Orders', icon: Receipt, to: '/user/store-orders', perm: 'stores' },
     ],
   },
@@ -122,6 +123,7 @@ export const userMenu = (user) => filterMenu([
       { label: 'Invoices', icon: FileText, to: '/user/invoices', perm: 'billing' },
       { label: 'Affiliation', icon: Wallet, to: '/user/affiliation', perm: 'billing' },
       { label: 'Organisation', icon: Building2, to: '/user/organisation', perm: 'members' },
+      !['manager', 'supervisor'].includes(user?.company_role) && { label: 'Settings', icon: Settings, to: '/user/settings' },
       { label: 'Profile', icon: UserCircle, to: '/user/profile' },
     ],
   },

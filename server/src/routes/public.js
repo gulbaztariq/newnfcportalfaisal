@@ -12,6 +12,9 @@ const settings = require('../services/settings');
 const subs = require('../services/subscription');
 const extras = require('../services/extras');
 const mail = require('../services/mail');
+const usersettings = require('../services/usersettings');
+const userpay = require('../services/userpay');
+const currencyFor = (all) => String(all.currency_code || 'USD').toUpperCase().slice(0, 10);
 const { makeUpload, fileUrl, DOC_TYPES } = require('../middleware/upload');
 const { render, renderSubPage, renderLocked, renderUnavailable, manifest, vcardFile, vcardCsp } = require('../views/templates/render');
 const { renderStore, renderStorePage } = require('../views/store');
@@ -189,10 +192,41 @@ api.post('/vcards/:alias/appointments', formLimiter, wrap(async (req, res) => {
   const slot = (await freeSlots(v, req.body.date)).find((s) => s.from === req.body.from_time && s.to === req.body.to_time);
   if (!slot) fail(422, 'This time is no longer available, please pick another slot');
   const a = v.appointment_settings || {};
-  const ap = await M.Appointment.create({ vcard_id: v.id, name: req.body.name, email: req.body.email || null, phone: req.body.phone || null, date: req.body.date, from_time: slot.from, to_time: slot.to, notes: req.body.notes || null, service_name: req.body.service_name || null, amount: a.paid ? Number(a.price || 0) : 0 });
+  const price = a.paid ? Number(a.price || 0) : 0;
+  const all = await usersettings.full(v.user_id);
+  const methods = price > 0 ? usersettings.methodsOf(all) : [];
+  if (methods.length && !methods.some((m) => m.id === req.body.method)) fail(422, 'Please choose how you want to pay', { method: 'Please choose how you want to pay' });
+  const ap = await M.Appointment.create({ vcard_id: v.id, name: req.body.name, email: req.body.email || null, phone: req.body.phone || null, date: req.body.date, from_time: slot.from, to_time: slot.to, notes: req.body.notes || null, service_name: req.body.service_name || null, amount: price });
   mail.sendTemplate('appointment_booked', v.user.email, { customer: ap.name, date: ap.date, time: `${ap.from_time} - ${ap.to_time}`, vcard: v.name, notes: ap.notes || '' }).catch(() => {});
   extras.slack('appointment', `New appointment on ${ap.date} ${ap.from_time} for ${v.name}`);
+  if (methods.length) {
+    let out;
+    try {
+      out = await userpay.begin(v, { kind: 'appointment', appointment_id: ap.id, item_name: `Appointment ${ap.date} ${ap.from_time}${ap.service_name ? ` (${ap.service_name})` : ''}`.slice(0, 190), quantity: 1, unit_price: price, amount: price, currency_code: currencyFor(all), customer_name: ap.name, customer_email: ap.email, customer_phone: ap.phone, notes: ap.notes }, req.body.method);
+    } catch (e) { await ap.destroy(); throw e; } // the slot is free again when the payment page could not be opened
+    if (out.url) return res.status(201).json({ message: 'Opening the payment page...', pay_url: out.url });
+    return res.status(201).json({ message: 'Your appointment request was sent. Please pay as described below; it is confirmed once the payment is received.', guide: out.guide || '' });
+  }
   res.status(201).json({ message: 'Your appointment request was sent. You will receive a confirmation soon.' });
+}));
+
+/* ------------------------------------------- buy a product on a vCard */
+api.post('/vcards/:alias/orders', orderLimiter, wrap(async (req, res) => {
+  const v = await liveVcard(req.params.alias);
+  validate(req.body, { product_id: 'required|integer', customer_name: 'required|max:120', customer_email: 'email|max:191', customer_phone: 'phone', customer_address: 'max:500', notes: 'max:1000', quantity: 'integer|minv:1|maxv:99', method: 'required' },
+    { product_id: 'Product', customer_name: 'Name', customer_email: 'E-mail address', customer_phone: 'Phone number', customer_address: 'Address', method: 'Payment method' });
+  if (!req.body.customer_email && !req.body.customer_phone) fail(422, 'Please leave an e-mail address or phone number', { customer_phone: 'Please leave an e-mail address or phone number' });
+  await guardEmail(req.body.customer_email);
+  const pr = await M.VcardProduct.findOne({ where: { id: req.body.product_id, vcard_id: v.id } });
+  if (!pr || pr.price === null || Number(pr.price) <= 0) fail(404, 'This product cannot be ordered online');
+  if (pr.in_stock === false) fail(422, 'This product is out of stock');
+  const all = await usersettings.full(v.user_id);
+  const qty = Math.min(99, Math.max(1, parseInt(req.body.quantity, 10) || 1));
+  const out = await userpay.begin(v, { kind: 'product', product_id: pr.id, item_name: pr.name, quantity: qty, unit_price: Number(pr.price), amount: Math.round(Number(pr.price) * qty * 100) / 100, currency_code: String(pr.currency_code || currencyFor(all)).toUpperCase().slice(0, 10), customer_name: req.body.customer_name, customer_email: req.body.customer_email || null, customer_phone: req.body.customer_phone || null, customer_address: req.body.customer_address || null, notes: req.body.notes || null }, req.body.method);
+  extras.slack('store_order', `New product order ${out.order.order_number} on ${v.name}`);
+  if (out.url) return res.status(201).json({ message: 'Opening the payment page...', pay_url: out.url, order: out.order.order_number });
+  userpay.notify(out.order, 'placed').catch(() => {});
+  res.status(201).json({ message: `Order ${out.order.order_number} received. Please pay as described below.`, guide: out.guide || '', order: out.order.order_number });
 }));
 
 /* -------------------------------------------------- WhatsApp store API */
@@ -333,7 +367,8 @@ async function vcardPage(req, res, v) {
     res.set('Content-Security-Policy', `default-src 'none'; frame-src 'self'; style-src 'unsafe-inline'; img-src 'self' data:; frame-ancestors 'self' ${clientUrl}`);
     return res.send(`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(v.name)}</title><meta name="description" content="${esc(v.description || v.occupation || '')}"><link rel="icon" href="${esc(s.favicon || '/brand/favicon.svg')}"><style>html,body{margin:0;height:100%}iframe{border:0;width:100%;height:100%;display:block}</style></head><body><iframe src="/c/${esc(v.url_alias)}" title="${esc(v.name)}" sandbox="allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-modals allow-downloads" allow="clipboard-write; web-share"></iframe></body></html>`);
   }
-  res.send(render({ v, template: v.template, services, gallery, testimonials, products, blogs, pages: pageList, app: s, appUrl, nonce: res.locals.nonce }));
+  const payMethods = await usersettings.methods(v.user_id).catch(() => []);
+  res.send(render({ v, template: v.template, services, gallery, testimonials, products, blogs, pages: pageList, app: s, appUrl, nonce: res.locals.nonce, payMethods }));
 }
 
 async function customCodeAllowed(v) {

@@ -240,6 +240,7 @@ r.post('/register', authLimiter, wrap(async (req, res) => {
   if (s.register_enable !== '1') fail(403, 'Registration is currently disabled');
   validate(req.body, { first_name: 'required|max:100', last_name: 'required|max:100', email: 'required|email|max:191', password: 'required|min:8|max:100', contact: 'phone' });
   if (req.body.password !== req.body.password_confirmation) fail(422, 'Validation failed', { password_confirmation: 'Passwords do not match' });
+  if (s.mobile_validation === '1' && !String(req.body.contact || '').trim()) fail(422, 'Phone number is required', { contact: 'Phone number is required' });
   if (!req.body.terms) fail(422, 'Validation failed', { terms: 'You must accept the terms' });
   await checkBotAndDomain(req);
   const email = String(req.body.email).toLowerCase().trim();

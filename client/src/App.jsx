@@ -36,6 +36,8 @@ const U = {
   VcardList: lazyNamed(() => import('@/pages/user/Vcards'), 'VcardList'),
   VcardCreate: lazyNamed(() => import('@/pages/user/Vcards'), 'VcardCreate'),
   Enquiries: lazyNamed(() => import('@/pages/user/Vcards'), 'UserEnquiries'),
+  Settings: lazyNamed(() => import('@/pages/user/Account'), 'UserSettings'),
+  ProductOrders: lazyNamed(() => import('@/pages/user/Account'), 'ProductOrders'),
   Editor: lazy(() => import('@/pages/user/VcardEditor')),
   Plans: lazyNamed(() => import('@/pages/user/Billing'), 'UserPlans'),
   PaymentSuccess: lazyNamed(() => import('@/pages/user/Billing'), 'PaymentSuccess'),
@@ -224,6 +226,8 @@ export default function App() {
                 <Route path="stores/:sid" element={<U.StoreEditor />} />
                 <Route path="store-orders" element={<U.StoreOrders />} />
                 <Route path="enquiries" element={<U.Enquiries />} />
+                <Route path="settings" element={<U.Settings />} />
+                <Route path="product-orders" element={<U.ProductOrders />} />
                 <Route path="nfc-orders" element={<UB.Orders />} />
                 <Route path="orders/:id" element={<UB.OrderDetail />} />
                 <Route path="short-links" element={<UB.ShortLinks />} />
