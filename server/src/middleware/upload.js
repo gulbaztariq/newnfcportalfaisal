@@ -7,6 +7,8 @@ const { HttpError } = require('../utils/http');
 
 const IMAGE_TYPES = { 'image/jpeg': '.jpg', 'image/png': '.png', 'image/webp': '.webp', 'image/gif': '.gif', 'image/x-icon': '.ico', 'image/vnd.microsoft.icon': '.ico'};
 const DOC_TYPES = { ...IMAGE_TYPES, 'application/pdf': '.pdf' };
+/** gallery extras: audio, a short video or a document */
+const MEDIA_TYPES = { 'audio/mpeg': '.mp3', 'audio/mp3': '.mp3', 'audio/wav': '.wav', 'audio/x-wav': '.wav', 'audio/ogg': '.ogg', 'audio/mp4': '.m4a', 'audio/x-m4a': '.m4a', 'video/mp4': '.mp4', 'application/pdf': '.pdf' };
 
 /** File content must match the type the client declared (the declared type alone is attacker controlled). */
 const SIGNATURES = {
@@ -18,6 +20,13 @@ const SIGNATURES = {
   'image/vnd.microsoft.icon': (b) => b[0] === 0 && b[1] === 0 && b[2] === 1 && b[3] === 0,
   'application/pdf': (b) => b.subarray(0, 5).toString('latin1') === '%PDF-',
   'video/mp4': (b) => b.subarray(4, 8).toString('latin1') === 'ftyp',
+  'audio/mp4': (b) => b.subarray(4, 8).toString('latin1') === 'ftyp',
+  'audio/x-m4a': (b) => b.subarray(4, 8).toString('latin1') === 'ftyp',
+  'audio/mpeg': (b) => b.subarray(0, 3).toString('latin1') === 'ID3' || (b[0] === 0xff && (b[1] & 0xe0) === 0xe0),
+  'audio/mp3': (b) => b.subarray(0, 3).toString('latin1') === 'ID3' || (b[0] === 0xff && (b[1] & 0xe0) === 0xe0),
+  'audio/wav': (b) => b.subarray(0, 4).toString('latin1') === 'RIFF' && b.subarray(8, 12).toString('latin1') === 'WAVE',
+  'audio/x-wav': (b) => b.subarray(0, 4).toString('latin1') === 'RIFF' && b.subarray(8, 12).toString('latin1') === 'WAVE',
+  'audio/ogg': (b) => b.subarray(0, 4).toString('latin1') === 'OggS',
   'video/webm': (b) => b[0] === 0x1a && b[1] === 0x45 && b[2] === 0xdf && b[3] === 0xa3,
 };
 const uploaded = (req) => [req.file, ...(Array.isArray(req.files) ? req.files : Object.values(req.files || {}).flat())].filter(Boolean);
@@ -59,4 +68,4 @@ function removeFile(url) {
   if (abs.startsWith(uploadDir)) fs.promises.unlink(abs).catch(() => {});
 }
 
-module.exports = { makeUpload, fileUrl, removeFile, IMAGE_TYPES, DOC_TYPES };
+module.exports = { makeUpload, fileUrl, removeFile, IMAGE_TYPES, DOC_TYPES, MEDIA_TYPES };

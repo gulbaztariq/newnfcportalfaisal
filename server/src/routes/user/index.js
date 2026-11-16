@@ -4,6 +4,7 @@ const bcrypt = require('bcryptjs');
 const { Op, fn, col } = require('sequelize');
 const dayjs = require('dayjs');
 const QRCode = require('qrcode');
+const qrstyle = require('../../services/qrstyle');
 const M = require('../../models');
 const { HttpError, wrap, fail, validate, pick, toBool, paginate, paged } = require('../../utils/http');
 const { requireRole, companyWorkspace } = require('../../middleware/auth');
@@ -153,9 +154,9 @@ const vcardUpload = makeUpload('vcards', { maxMb: 5 }).fields([{ name: 'profile_
 const videoUpload = makeUpload('vcards', { types: { 'video/mp4': '.mp4', 'video/webm': '.webm' }, maxMb: 25 }).single('video');
 const VCARD_FIELDS = ['name', 'occupation', 'description', 'first_name', 'last_name', 'email', 'region_code', 'phone', 'alternative_email', 'alternative_phone',
   'location', 'location_url', 'company', 'job_title', 'dob', 'menu_title', 'menu_desc', 'site_title', 'meta_keyword', 'meta_description', 'google_analytics', 'default_language', 'custom_css', 'custom_code', 'custom_code_enabled'];
-const JSON_FIELDS = ['theme', 'social_links', 'custom_links', 'business_hours', 'sections', 'section_order', 'section_titles', 'iframes', 'payment_links', 'qr_settings', 'appointment_settings'];
+const JSON_FIELDS = ['theme', 'social_links', 'custom_links', 'business_hours', 'sections', 'section_order', 'section_titles', 'iframes', 'payment_links', 'qr_settings', 'appointment_settings', 'extras'];
 // sections of the public card that can be shown/hidden, reordered and renamed (views/templates/render.js)
-const SECTION_KEYS = ['about', 'contact', 'social', 'links', 'menu', 'services', 'products', 'appointments', 'gallery', 'testimonials', 'payments', 'blog', 'embeds', 'map', 'hours', 'qr', 'enquiry'];
+const SECTION_KEYS = ['about', 'contact', 'social', 'links', 'menu', 'services', 'products', 'store', 'appointments', 'gallery', 'testimonials', 'payments', 'blog', 'embeds', 'map', 'hours', 'qr', 'enquiry'];
 const sanitizeHtml = require('sanitize-html');
 const legalHtml = (h) => sanitizeHtml(String(h || ''), { allowedTags: sanitizeHtml.defaults.allowedTags.concat(['h1', 'h2', 'u', 's']), allowedSchemes: ['http', 'https', 'mailto', 'tel'] });
 const hhmm = (t) => (/^\d{2}:\d{2}$/.test(String(t)) ? t : null);
@@ -240,8 +241,22 @@ r.put('/vcards/:id', vcardUpload, trackStorage, wrap(async (req, res) => {
   if (b.pwa_enable !== undefined) data.pwa_enable = features.pwa ? toBool(b.pwa_enable) : false;
   if (b.business_directory !== undefined) data.business_directory = features.business_directory ? toBool(b.business_directory) : false;
   if (b.week_format !== undefined) data.week_format = b.week_format === 'sun' ? 'sun' : 'mon';
+  if (b.extras && typeof b.extras === 'object') {
+    const x = b.extras; const bn = x.banner && typeof x.banner === 'object' ? x.banner : {};
+    const str = (val, n) => String(val ?? '').trim().slice(0, n);
+    const link = str(bn.url, 500);
+    if (link && !/^(https?:\/\/|mailto:|tel:)/i.test(link)) fail(422, 'Validation failed', { banner_url: 'Banner link must start with https://' });
+    let storeId = Number(x.store_id) || null;
+    if (storeId && !(await M.WhatsappStore.findOne({ where: { id: storeId, user_id: v.user_id }, attributes: ['id'] }))) storeId = null;
+    data.extras = {
+      banner: { enabled: toBool(bn.enabled) && !!str(bn.title, 80), title: str(bn.title, 80), text: str(bn.text, 300), button: str(bn.button, 30), url: link },
+      terms_checkbox: toBool(x.terms_checkbox), share_sheet: x.share_sheet === undefined ? true : toBool(x.share_sheet),
+      dob_icon: /^ri-[a-z0-9-]{2,40}$/.test(String(x.dob_icon || '')) ? x.dob_icon : '', store_id: storeId,
+    };
+  } else delete data.extras;
   if (b.qr_settings) {
-    const q = pick(b.qr_settings, ['fg', 'bg', 'size', 'margin', 'ec']);
+    const q = pick(b.qr_settings, ['fg', 'bg', 'size', 'margin', 'ec', 'style', 'eye']);
+    q.style = qrstyle.STYLES.includes(q.style) && features.custom_qrcode ? q.style : 'square'; q.eye = qrstyle.EYES.includes(q.eye) && features.custom_qrcode ? q.eye : 'square';
     if (!features.custom_qrcode) { delete q.fg; delete q.bg; }
     for (const k of ['fg', 'bg']) if (q[k] && !/^#[0-9a-f]{6}$/i.test(q[k])) delete q[k];
     q.size = Math.min(1200, Math.max(200, Number(q.size) || 600)); q.margin = Math.min(8, Math.max(0, Number(q.margin ?? 2)));
@@ -296,8 +311,12 @@ r.get('/vcards/:id/qrcode', wrap(async (req, res) => {
   const opts = { width: Number(req.query.size) || q.size || 600, margin: q.margin ?? 2, errorCorrectionLevel: q.ec || 'M', color: { dark: q.fg || v.theme?.primary || '#000000', light: q.bg || '#ffffff' } };
   // QR codes point at the vCard's dynamic short link (destination can change later); ?direct=1 encodes the vCard URL itself
   const target = req.query.direct === '1' ? `${appUrl}/${v.url_alias}` : require('../../services/shortlinks').shortUrl((await require('../../services/shortlinks').forVcard(v)).code);
-  if (req.query.format === 'svg') {
-    return res.set('Content-Type', 'image/svg+xml').set('Content-Disposition', `attachment; filename="${v.url_alias}-qr.svg"`).send(await QRCode.toString(target, { ...opts, type: 'svg' }));
+  if (req.query.format === 'svg' || qrstyle.isStyled(q)) {
+    // styled codes (dots, rounded, round eyes) only exist as SVG; the editor turns it into a PNG in the browser when asked
+    const out = qrstyle.svg(target, { fg: opts.color.dark, bg: opts.color.light, margin: opts.margin, ec: opts.errorCorrectionLevel, style: q.style, eye: q.eye, size: opts.width });
+    res.set('Content-Type', 'image/svg+xml');
+    if (req.query.inline !== '1') res.set('Content-Disposition', `attachment; filename="${v.url_alias}-qr.svg"`);
+    return res.send(out);
   }
   const png = await QRCode.toBuffer(target, opts);
   res.set('Content-Type', 'image/png').set('Content-Disposition', `attachment; filename="${v.url_alias}-qr.png"`).send(png);
@@ -388,6 +407,18 @@ r.get('/vcards/:id/analytics', wrap(async (req, res) => {
   res.json({ total: v.views, period: views.length, byDay, devices: tally('device'), referrers: tally('referrer', host).slice(0, 8), enquiries, appointments, subscribers });
 }));
 
+/* gallery extras: an audio clip, a short video or a document (PDF) */
+const mediaUpload = makeUpload('vcards', { types: require('../../middleware/upload').MEDIA_TYPES, maxMb: 15 }).single('file');
+r.post('/vcards/:id/gallery-media', mediaUpload, trackStorage, wrap(async (req, res) => {
+  const v = await ownVcard(req);
+  if (!req.file) fail(422, 'Validation failed', { file: 'Please choose an audio, video or PDF file' });
+  validate(req.body, { caption: 'required|max:150', category: 'max:80' }, { caption: 'Title', category: 'Category' });
+  if ((await M.VcardGallery.count({ where: { vcard_id: v.id } })) >= 50) fail(422, 'Limit reached (50 items)');
+  const type = req.file.mimetype.startsWith('audio/') ? 'audio' : req.file.mimetype.startsWith('video/') ? 'video' : 'file';
+  const item = await M.VcardGallery.create({ vcard_id: v.id, image: '', type, video_url: fileUrl('vcards', req.file), caption: req.body.caption, category: req.body.category || null });
+  res.status(201).json({ data: item, message: 'Saved' });
+}));
+
 /* vCard sub resources: services, testimonials, gallery */
 const subUpload = makeUpload('vcards', { maxMb: 4 }).single('image');
 for (const [path, Model, fields, rules] of [
@@ -425,6 +456,7 @@ for (const [path, Model, fields, rules] of [
     const item = await Model.findOne({ where: { id: req.params.itemId, vcard_id: v.id } });
     if (!item) fail(404, 'Not found');
     removeFile(item.image);
+    if (path === 'gallery' && String(item.video_url || '').startsWith('/uploads/')) removeFile(item.video_url);
     await item.destroy();
     res.json({ message: 'Deleted' });
   }));

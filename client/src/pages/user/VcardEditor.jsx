@@ -1,3 +1,4 @@
+import { GalleryMedia } from './EditorExtras2';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence, Reorder, useDragControls } from 'motion/react';
@@ -32,7 +33,7 @@ const FONTS = [...SANS.map((f) => `'${f}', system-ui, sans-serif`), ...SERIF.map
 const LINK_ICONS = [['ri-links-line', 'Link'], ['ri-book-open-line', 'Menu / catalogue'], ['ri-restaurant-2-line', 'Restaurant'], ['ri-shopping-bag-3-line', 'Shop'], ['ri-calendar-event-line', 'Booking'], ['ri-map-pin-2-line', 'Location'], ['ri-phone-line', 'Phone'], ['ri-mail-line', 'E-mail'], ['ri-file-text-line', 'Document'], ['ri-gift-line', 'Offer'], ['ri-star-line', 'Reviews'], ['ri-play-circle-line', 'Video'], ['ri-global-line', 'Website']].map(([value, label]) => ({ value, label }));
 const RADII = [{ value: 'sharp', label: 'Sharp' }, { value: 'soft', label: 'Soft' }, { value: 'round', label: 'Round' }];
 // [key, editor label, default heading on the card]; order = default order on the card
-const SECTIONS = [['about', 'About', 'About'], ['contact', 'Contact details', 'Contact'], ['social', 'Social icons', 'Social'], ['links', 'Custom links', 'Links'], ['menu', 'Menu viewer', 'Menu'], ['services', 'Services', 'Services'], ['products', 'Products', 'Products'], ['appointments', 'Appointments', 'Book an Appointment'], ['gallery', 'Gallery', 'Gallery'], ['testimonials', 'Testimonials', 'Testimonials'], ['payments', 'Payment links', 'Pay Me'], ['blog', 'Blog', 'Blog'], ['embeds', 'Embeds', 'Videos'], ['map', 'Map', 'Location'], ['hours', 'Business hours', 'Business Hours'], ['qr', 'QR code', 'QR Code'], ['enquiry', 'Enquiry form', 'Get in touch']];
+const SECTIONS = [['about', 'About', 'About'], ['contact', 'Contact details', 'Contact'], ['social', 'Social icons', 'Social'], ['links', 'Custom links', 'Links'], ['menu', 'Menu viewer', 'Menu'], ['services', 'Services', 'Services'], ['products', 'Products', 'Products'], ['store', 'WhatsApp store', 'Shop'], ['appointments', 'Appointments', 'Book an Appointment'], ['gallery', 'Gallery', 'Gallery'], ['testimonials', 'Testimonials', 'Testimonials'], ['payments', 'Payment links', 'Pay Me'], ['blog', 'Blog', 'Blog'], ['embeds', 'Embeds', 'Videos'], ['map', 'Map', 'Location'], ['hours', 'Business hours', 'Business Hours'], ['qr', 'QR code', 'QR Code'], ['enquiry', 'Enquiry form', 'Get in touch']];
 const PALETTES = [['#6d5dfc', '#b44cf5'], ['#0ea5e9', '#22c55e'], ['#f43f5e', '#f59e0b'], ['#111827', '#d4af37'], ['#0f766e', '#84cc16'], ['#db2777', '#8b5cf6']];
 const CODE_PLACEHOLDER = `<!doctype html>
 <html>
@@ -73,7 +74,7 @@ export default function VcardEditor() {
 
   const load = async () => {
     const [{ data: d }, { data: t }] = await Promise.all([api.get(`/user/vcards/${id}`), api.get('/user/vcards/templates')]);
-    const v = { ...d.data, password: '', theme: d.data.theme || {}, social_links: d.data.social_links || {}, custom_links: d.data.custom_links || [], business_hours: d.data.business_hours || {}, sections: d.data.sections || {}, section_order: d.data.section_order || [], section_titles: d.data.section_titles || {}, iframes: d.data.iframes || [], payment_links: d.data.payment_links || [], qr_settings: d.data.qr_settings || {}, appointment_settings: d.data.appointment_settings || {} };
+    const v = { ...d.data, password: '', theme: d.data.theme || {}, social_links: d.data.social_links || {}, custom_links: d.data.custom_links || [], business_hours: d.data.business_hours || {}, sections: d.data.sections || {}, section_order: d.data.section_order || [], section_titles: d.data.section_titles || {}, iframes: d.data.iframes || [], payment_links: d.data.payment_links || [], qr_settings: d.data.qr_settings || {}, appointment_settings: d.data.appointment_settings || {}, extras: d.data.extras || {} };
     setData(d.data); setFeatures(d.features); setTemplates(t.data); setSchema(t.schema || null); form.setValues(v); setSnapshot(JSON.stringify(v));
   };
   useEffect(() => { load(); }, [id]); // eslint-disable-line
@@ -94,7 +95,7 @@ export default function VcardEditor() {
     const bad = check(v0, { name: 'required|max:120', url_alias: 'required|min:2|max:80', email: 'email|max:191', alternative_email: 'email|max:191', phone: 'phone', alternative_phone: 'phone', location_url: 'url' }, { name: 'Card name', url_alias: 'Card link', location_url: 'Google Maps link' });
     if (Object.keys(bad).length) { form.setErrors(bad); toast.error(Object.values(bad)[0]); return; }
     setSaving(true);
-    const fields = ['name', 'url_alias', 'occupation', 'description', 'first_name', 'last_name', 'email', 'region_code', 'phone', 'alternative_email', 'alternative_phone', 'location', 'location_url', 'company', 'job_title', 'dob', 'menu_title', 'menu_desc', 'default_language', 'template_id', 'theme', 'social_links', 'custom_links', 'business_hours', 'sections', 'section_order', 'section_titles', 'status', 'enable_enquiry_form', 'show_qr_code', 'hide_branding', 'custom_css', 'site_title', 'meta_keyword', 'meta_description', 'google_analytics', 'cover_type', 'youtube_link', 'instagram_embed', 'linkedin_embed', 'iframes', 'location_embed', 'payment_links', 'terms_conditions', 'privacy_policy', 'sticky_bar', 'newsletter_popup', 'ask_before_contact', 'enquiry_attachment', 'pwa_enable', 'business_directory', 'week_format', 'qr_settings', 'appointment_settings', 'custom_domain', 'custom_code', 'custom_code_enabled'];
+    const fields = ['name', 'url_alias', 'occupation', 'description', 'first_name', 'last_name', 'email', 'region_code', 'phone', 'alternative_email', 'alternative_phone', 'location', 'location_url', 'company', 'job_title', 'dob', 'menu_title', 'menu_desc', 'default_language', 'template_id', 'theme', 'social_links', 'custom_links', 'business_hours', 'sections', 'section_order', 'section_titles', 'status', 'enable_enquiry_form', 'show_qr_code', 'hide_branding', 'custom_css', 'site_title', 'meta_keyword', 'meta_description', 'google_analytics', 'cover_type', 'youtube_link', 'instagram_embed', 'linkedin_embed', 'iframes', 'location_embed', 'payment_links', 'terms_conditions', 'privacy_policy', 'sticky_bar', 'newsletter_popup', 'ask_before_contact', 'enquiry_attachment', 'pwa_enable', 'business_directory', 'week_format', 'qr_settings', 'appointment_settings', 'extras', 'custom_domain', 'custom_code', 'custom_code_enabled'];
     const payload = {};
     for (const f of fields) payload[f] = typeof v[f] === 'boolean' ? (v[f] ? '1' : '0') : v[f] ?? '';
     if (v.password || v.remove_password) payload.password = v.remove_password ? '' : v.password;
@@ -271,7 +272,8 @@ export default function VcardEditor() {
                 fields={[['name', 'Name', 'text', true], ['description', 'Testimonial', 'textarea', true]]} />
             ))}
             {tab === 'gallery' && (locked('gallery') ? <Upgrade what="Gallery" /> : (
-              <SubItems vcardId={id} kind="gallery" title="Gallery" icon={Images} items={data.gallery} onChange={(gallery) => { setData({ ...data, gallery }); setRev((r) => r + 1); }} fields={[['caption', 'Caption', 'text'], ['category', 'Category (optional, creates filter tabs)', 'text'], ['video_url', 'YouTube link (instead of an image)', 'url']]} />
+              <><SubItems vcardId={id} kind="gallery" title="Gallery" icon={Images} items={data.gallery} onChange={(gallery) => { setData({ ...data, gallery }); setRev((r) => r + 1); }} fields={[['caption', 'Caption', 'text'], ['category', 'Category (optional, creates filter tabs)', 'text'], ['video_url', 'YouTube link (instead of an image)', 'url']]} />
+              <GalleryMedia vcardId={id} items={data.gallery} onChange={(gallery) => { setData({ ...data, gallery }); setRev((r) => r + 1); }} /></>
             ))}
 
             {tab === 'hours' && (
@@ -513,7 +515,7 @@ function SubItems({ vcardId, kind, title, icon, items, onChange, fields, imageRe
         <CardBody>
           {!items.length ? <EmptyState icon={icon} title={`No ${title.toLowerCase()} yet`} action={<Button variant="soft" onClick={() => openForm()}><Plus />Add the first one</Button>} /> : kind === 'gallery' ? (
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-              {items.map((g) => (
+              {items.filter((g) => !['audio', 'video', 'file'].includes(g.type)).map((g) => (
                 <motion.div key={g.id} layout initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="group relative overflow-hidden rounded-2xl">
                   <img src={g.type === 'youtube' ? `https://i.ytimg.com/vi/${g.video_url}/hqdefault.jpg` : g.image} alt={g.caption || ''} className="aspect-square w-full object-cover transition duration-500 group-hover:scale-105" />
                   {g.type === 'youtube' && <span className="absolute top-2 left-2 rounded-md bg-red-600 px-1.5 py-0.5 text-[10px] font-bold text-white">VIDEO</span>}

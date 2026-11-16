@@ -12,6 +12,7 @@ const settings = require('../services/settings');
 const subs = require('../services/subscription');
 const extras = require('../services/extras');
 const mail = require('../services/mail');
+const qrstyle = require('../services/qrstyle');
 const usersettings = require('../services/usersettings');
 const userpay = require('../services/userpay');
 const currencyFor = (all) => String(all.currency_code || 'USD').toUpperCase().slice(0, 10);
@@ -122,6 +123,10 @@ api.post('/subscribe', formLimiter, wrap(async (req, res) => {
 }));
 
 /* ------------------------------------------------------- vCard public API */
+/** the owner asked visitors to accept the card's terms before sending a form */
+function needsTerms(v, body) {
+  if (v.extras?.terms_checkbox && (v.terms_conditions || v.privacy_policy) && body.message !== 'Downloaded the contact card' && !['1', 'true', 'on', true].includes(body.accept_terms)) fail(422, 'Please accept the terms first', { accept_terms: 'Please accept the terms first' });
+}
 async function liveVcard(alias) {
   const v = await M.Vcard.findOne({ where: { url_alias: alias, status: true }, include: [{ model: M.User, attributes: ['id', 'email', 'first_name', 'is_active', 'org_status'] }] });
   if (!v || !isLive(v.user)) fail(404, 'Not found');
@@ -142,6 +147,7 @@ api.post('/vcards/:alias/enquiry', formLimiter, enquiryUpload, wrap(async (req, 
   if (req.body.website) return res.json({ message: 'Thank you!' });
   const v = await liveVcard(req.params.alias);
   if (!v.enable_enquiry_form && req.body.message !== 'Downloaded the contact card') fail(404, 'Not found');
+  needsTerms(v, req.body);
   validate(req.body, { name: 'required|max:120', email: 'email|max:191', phone: 'phone', message: 'required|max:2000', product_name: 'max:150' });
   await guardEmail(req.body.email);
   const e = await M.VcardEnquiry.create({
@@ -188,6 +194,7 @@ api.post('/vcards/:alias/appointments', formLimiter, wrap(async (req, res) => {
   const v = await liveVcard(req.params.alias);
   validate(req.body, { name: 'required|max:120', email: 'email|max:191', phone: 'phone', date: 'required|date', from_time: 'required', to_time: 'required', notes: 'max:1000', service_name: 'max:150' });
   if (!req.body.email && !req.body.phone) fail(422, 'Please leave an e-mail or phone number');
+  needsTerms(v, req.body);
   await guardEmail(req.body.email);
   const slot = (await freeSlots(v, req.body.date)).find((s) => s.from === req.body.from_time && s.to === req.body.to_time);
   if (!slot) fail(422, 'This time is no longer available, please pick another slot');
@@ -368,7 +375,8 @@ async function vcardPage(req, res, v) {
     return res.send(`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(v.name)}</title><meta name="description" content="${esc(v.description || v.occupation || '')}"><link rel="icon" href="${esc(s.favicon || '/brand/favicon.svg')}"><style>html,body{margin:0;height:100%}iframe{border:0;width:100%;height:100%;display:block}</style></head><body><iframe src="/c/${esc(v.url_alias)}" title="${esc(v.name)}" sandbox="allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-modals allow-downloads" allow="clipboard-write; web-share"></iframe></body></html>`);
   }
   const payMethods = await usersettings.methods(v.user_id).catch(() => []);
-  res.send(render({ v, template: v.template, services, gallery, testimonials, products, blogs, pages: pageList, app: s, appUrl, nonce: res.locals.nonce, payMethods }));
+  const store = v.extras?.store_id ? await M.WhatsappStore.findOne({ where: { id: v.extras.store_id, user_id: v.user_id, status: true }, attributes: ['name', 'url_alias', 'slogan', 'logo', 'cover_image'] }) : null;
+  res.send(render({ v, template: v.template, services, gallery, testimonials, products, blogs, pages: pageList, app: s, appUrl, nonce: res.locals.nonce, payMethods, store }));
 }
 
 async function customCodeAllowed(v) {
@@ -574,10 +582,17 @@ pages.get('/:alias/contact.vcf', wrap(async (req, res, next) => {
   res.set('Content-Type', 'text/vcard; charset=utf-8').set('Content-Disposition', `attachment; filename="${v.url_alias}.vcf"`).send(vcardFile(v));
 }));
 
+pages.get('/:alias/qr.svg', wrap(async (req, res, next) => {
+  const v = await findVcard(req.params.alias);
+  if (!v) return next();
+  const q = v.qr_settings || {}; const hex = (c) => /^#[0-9a-f]{6}$/i.test(c || '');
+  res.set('Content-Type', 'image/svg+xml').set('Cache-Control', 'public, max-age=3600').send(qrstyle.svg(`${appUrl}/${v.url_alias}`, { fg: hex(q.fg) ? q.fg : hex(v.theme?.primary) ? v.theme.primary : '#000000', bg: q.bg, margin: q.margin ?? 1, ec: q.ec, style: q.style, eye: q.eye, size: 480 }));
+}));
 pages.get('/:alias/qr.png', wrap(async (req, res, next) => {
   const v = await findVcard(req.params.alias);
   if (!v) return next();
   const q = v.qr_settings || {};
+  if (qrstyle.isStyled(q)) return res.redirect(302, `/${encodeURIComponent(v.url_alias)}/qr.svg`);
   const png = await QRCode.toBuffer(`${appUrl}/${v.url_alias}`, { width: 480, margin: q.margin ?? 1, errorCorrectionLevel: q.ec || 'M', color: { dark: /^#[0-9a-f]{6}$/i.test(q.fg || '') ? q.fg : /^#[0-9a-f]{6}$/i.test(v.theme?.primary || '') ? v.theme.primary : '#000000', light: /^#[0-9a-f]{6}$/i.test(q.bg || '') ? q.bg : '#ffffff' } });
   res.set('Content-Type', 'image/png').set('Cache-Control', 'public, max-age=3600').send(png);
 }));

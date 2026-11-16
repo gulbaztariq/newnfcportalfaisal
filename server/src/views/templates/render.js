@@ -167,10 +167,10 @@ function footer(v, app, appUrl, L, pages) {
 /**
  * Render a public vCard page. Everything user-supplied is escaped; URLs are scheme-checked; colours are hex-checked.
  */
-function render({ v, template, services = [], gallery = [], testimonials = [], products = [], blogs = [], pages = [], app, appUrl, nonce, preview = null, payMethods = [] }) {
+function render({ v, template, services = [], gallery = [], testimonials = [], products = [], blogs = [], pages = [], app, appUrl, nonce, preview = null, payMethods = [], store = null }) {
   const th = themeOf(v, template, app);
   const { layout, L } = th;
-  const sec = { about: true, menu: true, contact: true, social: true, services: true, gallery: true, testimonials: true, hours: true, qr: true, enquiry: true, links: true, products: true, appointments: true, blog: true, embeds: true, payments: true, map: true, ...(v.sections || {}) };
+  const sec = { about: true, menu: true, contact: true, social: true, services: true, gallery: true, testimonials: true, hours: true, qr: true, enquiry: true, links: true, products: true, store: true, appointments: true, blog: true, embeds: true, payments: true, map: true, ...(v.sections || {}) };
   const link = `${appUrl}/${v.url_alias}`;
   const fullName = [v.first_name, v.last_name].filter(Boolean).join(' ') || v.name;
   const initials = fullName.split(/\s+/).map((w) => w[0]).slice(0, 2).join('').toUpperCase();
@@ -180,6 +180,7 @@ function render({ v, template, services = [], gallery = [], testimonials = [], p
   const days = v.week_format === 'sun' ? [DAYS[6], ...DAYS.slice(0, 6)] : DAYS;
   const today = DAYS[(new Date().getDay() + 6) % 7][0];
   const alias = esc(v.url_alias);
+  const X = v.extras && typeof v.extras === 'object' ? v.extras : {};
 
   // section heading: our own i18n label, or the owner's custom heading (escaped)
   const titles = v.section_titles || {};
@@ -196,13 +197,14 @@ function render({ v, template, services = [], gallery = [], testimonials = [], p
     v.alternative_email && ['ri-mail-line', L.email, v.alternative_email, `mailto:${v.alternative_email}`],
     phone && ['ri-phone-line', L.phone, phone, `tel:${phone}`],
     v.alternative_phone && ['ri-phone-line', L.phone, v.alternative_phone, `tel:${v.alternative_phone}`],
-    v.dob && ['ri-cake-2-line', 'Birthday', v.dob, null],
+    v.dob && [/^ri-[a-z0-9-]{2,40}$/.test(X.dob_icon || '') ? X.dob_icon : 'ri-cake-2-line', 'Birthday', v.dob, null],
     v.location && ['ri-map-pin-line', L.location, v.location, mapHref],
   ].filter(Boolean);
   const socials = Object.entries(v.social_links || {}).filter(([k, u]) => SOCIAL[k] && u);
   const hours = v.business_hours || {};
   const hasHours = DAYS.some(([d]) => hours[d]?.open);
-  const cats = [...new Set(gallery.map((g) => g.category).filter(Boolean))];
+  const media = gallery.filter((g) => ['audio', 'video', 'file'].includes(g.type) && String(g.video_url || '').startsWith('/uploads/'));
+  const cats = [...new Set(gallery.filter((g) => !['audio', 'video', 'file'].includes(g.type)).map((g) => g.category).filter(Boolean))];
   const appt = v.appointment_settings || {};
   const apptOn = sec.appointments && appt.enabled && Object.values(appt.slots || {}).some((x) => x?.length);
   const currencyOf = (pr) => pr.currency_code || '';
@@ -217,7 +219,12 @@ function render({ v, template, services = [], gallery = [], testimonials = [], p
     ...(sec.links ? (v.custom_links || []).map((l) => card(l.url, /^ri-[a-z0-9-]+$/.test(l.icon || '') ? l.icon : 'ri-links-line', '#f59e0b', l.label, l.desc, { badge: l.badge, featured: l.featured })) : []),
   ] : [];
 
+  const banner = !preview && X.banner?.enabled && X.banner.title ? X.banner : null;
+  const shareSheet = X.share_sheet !== false;
+  const SHARE = [['whatsapp', 'ri-whatsapp-line', 'WhatsApp'], ['facebook', 'ri-facebook-circle-line', 'Facebook'], ['x', 'ri-twitter-x-line', 'X'], ['linkedin', 'ri-linkedin-box-line', 'LinkedIn'], ['telegram', 'ri-telegram-line', 'Telegram'], ['snapchat', 'ri-snapchat-line', 'Snapchat'], ['email', 'ri-mail-line', L.email], ['copy', 'ri-file-copy-line', 'Copy link']];
+  const qrExt = require('../../services/qrstyle').isStyled(v.qr_settings) ? 'svg' : 'png';
   const canBuy = !preview && payMethods.length > 0;
+  const termsBox = X.terms_checkbox && (v.terms_conditions || v.privacy_policy) ? `<label class="agree" style="display:flex;gap:8px;align-items:flex-start;font-size:13px;color:var(--muted);margin:2px 2px 10px"><input type="checkbox" name="accept_terms" value="1" style="width:auto;margin-top:3px"><span>I accept the ${v.terms_conditions ? `<a href="/${alias}/terms" target="_blank" rel="noopener">${L.terms}</a>` : ''}${v.terms_conditions && v.privacy_policy ? ' & ' : ''}${v.privacy_policy ? `<a href="/${alias}/privacy" target="_blank" rel="noopener">${L.privacy}</a>` : ''}</span></label>` : '';
   const paySelect = (id) => `<select name="method" id="${id}" required style="width:100%;padding:13px 16px;border-radius:14px;border:1px solid var(--line);background:var(--bg);color:var(--tx);font-family:inherit;font-size:15px;margin-bottom:10px">${payMethods.length > 1 ? '<option value="">Payment method</option>' : ''}${payMethods.map((m) => `<option value="${esc(m.id)}">${esc(m.label)}</option>`).join('')}</select>`;
   const productsHtml = sec.products && products.length ? `<section class="sec s-products">${H('products', 'ri-shopping-bag-3-line', L.products)}<div class="prods">${products.map((pr) => {
     const img = (pr.images || [])[0];
@@ -229,7 +236,7 @@ function render({ v, template, services = [], gallery = [], testimonials = [], p
 
   const galleryHtml = sec.gallery && gallery.length ? `<section class="sec s-gallery">${H('gallery', 'ri-image-2-line', L.gallery)}${cats.length > 1 ? `<div class="chips" id="gcats"><button class="on" data-cat="">${L.all}</button>${cats.map((c) => `<button data-cat="${esc(c)}">${esc(c)}</button>`).join('')}</div>` : ''}<div class="gal" id="gal">${gallery.map((g) => (g.type === 'youtube' && /^[\w-]{11}$/.test(g.video_url || '')
     ? `<a class="vid" href="#" data-cat="${esc(g.category || '')}" data-yt="${esc(g.video_url)}"><img src="https://i.ytimg.com/vi/${esc(g.video_url)}/hqdefault.jpg" alt="${esc(g.caption || '')}" loading="lazy"></a>`
-    : g.image ? `<a href="#" data-cat="${esc(g.category || '')}" data-lb="${url(g.image)}"><img src="${url(g.image)}" alt="${esc(g.caption || '')}" loading="lazy"></a>` : '')).join('')}</div></section>` : '';
+    : g.image ? `<a href="#" data-cat="${esc(g.category || '')}" data-lb="${url(g.image)}"><img src="${url(g.image)}" alt="${esc(g.caption || '')}" loading="lazy"></a>` : '')).join('')}</div>${media.length ? `<div class="box" style="margin-top:12px;display:grid;gap:12px">${media.map((g) => (g.type === 'audio' ? `<div><p style="font-size:13px;font-weight:600;margin-bottom:6px"><i class="ri-music-2-line"></i> ${esc(g.caption || 'Audio')}</p><audio controls preload="none" src="${url(g.video_url)}" style="width:100%"></audio></div>` : g.type === 'video' ? `<div><p style="font-size:13px;font-weight:600;margin-bottom:6px"><i class="ri-movie-2-line"></i> ${esc(g.caption || 'Video')}</p><video controls preload="none" playsinline src="${url(g.video_url)}" style="width:100%;border-radius:14px"></video></div>` : `<a href="${url(g.video_url)}" download style="display:flex;align-items:center;gap:10px;font-size:14px;font-weight:600;color:var(--tx);text-decoration:none"><i class="ri-file-download-line" style="font-size:20px;color:var(--p)"></i>${esc(g.caption || 'Download file')}</a>`)).join('')}</div>` : ''}</section>` : '';
 
   const embeds = [];
   if (sec.embeds && v.instagram_embed) {
@@ -246,6 +253,7 @@ function render({ v, template, services = [], gallery = [], testimonials = [], p
     links: linkLayout ? (linkCards.length ? `<section class="sec s-links">${titles.links ? H('links', 'ri-links-line', L.links) : ''}<div class="lcards">${linkCards.join('')}</div></section>` : '') : sec.links && (v.custom_links || []).length ? `<section class="sec s-links">${H('links', 'ri-links-line', L.links)}<div class="links">${v.custom_links.map((l) => `<a href="${url(l.url)}" target="_blank" rel="noopener"><span>${esc(l.label)}</span><i class="ri-arrow-right-up-line"></i></a>`).join('')}</div></section>` : '',
     services: sec.services && services.length ? `<section class="sec s-services">${H('services', 'ri-briefcase-4-line', L.services)}<div class="box svc">${services.map((x) => `<div class="item">${x.image ? `<img src="${url(x.image)}" alt="" loading="lazy">` : '<span class="ic" aria-hidden="true"><i class="ri-star-line"></i></span>'}<div><b>${esc(x.name)}</b>${x.description ? `<p>${esc(x.description)}</p>` : ''}${x.service_url ? `<a class="more" href="${url(x.service_url)}" target="_blank" rel="noopener">${L.readmore} &rarr;</a>` : ''}${v.enable_enquiry_form ? ` <a class="more" href="#enq" data-enq="${esc(x.name)}">${L.enquire}</a>` : ''}</div></div>`).join('')}</div></section>` : '',
     products: productsHtml,
+    store: sec.store && store ? `<section class="sec s-store">${H('store', 'ri-store-2-line', 'Shop')}<a class="box" href="/s/${esc(store.url_alias)}" style="display:flex;align-items:center;gap:14px;text-decoration:none;color:var(--tx)">${store.logo || store.cover_image ? `<img src="${url(store.logo || store.cover_image)}" alt="" loading="lazy" style="width:56px;height:56px;border-radius:14px;object-fit:cover">` : '<i class="ri-store-2-line" style="font-size:30px;color:var(--p)"></i>'}<span style="flex:1;min-width:0"><b style="display:block">${esc(store.name)}</b>${store.slogan ? `<span style="font-size:13px;color:var(--muted)">${esc(store.slogan)}</span>` : ''}</span><i class="ri-arrow-right-s-line" style="font-size:22px;color:var(--muted)"></i></a></section>` : '',
     appointments: apptOn ? `<section class="sec s-appointments" id="appt-sec">${H('appointments', 'ri-calendar-event-line', L.appointment)}<div class="box appt" id="appt">
     ${appt.paid && appt.price ? `<p class="price"><i class="ri-price-tag-3-line"></i> ${esc(appt.price)} · ${appt.duration || 30} min</p>` : `<p class="price"><i class="ri-time-line"></i> ${appt.duration || 30} min</p>`}
     <div class="days" id="days"></div><div class="slots" id="slots"></div>
@@ -254,6 +262,7 @@ function render({ v, template, services = [], gallery = [], testimonials = [], p
       <input name="name" placeholder="${L.name}" maxlength="120" required><input name="email" type="email" placeholder="${L.email}" maxlength="191"><input name="phone" placeholder="${L.phone}" maxlength="30">
       <textarea name="notes" rows="2" placeholder="${L.message}" maxlength="1000"></textarea>
       ${canBuy && appt.paid && Number(appt.price) > 0 ? paySelect('book-method') : ''}
+      ${termsBox}
       <button class="btn" type="submit"><i class="ri-calendar-check-line"></i>${L.book}</button><div class="msg" id="book-msg"></div>
     </form></div></section>` : '',
     gallery: galleryHtml,
@@ -263,7 +272,7 @@ function render({ v, template, services = [], gallery = [], testimonials = [], p
     embeds: embeds.length ? `<section class="sec s-embeds">${H('embeds', 'ri-play-circle-line', L.videos)}<div style="display:grid;gap:12px">${embeds.join('')}</div></section>` : '',
     map: sec.map && v.location_embed && /^https:\/\/(www\.)?google\.[a-z.]+\/maps\/embed/.test(v.location_embed) ? `<section class="sec s-map">${H('map', 'ri-map-2-line', L.location)}<div class="embed"><iframe src="${url(v.location_embed)}" height="260" loading="lazy" referrerpolicy="no-referrer-when-downgrade" title="map"></iframe></div></section>` : '',
     hours: sec.hours && hasHours ? `<section class="sec s-hours">${H('hours', 'ri-time-line', L.hours)}<div class="box hours">${days.map(([d, label]) => `<div class="d${d === today ? ' today' : ''}"><span>${label}</span><span>${hours[d]?.open ? `${esc(hours[d].from)} - ${esc(hours[d].to)}` : L.closed}</span></div>`).join('')}</div></section>` : '',
-    qr: sec.qr && v.show_qr_code ? `<section class="sec s-qr">${H('qr', 'ri-qr-code-line', L.qr)}<div class="box qr"><img src="/${alias}/qr.png" alt="QR code" loading="lazy" width="120" height="120"><div><p>${L.scan}</p><a class="btn" style="margin-top:10px" href="/${alias}/qr.png" download="${alias}-qr.png"><i class="ri-download-line"></i>${L.download}</a></div></div></section>` : '',
+    qr: sec.qr && v.show_qr_code ? `<section class="sec s-qr">${H('qr', 'ri-qr-code-line', L.qr)}<div class="box qr"><img src="/${alias}/qr.${qrExt}" alt="QR code" loading="lazy" width="120" height="120"><div><p>${L.scan}</p><a class="btn" style="margin-top:10px" href="/${alias}/qr.${qrExt}" download="${alias}-qr.${qrExt}"><i class="ri-download-line"></i>${L.download}</a></div></div></section>` : '',
     enquiry: sec.enquiry && v.enable_enquiry_form ? `<section class="sec s-enquiry" id="enq-sec">${H('enquiry', 'ri-mail-send-line', L.touch)}<div class="box"><form class="enq" id="enq" novalidate>
     <input name="name" placeholder="${L.name}" maxlength="120" required>
     <input name="email" type="email" placeholder="${L.email}" maxlength="191">
@@ -272,6 +281,7 @@ function render({ v, template, services = [], gallery = [], testimonials = [], p
     <textarea name="message" rows="3" placeholder="${L.message}" maxlength="2000" required></textarea>
     ${v.enquiry_attachment ? `<label style="font-size:13px;color:var(--muted)">${L.attach}<input name="attachment" type="file" accept="image/*,application/pdf" style="margin-top:6px"></label>` : ''}
     <input name="website" tabindex="-1" autocomplete="off" style="position:absolute;left:-9999px" aria-hidden="true">
+    ${termsBox}
     <button class="btn" type="submit"><i class="ri-send-plane-line"></i>${L.send}</button><div class="msg" id="enq-msg"></div>
   </form></div></section>` : '',
   };
@@ -346,6 +356,8 @@ ${sig ? sig.dock : v.sticky_bar !== false ? stickyBar : ''}
 ${menuViewer}
 <div class="lb" id="lb"><button class="x" type="button" aria-label="Close">&times;</button><div id="lbc"></div></div>
 ${v.ask_before_contact ? `<div class="modal" id="askm"><div class="sheet"><h4>${L.save}</h4><p>${L.details}</p><form id="ask"><input name="name" placeholder="${L.name}" required maxlength="120"><input name="email" type="email" placeholder="${L.email}" maxlength="191"><input name="phone" placeholder="${L.phone}" maxlength="30"><button class="btn" type="submit">${L.continue}</button></form></div></div>` : ''}
+${banner ? `<div class="modal" id="bnm"><div class="sheet" style="text-align:center"><h4>${esc(banner.title)}</h4>${banner.text ? `<p>${esc(banner.text)}</p>` : ''}${banner.url ? `<a class="btn" href="${url(banner.url)}" target="_blank" rel="noopener">${esc(banner.button || 'Open')}</a>` : ''}<button type="button" id="bnx" style="margin-top:10px;background:none;border:0;color:var(--muted);font-family:inherit;font-size:13px;cursor:pointer">Close</button></div></div>` : ''}
+${shareSheet ? `<div class="modal" id="shm"><div class="sheet"><h4>${L.share}</h4><div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:12px 0 4px">${SHARE.map(([k, ic, lb]) => `<a href="#" data-sh="${k}" style="display:grid;justify-items:center;gap:6px;font-size:11px;color:var(--tx);text-decoration:none"><i class="${ic}" style="font-size:26px;color:var(--p)"></i>${lb}</a>`).join('')}</div></div></div>` : ''}
 ${canBuy ? `<div class="modal" id="buym"><div class="sheet" style="max-height:92vh;overflow:auto"><h4 id="buy-t"></h4><p id="buy-p"></p><form id="buy" novalidate><input type="hidden" name="product_id"><input name="customer_name" placeholder="${L.name}" required maxlength="120"><input name="customer_email" type="email" placeholder="${L.email}" maxlength="191"><input name="customer_phone" placeholder="${L.phone}" maxlength="30"><input name="customer_address" placeholder="Address" maxlength="500"><label style="display:block;font-size:12px;color:var(--muted);margin:2px 4px 4px">Quantity</label><input name="quantity" type="number" min="1" max="99" value="1" aria-label="Quantity">${paySelect('buy-method')}<button class="btn" type="submit">${L.buy}</button><div class="msg" id="buy-msg"></div></form></div></div>` : ''}
 ${v.newsletter_popup ? `<div class="modal" id="nlm"><div class="sheet"><h4>${L.newsletter}</h4><p>${L.newsletter_text}</p><form id="nl"><input name="email" type="email" placeholder="${L.email}" required maxlength="191"><button class="btn" type="submit">${L.subscribe}</button><div class="msg" id="nl-msg"></div></form></div></div>` : ''}
 <div class="toast" id="toast"></div>
@@ -357,7 +369,8 @@ ${v.newsletter_popup ? `<div class="modal" id="nlm"><div class="sheet"><h4>${L.n
   ${sig ? sig.script : ''}
   var t=$('#toast');function toast(m){t.textContent=m;t.classList.add('show');setTimeout(function(){t.classList.remove('show')},2400)}
   function post(u,body,isForm){return fetch(u,{method:'POST',headers:isForm?{'X-Requested-With':'XMLHttpRequest'}:{'Content-Type':'application/json','X-Requested-With':'XMLHttpRequest'},body:isForm?body:JSON.stringify(body)}).then(function(r){return r.json().then(function(j){return{ok:r.ok,j:j}})})}
-  function share(){var d={title:${js(fullName)},url:${js(link)}};if(navigator.share){navigator.share(d).catch(function(){})}else if(navigator.clipboard){navigator.clipboard.writeText(d.url).then(function(){toast('Link copied')})}}
+  var SHARE_TITLE=${js(fullName)},SHARE_URL=${js(link)};
+  function share(){var d={title:SHARE_TITLE,url:SHARE_URL};var sm=document.getElementById('shm');if(sm){sm.classList.add('show');return}if(navigator.share){navigator.share(d).catch(function(){})}else if(navigator.clipboard){navigator.clipboard.writeText(d.url).then(function(){toast('Link copied')})}}
   $('#share').addEventListener('click',share);$$('[data-share]').forEach(function(b){b.addEventListener('click',share)});
   var cv=$('#cv'),mu=$('#mute');if(cv&&mu)mu.addEventListener('click',function(){cv.muted=!cv.muted;mu.innerHTML=cv.muted?'<i class="ri-volume-mute-line"></i>':'<i class="ri-volume-up-line"></i>'});
   /* lightbox */
@@ -370,7 +383,7 @@ ${v.newsletter_popup ? `<div class="modal" id="nlm"><div class="sheet"><h4>${L.n
   var f=$('#enq');
   $$('[data-enq]').forEach(function(b){b.addEventListener('click',function(e){e.preventDefault();if(!f)return;$('#enq-about').value=b.getAttribute('data-enq');var m=f.querySelector('textarea');if(!m.value)m.value=b.getAttribute('data-enq')+': ';f.scrollIntoView({behavior:'smooth',block:'center'});m.focus()})});
   if(f)f.addEventListener('submit',function(e){e.preventDefault();var m=$('#enq-msg'),b=f.querySelector('button');var fd=new FormData(f);
-    if(!fd.get('name')||!fd.get('message')){m.textContent='Please fill in your name and message.';return}b.disabled=true;
+    if(!fd.get('name')||!fd.get('message')){m.textContent='Please fill in your name and message.';return}var ag=f.querySelector('[name=accept_terms]');if(ag&&!ag.checked){m.textContent='Please accept the terms first.';return}b.disabled=true;
     post(API+'/enquiry',fd,true).then(function(x){m.textContent=x.j.message||'';if(x.ok)f.reset()}).catch(function(){m.textContent='Could not send, please try again.'}).finally(function(){b.disabled=false})});
   /* ask details before saving contact */
   var askm=$('#askm');if(askm){var go=function(e){e.preventDefault();askm.classList.add('show')};$('#save').addEventListener('click',go);$$('[data-save]').forEach(function(a){a.addEventListener('click',go)});
@@ -380,6 +393,14 @@ ${v.newsletter_popup ? `<div class="modal" id="nlm"><div class="sheet"><h4>${L.n
   var nlm=$('#nlm');if(nlm){try{if(!sessionStorage.getItem('nl_'+A))setTimeout(function(){nlm.classList.add('show');sessionStorage.setItem('nl_'+A,'1')},8000)}catch(e){}
     nlm.addEventListener('click',function(e){if(e.target===nlm)nlm.classList.remove('show')});
     $('#nl').addEventListener('submit',function(e){e.preventDefault();post(API+'/subscribe',Object.fromEntries(new FormData(e.target))).then(function(x){$('#nl-msg').textContent=x.j.message||'';if(x.ok)setTimeout(function(){nlm.classList.remove('show')},1200)})})}
+  /* banner */
+  var bnm=$('#bnm');if(bnm){try{if(!sessionStorage.getItem('bn_'+A))setTimeout(function(){bnm.classList.add('show');sessionStorage.setItem('bn_'+A,'1')},1500)}catch(e){}
+    bnm.addEventListener('click',function(e){if(e.target===bnm||e.target.id==='bnx')bnm.classList.remove('show')})}
+  /* share sheet */
+  var shm=$('#shm');if(shm){shm.addEventListener('click',function(e){if(e.target===shm)shm.classList.remove('show')});
+    $$('[data-sh]').forEach(function(a){a.addEventListener('click',function(e){e.preventDefault();var u=encodeURIComponent(SHARE_URL),t=encodeURIComponent(SHARE_TITLE),k=a.getAttribute('data-sh'),h={whatsapp:'https://wa.me/?text='+t+'%20'+u,facebook:'https://www.facebook.com/sharer/sharer.php?u='+u,x:'https://twitter.com/intent/tweet?text='+t+'&url='+u,linkedin:'https://www.linkedin.com/sharing/share-offsite/?url='+u,telegram:'https://t.me/share/url?url='+u+'&text='+t,snapchat:'https://www.snapchat.com/scan?attachmentUrl='+u,email:'mailto:?subject='+t+'&body='+u}[k];
+      if(k==='copy'){if(navigator.clipboard)navigator.clipboard.writeText(SHARE_URL).then(function(){toast('Link copied')});shm.classList.remove('show');return}
+      window.open(h,'_blank','noopener');shm.classList.remove('show')})})}
   /* buy a product */
   var buym=$('#buym');if(buym){var bf=$('#buy');buym.addEventListener('click',function(e){if(e.target===buym)buym.classList.remove('show')});
     $$('[data-buy]').forEach(function(b){b.addEventListener('click',function(){bf.reset();bf.product_id.value=b.getAttribute('data-buy');$('#buy-t').textContent=b.getAttribute('data-name');$('#buy-p').textContent=b.getAttribute('data-price');$('#buy-msg').textContent='';buym.classList.add('show')})});
@@ -393,7 +414,7 @@ ${v.newsletter_popup ? `<div class="modal" id="nlm"><div class="sheet"><h4>${L.n
       b.addEventListener('click',function(){$$('.day').forEach(function(x){x.classList.remove('on')});b.classList.add('on');sel.date=iso;sel.slot=null;book.style.display='none';slots.innerHTML='...';
         fetch(API+'/slots?date='+iso).then(function(r){return r.json()}).then(function(j){slots.innerHTML='';if(!j.data||!j.data.length){slots.textContent=${js(L.noslots)};return}
           j.data.forEach(function(s){var sb=document.createElement('button');sb.type='button';sb.className='slot';sb.textContent=s.from+' - '+s.to;sb.addEventListener('click',function(){$$('.slot').forEach(function(x){x.classList.remove('on')});sb.classList.add('on');sel.slot=s;book.style.display='grid'});slots.appendChild(sb)})})});days.appendChild(b)})(i)}
-    book.addEventListener('submit',function(e){e.preventDefault();var d=Object.fromEntries(new FormData(book));if(!d.name||!sel.slot)return;d.date=sel.date;d.from_time=sel.slot.from;d.to_time=sel.slot.to;var bt=book.querySelector('button');bt.disabled=true;
+    book.addEventListener('submit',function(e){e.preventDefault();var d=Object.fromEntries(new FormData(book));if(!d.name||!sel.slot)return;var ag2=book.querySelector('[name=accept_terms]');if(ag2&&!ag2.checked){$('#book-msg').textContent='Please accept the terms first.';return}d.date=sel.date;d.from_time=sel.slot.from;d.to_time=sel.slot.to;var bt=book.querySelector('button');bt.disabled=true;
       post(API+'/appointments',d).then(function(x){if(x.ok&&x.j.pay_url){location.href=x.j.pay_url;return}var er=x.j.errors?Object.values(x.j.errors)[0]:'';$('#book-msg').textContent=(er||x.j.message||'')+(x.j.guide?' '+String(x.j.guide).replace(/<[^>]+>/g,' '):'');if(x.ok){book.reset();book.style.display='none';slots.innerHTML=''}}).finally(function(){bt.disabled=false})})}
   /* menu viewer */
   var mv=$('#mv');if(mv){var mt=$('#mvt'),mc=$('#mvc'),sl=$$('.mv-s'),n=sl.length;
