@@ -13,6 +13,7 @@ const RESERVED = require('../../utils/reserved');
 
 const r = express.Router();
 const plain = (h) => sanitizeHtml(String(h || ''), { allowedTags: ['p', 'br', 'b', 'strong', 'i', 'em', 'ul', 'ol', 'li', 'a', 'h2', 'h3'], allowedSchemes: ['http', 'https', 'mailto', 'tel'] });
+const { STORE_FONTS, STORE_LANGS } = require('../../views/store');
 const STORE_TEMPLATES = ['modern', 'boutique', 'grocery', 'restaurant', 'jewellery', 'electronics', 'fashion', 'beauty', 'home-decor', 'sports'];
 
 async function ownStore(req, id = req.params.sid) {
@@ -36,6 +37,17 @@ function storeData(b, existing) {
   if (b.theme) { let t = b.theme; if (typeof t === 'string') { try { t = JSON.parse(t); } catch { t = {}; } } d.theme = Object.fromEntries(Object.entries(pick(t, ['primary', 'secondary', 'background', 'text'])).filter(([, v]) => /^#[0-9a-f]{6}$/i.test(v))); }
   if (b.business_hours) { let h = b.business_hours; if (typeof h === 'string') { try { h = JSON.parse(h); } catch { h = {}; } } d.business_hours = h; }
   if (b.youtube_banner !== undefined) { const m = String(b.youtube_banner || '').match(/(?:youtu\.be\/|v=|embed\/|shorts\/)([\w-]{11})/); d.youtube_banner = m ? m[1] : null; }
+  if (b.extras !== undefined) {
+    let x = b.extras; if (typeof x === 'string') { try { x = JSON.parse(x); } catch { x = {}; } }
+    x = x && typeof x === 'object' ? x : {};
+    const yt = String(x.trending_video || '').match(/(?:youtu\.be\/|v=|embed\/|shorts\/)([\w-]{11})/) || (/^[\w-]{11}$/.test(String(x.trending_video || '')) ? [null, x.trending_video] : null);
+    d.extras = {
+      newsletter_popup: toBool(x.newsletter_popup), pwa: toBool(x.pwa), show_qr: toBool(x.show_qr), scroll_top: x.scroll_top === undefined ? true : toBool(x.scroll_top),
+      trending_video: yt ? yt[1] : '', font: STORE_FONTS.includes(x.font) ? x.font : '', language: STORE_LANGS.includes(x.language) ? x.language : 'en',
+      // styles only: tags are removed so it cannot break out of the <style> block
+      custom_css: String(x.custom_css || '').replace(/<[^>]*>/g, '').replace(/@import[^;]*;?/gi, '').slice(0, 10000),
+    };
+  }
   if (existing === undefined && !d.template) d.template = 'modern';
   return d;
 }
@@ -167,6 +179,10 @@ r.delete('/stores/:sid/products/:pid', wrap(async (req, res) => {
 }));
 
 /* orders */
+r.get('/stores/:sid/subscribers', wrap(async (req, res) => {
+  const st = await ownStore(req);
+  res.json({ data: await M.StoreSubscriber.findAll({ where: { store_id: st.id }, attributes: ['id', 'email', 'created_at'], order: [['id', 'DESC']], limit: 2000 }) });
+}));
 r.get('/store-orders', wrap(async (req, res) => {
   const p = paginate(req);
   const storeIds = (await M.WhatsappStore.findAll({ where: { user_id: req.user.id }, attributes: ['id'] })).map((s) => s.id);

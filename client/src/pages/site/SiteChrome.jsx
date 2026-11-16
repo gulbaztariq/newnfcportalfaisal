@@ -150,8 +150,23 @@ export function SiteExtras({ settings }) {
     try { const { data } = await api.post('/public/subscribe', { email }); toast.success(data.message); setOpen(false); } catch (ex) { toast.error(Object.values(ex.errors || {})[0] || ex.message); } finally { setBusy(false); }
   };
   const wa = String(settings.home_whatsapp_number || '').replace(/\D/g, '');
+  // extra scripts the super admin allowed (chat widgets, pixels): loaded once, only on the public site
+  useEffect(() => {
+    for (const src of settings.front_extra_scripts || []) {
+      if (document.querySelector(`script[data-extra="${CSS.escape(src)}"]`)) continue;
+      const el = document.createElement('script'); el.src = src; el.async = true; el.dataset.extra = src; document.body.appendChild(el);
+    }
+  }, [settings.front_extra_scripts]);
+  const [cookieOk, setCookieOk] = useState(() => { try { return localStorage.getItem('cookie-consent') === '1'; } catch { return false; } });
+  const acceptCookies = () => { setCookieOk(true); try { localStorage.setItem('cookie-consent', '1'); } catch { /* ignore */ } };
   return (
     <>
+      {settings.cookie_consent_enable === '1' && !cookieOk && (
+        <div role="dialog" aria-label="Cookies" className="fixed inset-x-3 bottom-3 z-50 mx-auto flex max-w-2xl flex-col gap-3 rounded-2xl border border-border bg-card p-4 shadow-lift sm:flex-row sm:items-center">
+          <p className="flex-1 text-sm text-muted-foreground">{settings.cookie_consent_text} <Link to="/privacy-policy" className="text-primary hover:underline">Privacy policy</Link></p>
+          <Button size="sm" onClick={acceptCookies}>OK, got it</Button>
+        </div>
+      )}
       {settings.home_custom_css && <style>{settings.home_custom_css}</style>}
       {wa && (
         <motion.a initial={{ scale: 0, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ delay: 1.5, type: 'spring', stiffness: 260, damping: 18 }}
@@ -177,7 +192,8 @@ export function useSiteTheme(frontTheme) {
     if (!frontTheme) return undefined;
     const html = document.documentElement;
     const had = html.classList.contains('dark');
-    html.classList.toggle('dark', frontTheme === '2');
-    return () => html.classList.toggle('dark', had);
+    html.classList.toggle('dark', frontTheme === '2' || frontTheme === '4');
+    if (frontTheme === '3' || frontTheme === '4') html.dataset.siteTheme = frontTheme; // 3 = Ocean (light), 4 = Sunset (dark): see index.css
+    return () => { html.classList.toggle('dark', had); delete html.dataset.siteTheme; };
   }, [frontTheme]);
 }

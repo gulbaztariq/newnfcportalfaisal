@@ -38,7 +38,11 @@ const DEFAULTS = {
   // integrations & security
   slack_enable: '0', slack_webhook_url: '', slack_events: 'user_registered,payment,nfc_order,store_order,appointment',
   recaptcha_enable: '0', recaptcha_site_key: '', recaptcha_secret: '', recaptcha_min_score: '0.5',
-  google_login_enable: '0', google_client_id: '',
+  google_login_enable: '0', google_client_id: '', facebook_login_enable: '0', facebook_app_id: '', facebook_app_secret: '',
+  // look and feel + front site extras
+  panel_color: '', auth_theme: 'split', front_extra_scripts: '', cookie_consent_enable: '0', cookie_consent_text: 'We use cookies to keep you signed in and to understand how the site is used.',
+  front_sec_templates: '1', front_sec_features: '1', front_sec_about: '1', front_sec_pricing: '1', front_sec_testimonials: '1', front_sec_faqs: '1', front_sec_contact: '1',
+  i18n_overrides: '',
   email_verification_enable: '0', blocked_email_domains: '', expiry_reminder_days: '30', expiry_reminder_every_days: '3', product_sync_last_run: '', login_otp_minutes: '5',
   ai_enable: '0', anthropic_api_key: '',
   // regional
@@ -75,7 +79,7 @@ const DEFAULTS = {
 };
 const SECRET_KEYS = ['stripe_secret', 'paypal_secret', 'razorpay_secret', 'flutterwave_secret', 'paystack_secret', 'phonepe_salt_key',
   'mercadopago_access_token', 'cashfree_secret', 'sslcommerz_store_password', 'payfast_passphrase', 'iyzico_secret', 'mail_password',
-  'slack_webhook_url', 'recaptcha_secret', 'anthropic_api_key', 'leopards_api_password', 'whatsapp_access_token', 'whatsapp_app_secret', 'twilio_token'];
+  'slack_webhook_url', 'recaptcha_secret', 'anthropic_api_key', 'leopards_api_password', 'whatsapp_access_token', 'whatsapp_app_secret', 'twilio_token', 'facebook_app_secret'];
 const PUBLIC_KEYS = [
   'app_name', 'email', 'phone', 'region_code', 'address', 'app_logo', 'dashboard_logo', 'favicon', 'default_country_code',
   'default_language', 'register_enable', 'mobile_validation', 'front_theme', 'banner_enable', 'banner_title', 'banner_description', 'banner_url',
@@ -84,7 +88,8 @@ const PUBLIC_KEYS = [
   'stripe_enable', 'paypal_enable', 'razorpay_enable', 'flutterwave_enable', 'paystack_enable', 'phonepe_enable',
   'manual_payment_enable', 'manual_payment_guide', 'hide_decimal_values', 'currency_after_amount', 'min_withdrawal_amount',
   'mercadopago_enable', 'cashfree_enable', 'sslcommerz_enable', 'payfast_enable', 'iyzico_enable',
-  'recaptcha_enable', 'recaptcha_site_key', 'google_login_enable', 'google_client_id', 'ai_enable', 'date_format', 'time_format', 'timezone',
+  'recaptcha_enable', 'recaptcha_site_key', 'google_login_enable', 'google_client_id', 'facebook_login_enable', 'facebook_app_id', 'panel_color', 'auth_theme', 'cookie_consent_enable', 'cookie_consent_text',
+  'front_sec_templates', 'front_sec_features', 'front_sec_about', 'front_sec_pricing', 'front_sec_testimonials', 'front_sec_faqs', 'front_sec_contact', 'ai_enable', 'date_format', 'time_format', 'timezone',
   'home_whatsapp_number', 'home_custom_css', 'newsletter_popup_enable', 'business_directory_enable', 'front_blog_enable', 'email_verification_enable', 'nfc_tax_name', 'nfc_tax_rate',
   'shop_enable', 'shop_currency_code', 'shop_currency_icon', 'delivery_charges', 'free_delivery_above', 'cod_enable', 'cod_charges', 'online_payment_enable',
   'shop_min_order', 'shop_ai_design_enable', 'shop_upload_design_enable', 'login_otp_enable',
@@ -115,6 +120,7 @@ async function publicSettings() {
   // sign in with an e-mailed code only works when mail can be sent; otherwise the login page falls back to a password
   out.email_login = process.env.DISABLE_LOGIN_OTP !== '1' && (await require('./mail').isConfigured());
   out.home_custom_css = String(s.home_custom_css || '').replace(/<\/?style[^>]*>/gi, '');
+  out.front_extra_scripts = extraScripts(s);
   return out;
 }
 /** Admin view: secrets are masked, the admin can overwrite but never read them back. */
@@ -125,5 +131,11 @@ async function adminSettings() {
 }
 
 const clearCache = () => { cache = null; };
+/** what is cached right now, without touching the database (for code that cannot wait, e.g. response headers) */
+const peek = () => cache || DEFAULTS;
+/** https script addresses the super admin allows on the public site (chat widgets, pixels): one per line */
+function extraScripts(s = peek()) {
+  return String(s.front_extra_scripts || '').split(/\s+/).map((u) => u.trim()).filter((u) => /^https:\/\/[a-z0-9.-]+\.[a-z]{2,}(:\d+)?\/[^\s"'<>]*$/i.test(u)).slice(0, 10);
+}
 
-module.exports = { DEFAULTS, SECRET_KEYS, all, get, set, publicSettings, adminSettings, clearCache };
+module.exports = { DEFAULTS, SECRET_KEYS, all, get, set, publicSettings, adminSettings, clearCache, peek, extraScripts };

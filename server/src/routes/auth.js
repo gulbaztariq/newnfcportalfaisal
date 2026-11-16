@@ -286,6 +286,20 @@ r.post('/google', authLimiter, wrap(async (req, res) => {
   await completeLogin(req, res, user);
 }));
 
+r.post('/facebook', authLimiter, wrap(async (req, res) => {
+  let g;
+  try { g = await extras.verifyFacebookToken(String(req.body.access_token || '')); } catch (e) { fail(422, e.message); }
+  let user = await User.scope('withSecrets').findOne({ where: { email: g.email } });
+  if (!user) {
+    if ((await settings.get('register_enable')) !== '1') fail(403, 'Registration is currently disabled');
+    if (await extras.isBlockedEmail(g.email)) fail(422, 'This e-mail domain is not allowed');
+    user = await createAccount({ ...g, password: crypto.randomBytes(24).toString('hex'), referral: req.body.referral, verified: true });
+  } else if (!user.email_verified_at) await user.update({ email_verified_at: new Date() });
+  if (!user.is_active) fail(403, 'Your account is deactivated. Please contact the administrator.');
+  if (!org.canSignIn(user)) fail(403, org.LOCKED_MESSAGE);
+  await completeLogin(req, res, user);
+}));
+
 r.post('/logout', (req, res) => { clearTokens(res); res.json({ message: 'Logged out' }); });
 
 r.get('/me', wrap(async (req, res) => {

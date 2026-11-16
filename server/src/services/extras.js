@@ -50,6 +50,19 @@ async function verifyGoogleIdToken(idToken) {
   return { email: String(j.email).toLowerCase(), first_name: j.given_name || j.name || 'User', last_name: j.family_name || '', avatar: j.picture };
 }
 
+/** Facebook Login: the browser gets a user token from Facebook; it is checked against OUR app before it is trusted */
+async function verifyFacebookToken(accessToken) {
+  const s = await settings.all();
+  if (s.facebook_login_enable !== '1' || !s.facebook_app_id || !s.facebook_app_secret) throw new Error('Facebook sign-in is disabled');
+  const app = `${s.facebook_app_id}|${s.facebook_app_secret}`;
+  const d = await (await fetch(`https://graph.facebook.com/debug_token?input_token=${encodeURIComponent(accessToken)}&access_token=${encodeURIComponent(app)}`, { signal: AbortSignal.timeout(15000) })).json().catch(() => ({}));
+  if (!d.data?.is_valid || String(d.data.app_id) !== String(s.facebook_app_id)) throw new Error('Could not verify your Facebook account');
+  const me = await (await fetch(`https://graph.facebook.com/me?fields=id,email,first_name,last_name&access_token=${encodeURIComponent(accessToken)}`, { signal: AbortSignal.timeout(15000) })).json().catch(() => ({}));
+  if (!me.id || String(me.id) !== String(d.data.user_id)) throw new Error('Could not verify your Facebook account');
+  if (!me.email) throw new Error('Your Facebook account did not share an e-mail address. Sign in with your e-mail instead.');
+  return { email: String(me.email).toLowerCase(), first_name: me.first_name || 'User', last_name: me.last_name || '' };
+}
+
 /* ------------------------------------------------------------ storage */
 function fileSize(url) {
   if (!url || !String(url).startsWith('/uploads/')) return 0;
@@ -72,4 +85,4 @@ async function freeStorage(userId, url, User) {
 /* --------------------------------------------------------- period window */
 function periodStart(sub) { return sub?.starts_at ? dayjs(sub.starts_at).toDate() : dayjs().startOf('month').toDate(); }
 
-module.exports = { slack, verifyRecaptcha, isBlockedEmail, verifyGoogleIdToken, fileSize, assertStorage, addStorage, freeStorage, periodStart };
+module.exports = { slack, verifyRecaptcha, isBlockedEmail, verifyGoogleIdToken, verifyFacebookToken, fileSize, assertStorage, addStorage, freeStorage, periodStart };

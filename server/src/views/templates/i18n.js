@@ -24,6 +24,20 @@ const EXTRA = {
   it: { directions: 'Indicazioni' }, vi: { directions: 'Chỉ đường' }, zh: { directions: '导航' }, ru: { directions: 'Маршрут' },
 };
 
-const t = (lang) => ({ ...L.en, ...EXTRA.en, ...(L[lang] || {}), ...(EXTRA[lang] || {}) });
+// Admin > Translations: the super admin's own wording per language, kept in settings (parsed once per change)
+let ovRaw = null; let ov = {};
+const clean = (val) => String(val ?? '').replace(/[<>"`\\]/g, '').trim().slice(0, 200);
+function overrides() {
+  const raw = require('../../services/settings').peek().i18n_overrides || '';
+  if (raw !== ovRaw) {
+    ovRaw = raw; let parsed = {};
+    try { parsed = raw ? JSON.parse(raw) : {}; } catch { parsed = {}; }
+    // labels are written straight into the page, so an override may never carry markup
+    ov = Object.fromEntries(Object.entries(parsed || {}).map(([lang, vals]) => [lang, Object.fromEntries(Object.entries(vals || {}).map(([k, val]) => [k, clean(val)]).filter(([, val]) => val))]));
+  }
+  return ov;
+}
+const base = (lang) => ({ ...L.en, ...EXTRA.en, ...(L[lang] || {}), ...(EXTRA[lang] || {}) });
+const t = (lang) => ({ ...base(lang), ...(overrides()[lang] || {}) });
 
-module.exports = { t, RTL, LANGS: Object.keys(L) };
+module.exports = { t, base, clean, RTL, LANGS: Object.keys(L), KEYS: Object.keys({ ...L.en, ...EXTRA.en }) };

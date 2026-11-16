@@ -217,6 +217,15 @@ api.post('/vcards/:alias/appointments', formLimiter, wrap(async (req, res) => {
   res.status(201).json({ message: 'Your appointment request was sent. You will receive a confirmation soon.' });
 }));
 
+api.post('/stores/:alias/subscribe', formLimiter, wrap(async (req, res) => {
+  const st = await M.WhatsappStore.findOne({ where: { url_alias: req.params.alias, status: true }, attributes: ['id', 'extras'] });
+  if (!st || !st.extras?.newsletter_popup) fail(404, 'Not found');
+  validate(req.body, { email: 'required|email|max:191' }, { email: 'E-mail address' });
+  await guardEmail(req.body.email);
+  await M.StoreSubscriber.findOrCreate({ where: { store_id: st.id, email: String(req.body.email).toLowerCase() } });
+  res.status(201).json({ message: 'Thank you for subscribing!' });
+}));
+
 /* ------------------------------------------- buy a product on a vCard */
 api.post('/vcards/:alias/orders', orderLimiter, wrap(async (req, res) => {
   const v = await liveVcard(req.params.alias);
@@ -432,6 +441,17 @@ pages.get('/s/:alias', wrap(async (req, res, next) => {
   M.WhatsappStore.increment('views', { where: { id: st.id } }).catch(() => {});
   setCsp(res);
   res.send(renderStore({ st, categories, products, app: await settings.all(), nonce: res.locals.nonce, appUrl }));
+}));
+pages.get('/s/:alias/qr.png', wrap(async (req, res, next) => {
+  const st = await M.WhatsappStore.findOne({ where: { url_alias: String(req.params.alias).toLowerCase(), status: true }, attributes: ['url_alias'] });
+  if (!st) return next();
+  res.set('Content-Type', 'image/png').set('Cache-Control', 'public, max-age=3600').send(await QRCode.toBuffer(`${appUrl}/s/${st.url_alias}`, { width: 360, margin: 1 }));
+}));
+pages.get('/s/:alias/manifest.webmanifest', wrap(async (req, res, next) => {
+  const st = await M.WhatsappStore.findOne({ where: { url_alias: String(req.params.alias).toLowerCase(), status: true } });
+  if (!st || !st.extras?.pwa) return next();
+  const app = await settings.all(); const icon = st.logo || app.favicon || '/brand/favicon.svg';
+  res.type('application/manifest+json').send(JSON.stringify({ name: st.name, short_name: st.name.slice(0, 12), start_url: `/s/${st.url_alias}`, scope: `/s/${st.url_alias}`, display: 'standalone', background_color: '#ffffff', theme_color: /^#[0-9a-f]{6}$/i.test(st.theme?.primary || '') ? st.theme.primary : '#6d5dfc', icons: [{ src: icon, sizes: '192x192', purpose: 'any' }, { src: icon, sizes: '512x512', purpose: 'any' }] }));
 }));
 pages.get('/s/:alias/:page', wrap(async (req, res, next) => {
   if (!['terms', 'privacy', 'refund', 'shipping'].includes(req.params.page)) return next();

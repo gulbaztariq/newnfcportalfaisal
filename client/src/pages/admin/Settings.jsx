@@ -86,8 +86,19 @@ export default function Settings() {
   );
 }
 
+function DbUpgrade() {
+  const [busy, setBusy] = useState(false);
+  const go = async () => { setBusy(true); await run(api.post('/admin/settings/db-upgrade')).catch(() => {}); setBusy(false); };
+  return (
+    <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-border p-4">
+      <div className="min-w-0 flex-1"><p className="text-sm font-medium">Upgrade database</p><p className="text-xs text-muted-foreground">Run this after installing a new version. It adds new tables and fields and never deletes data.</p></div>
+      <Button variant="outline" onClick={go} loading={busy}>Upgrade database</Button>
+    </div>
+  );
+}
+
 function General({ st }) {
-  const keys = ['app_name', 'email', 'phone', 'region_code', 'address', 'default_currency_id', 'affiliation_amount', 'min_withdrawal_amount', 'register_enable', 'mobile_validation', 'hide_decimal_values', 'app_logo', 'dashboard_logo', 'favicon', 'timezone', 'date_format', 'time_format', 'nfc_tax_name', 'nfc_tax_rate', 'expiry_reminder_days', 'expiry_reminder_every_days', 'default_vcard_enable', 'default_vcard_template'];
+  const keys = ['app_name', 'email', 'phone', 'region_code', 'address', 'default_currency_id', 'affiliation_amount', 'min_withdrawal_amount', 'register_enable', 'mobile_validation', 'panel_color', 'auth_theme', 'hide_decimal_values', 'app_logo', 'dashboard_logo', 'favicon', 'timezone', 'date_format', 'time_format', 'nfc_tax_name', 'nfc_tax_rate', 'expiry_reminder_days', 'expiry_reminder_every_days', 'default_vcard_enable', 'default_vcard_template'];
   return (
     <div className="space-y-6">
       <Card>
@@ -117,6 +128,13 @@ function General({ st }) {
           </div>
           <SwitchRow title="User registration" description="Allow visitors to create accounts from the website" {...st.flag('register_enable')} />
           <SwitchRow title="Phone number required" description="People must enter a phone number when they create an account" {...st.flag('mobile_validation')} />
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Panel colour" hint="Buttons, links and highlights in the admin and user panels. Empty = the standard violet." error={st.s.panel_color && !/^#[0-9a-f]{6}$/i.test(st.s.panel_color) ? 'Panel colour must look like #2563eb' : undefined}>
+              <div className="flex items-center gap-2"><input type="color" aria-label="Pick a colour" value={/^#[0-9a-f]{6}$/i.test(st.s.panel_color || '') ? st.s.panel_color : '#6d5dfc'} onChange={(e) => st.set('panel_color', e.target.value)} className="h-11 w-14 cursor-pointer rounded-xl border border-border bg-transparent p-1" /><Input {...st.input('panel_color')} placeholder="#6d5dfc" maxLength={7} /></div>
+            </Field>
+            <Field label="Sign-in page design"><Select value={st.s.auth_theme || 'split'} onChange={(v) => st.set('auth_theme', v)} options={[{ value: 'split', label: 'Split with artwork (standard)' }, { value: 'centered', label: 'Centred card' }, { value: 'minimal', label: 'Minimal' }]} /></Field>
+          </div>
+          <DbUpgrade />
           <SwitchRow title="Hide decimal values" description="Show prices without cents on the website" {...st.flag('hide_decimal_values')} />
         </CardBody>
       </Card>
@@ -307,7 +325,7 @@ function MailSettings({ st }) {
 
 function Integrations({ st }) {
   const keys = ['login_otp_enable', 'enforce_2fa_staff', 'require_totp_staff', 'require_totp_company', 'max_login_attempts', 'lockout_minutes', 'email_verification_enable', 'blocked_email_domains', 'recaptcha_enable', 'recaptcha_site_key', 'recaptcha_secret', 'recaptcha_min_score',
-    'google_login_enable', 'google_client_id', 'slack_enable', 'slack_webhook_url', 'slack_events', 'ai_enable', 'anthropic_api_key'];
+    'google_login_enable', 'google_client_id', 'facebook_login_enable', 'facebook_app_id', 'facebook_app_secret', 'slack_enable', 'slack_webhook_url', 'slack_events', 'ai_enable', 'anthropic_api_key'];
   const events = String(st.s.slack_events || '').split(',').filter(Boolean);
   const toggleEvent = (e) => st.set('slack_events', (events.includes(e) ? events.filter((x) => x !== e) : [...events, e]).join(','));
   const [testing, setTesting] = useState(false);
@@ -346,6 +364,8 @@ function Integrations({ st }) {
         <CardBody className="space-y-4">
           <SwitchRow title="Enable Google sign-in" {...st.flag('google_login_enable')} />
           <Field label="OAuth client ID"><Input {...st.input('google_client_id')} placeholder="xxxxxxxx.apps.googleusercontent.com" autoComplete="off" /></Field>
+          <SwitchRow title="Enable Facebook sign-in" description="Needs a Facebook app with Facebook Login and your site address under Allowed domains" {...st.flag('facebook_login_enable')} />
+          <div className="grid gap-4 sm:grid-cols-2"><Field label="Facebook app ID"><Input {...st.input('facebook_app_id')} inputMode="numeric" autoComplete="off" /></Field><Field label="Facebook app secret" hint="Stored hidden. Leave the dots to keep it."><Input {...st.input('facebook_app_secret')} type="password" autoComplete="off" /></Field></div>
         </CardBody>
       </Card>
       <Card>
@@ -652,7 +672,7 @@ export function FrontSettings() {
   const st = useSettings();
   const { settings } = useAuth();
   if (!st.s) return <Skeleton className="h-[600px] rounded-2xl" />;
-  const keys = ['front_theme', 'home_title', 'home_sub_text', 'home_image', 'banner_enable', 'banner_title', 'banner_description', 'banner_url', 'banner_button', 'mobile_app_play_store_url', 'mobile_app_app_store_url', 'facebook_url', 'twitter_url', 'instagram_url', 'linkedin_url', 'home_whatsapp_number', 'newsletter_popup_enable', 'business_directory_enable', 'front_blog_enable', 'home_custom_css'];
+  const keys = ['front_theme', 'home_title', 'home_sub_text', 'home_image', 'banner_enable', 'banner_title', 'banner_description', 'banner_url', 'banner_button', 'mobile_app_play_store_url', 'mobile_app_app_store_url', 'facebook_url', 'twitter_url', 'instagram_url', 'linkedin_url', 'home_whatsapp_number', 'newsletter_popup_enable', 'business_directory_enable', 'front_blog_enable', 'home_custom_css', 'front_extra_scripts', 'cookie_consent_enable', 'cookie_consent_text', 'front_sec_templates', 'front_sec_features', 'front_sec_about', 'front_sec_pricing', 'front_sec_testimonials', 'front_sec_faqs', 'front_sec_contact'];
   return (
     <>
       <PageHeader title="Front Settings" description="Control the look and content of the public website.">
@@ -662,13 +682,13 @@ export function FrontSettings() {
         <Card>
           <CardHeader icon={Palette} title="Theme" description="Choose the website appearance" />
           <CardBody className="grid grid-cols-2 gap-4">
-            {[['1', 'Light', Sun, 'bg-white', 'bg-zinc-100'], ['2', 'Dark', Moon, 'bg-zinc-900', 'bg-zinc-800']].map(([v, l, I, bg, bar]) => {
+            {[['1', 'Light', Sun, 'bg-white', 'bg-zinc-100', 'bg-violet-500'], ['2', 'Dark', Moon, 'bg-zinc-900', 'bg-zinc-800', 'bg-violet-500'], ['3', 'Ocean', Sun, 'bg-white', 'bg-sky-100', 'bg-cyan-600'], ['4', 'Sunset', Moon, 'bg-zinc-900', 'bg-zinc-800', 'bg-orange-400']].map(([v, l, I, bg, bar, accent]) => {
               const on = st.s.front_theme === v;
               return (
                 <button key={v} type="button" onClick={() => st.set('front_theme', v)} className={cn('relative cursor-pointer rounded-2xl border-2 p-2 text-left transition', on ? 'border-primary shadow-glow' : 'border-border hover:border-primary/40')}>
                   <div className={`h-28 overflow-hidden rounded-xl border border-border ${bg} p-3`}>
                     <div className={`h-2.5 w-1/3 rounded ${bar}`} /><div className="mt-3 h-4 w-3/4 rounded bg-linear-to-r from-violet-500 to-fuchsia-500" /><div className={`mt-2 h-2 w-1/2 rounded ${bar}`} />
-                    <div className="mt-3 flex gap-1.5"><div className="h-5 w-12 rounded bg-violet-500" /><div className={`h-5 w-12 rounded ${bar}`} /></div>
+                    <div className="mt-3 flex gap-1.5"><div className={`h-5 w-12 rounded ${accent}`} /><div className={`h-5 w-12 rounded ${bar}`} /></div>
                   </div>
                   <p className="mt-2 flex items-center gap-2 px-1 text-sm font-medium"><I className="size-4" />{l}</p>
                 </button>
@@ -715,6 +735,28 @@ export function FrontSettings() {
             <SwitchRow title="Newsletter popup" description="Invite visitors to subscribe after a few seconds" {...st.flag('newsletter_popup_enable')} />
             <SwitchRow title="Business directory" description="Public /directory page listing vCards and stores that opted in" {...st.flag('business_directory_enable')} />
             <SwitchRow title="Blog" description="Show the blog on the website" {...st.flag('front_blog_enable')} />
+          </CardBody>
+        </Card>
+        <Card>
+          <CardHeader icon={Home} title="Home page sections" description="Switch off the parts you do not want on the home page" />
+          <CardBody className="space-y-3">
+            {[['front_sec_features', 'Features'], ['front_sec_templates', 'vCard templates'], ['front_sec_about', 'About us'], ['front_sec_pricing', 'Pricing'], ['front_sec_testimonials', 'Testimonials'], ['front_sec_faqs', 'FAQs'], ['front_sec_contact', 'Contact form']].map(([k, l]) => <SwitchRow key={k} title={l} {...st.flag(k)} />)}
+          </CardBody>
+        </Card>
+        <Card>
+          <CardHeader icon={ShieldCheck} title="Cookie notice" description="A small bar at the bottom of the website until the visitor presses OK" />
+          <CardBody className="space-y-4">
+            <SwitchRow title="Show the cookie notice" {...st.flag('cookie_consent_enable')} />
+            <Field label="Text"><Textarea {...st.input('cookie_consent_text')} rows={2} maxLength={300} /></Field>
+          </CardBody>
+        </Card>
+        <Card>
+          <CardHeader icon={Code2} title="Extra scripts" description="Chat widgets, tracking pixels and similar tools for the public website" />
+          <CardBody>
+            <Field label="Script addresses" hint="One https address per line, up to 10 (for example the script link your chat provider gives you). Only these addresses are allowed to run; pasted code is not accepted, for the safety of your visitors."
+              error={String(st.s.front_extra_scripts || '').split(/\s+/).filter(Boolean).some((u) => !/^https:\/\/[a-z0-9.-]+\.[a-z]{2,}(:\d+)?\/\S*$/i.test(u)) ? 'Every line must be a full https address, e.g. https://cdn.example.com/widget.js' : undefined}>
+              <Textarea {...st.input('front_extra_scripts')} rows={4} className="font-mono text-xs" placeholder="https://cdn.example.com/widget.js" />
+            </Field>
           </CardBody>
         </Card>
         <Card>

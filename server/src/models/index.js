@@ -618,7 +618,10 @@ const WhatsappStore = sequelize.define('whatsapp_store', {
   views: { type: T.INTEGER, defaultValue: 0 },
   status: { type: T.BOOLEAN, defaultValue: true },
   business_directory: { type: T.BOOLEAN, defaultValue: false },
+  extras: json('extras', {}), // { newsletter_popup, trending_video, custom_css, font, pwa, language, show_qr, scroll_top }
 });
+/** e-mail addresses collected by a store's newsletter popup */
+const StoreSubscriber = sequelize.define('store_subscriber', { store_id: { type: T.INTEGER, allowNull: false }, email: { type: T.STRING(191), allowNull: false } }, { updatedAt: false, indexes: [{ unique: true, fields: ['store_id', 'email'] }] });
 WhatsappStore.belongsTo(User, { foreignKey: 'user_id' }); User.hasMany(WhatsappStore, { foreignKey: 'user_id' });
 const StoreCategory = sequelize.define('store_category', {
   name: { type: T.STRING(120), allowNull: false },
@@ -658,7 +661,7 @@ const business = require('./business')(sequelize, json, { User, Vcard, NfcCard, 
 module.exports = {
   sequelize, PLAN_FEATURES, STAFF_ROLES, COMPANY_ROLES, ...business,
   User, Organisation, Currency, Country, State, City, Language, Template, Plan, CouponCode, Transaction, Subscription,
-  Vcard, VcardService, VcardGallery, VcardTestimonial, VcardEnquiry, WhatsappLine, WhatsappContact, WhatsappMessage, WaLease, UserSetting, VcardOrder, VcardView, VcardEvent, VcardProduct, Appointment, VcardBlog, VcardPage, VcardSubscriber,
+  Vcard, VcardService, VcardGallery, VcardTestimonial, VcardEnquiry, WhatsappLine, WhatsappContact, WhatsappMessage, WaLease, UserSetting, VcardOrder, StoreSubscriber, VcardView, VcardEvent, VcardProduct, Appointment, VcardBlog, VcardPage, VcardSubscriber,
   FrontBlog, WhatsappStore, StoreCategory, StoreProduct, StoreOrder,
   NfcCard, NfcOrder, AffiliateUser, Withdrawal,
   Setting, Feature, AboutUs, FrontTestimonial, FrontFaq, Enquiry, EmailSubscription, SentEmail,

@@ -79,6 +79,7 @@ async function defaultCurrency() {
 }
 
 /* ======================================================= users and admins */
+r.use(require('./tools')); // before the generic resources: it has its own /custom-domains/guide
 r.use(require('./business'));
 r.use('/whatsapp-lines', isSuperAdmin, require('./whatsapp')); // tokens: super admin only
 r.use('/users', usersRouter('user'));
@@ -364,6 +365,16 @@ r.put('/settings', settingsUpload, wrap(async (req, res) => {
   for (const k of ['terms_conditions', 'privacy_policy', 'manual_payment_guide']) if (values[k] !== undefined) values[k] = richText(values[k]);
   for (const k of Object.keys(values)) if (/^mail_tpl_\w+_body$/.test(k)) values[k] = richText(values[k]);
   if (values.home_custom_css !== undefined) values.home_custom_css = String(values.home_custom_css).replace(/<[^>]*>/g, '').slice(0, 20000);
+  if (values.panel_color !== undefined && values.panel_color !== '' && !/^#[0-9a-f]{6}$/i.test(values.panel_color)) fail(422, 'Validation failed', { panel_color: 'Panel colour must look like #2563eb' });
+  if (values.auth_theme !== undefined && !['split', 'centered', 'minimal'].includes(values.auth_theme)) fail(422, 'Validation failed', { auth_theme: 'Choose a sign-in page design from the list' });
+  if (values.front_extra_scripts !== undefined) {
+    const lines = String(values.front_extra_scripts).split(/\s+/).filter(Boolean);
+    if (lines.length > 10) fail(422, 'Validation failed', { front_extra_scripts: 'Extra scripts: 10 addresses at most' });
+    if (lines.length !== settings.extraScripts({ front_extra_scripts: lines.join('\n') }).length) fail(422, 'Validation failed', { front_extra_scripts: 'Every line must be a full https address, e.g. https://cdn.example.com/widget.js' });
+    values.front_extra_scripts = lines.join('\n');
+  }
+  if (values.cookie_consent_text !== undefined) values.cookie_consent_text = String(values.cookie_consent_text).replace(/<[^>]*>/g, '').slice(0, 300);
+  delete values.i18n_overrides; // only through Admin > Translations
   if (values.slack_webhook_url && values.slack_webhook_url !== '********' && !/^https:\/\/hooks\.slack\.com\//.test(values.slack_webhook_url)) fail(422, 'Validation failed', { slack_webhook_url: 'Use a https://hooks.slack.com/... incoming webhook URL' });
   for (const k of ['app_logo', 'dashboard_logo', 'favicon', 'home_image', 'invoice_logo']) if (req.files?.[k]?.[0]) values[k] = fileUrl('settings', req.files[k][0]);
   if (values.google_analytics !== undefined && values.google_analytics && !/^(G|UA|GT|AW)-[A-Z0-9-]+$/i.test(values.google_analytics.trim())) {
