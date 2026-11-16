@@ -2,7 +2,7 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 const { Op } = require('sequelize');
-const { User, Vcard, Subscription, Plan, Organisation } = require('../../models');
+const { User, Vcard, Subscription, Plan, Organisation, StaffRole } = require('../../models');
 const { wrap, fail, validate, pick, toBool, paginate, paged } = require('../../utils/http');
 const { makeUpload, fileUrl, removeFile } = require('../../middleware/upload');
 const { issueToken, isSuperAdmin, COOKIE, IMP_COOKIE, cookieOpts } = require('../../middleware/auth');
@@ -41,6 +41,71 @@ module.exports = function usersRouter(role) {
   const upload = makeUpload('avatars', { maxMb: 2 }).fields([{ name: 'avatar', maxCount: 1 }, { name: 'logo', maxCount: 1 }]);
   const roleWhere = role === 'admin' ? STAFF : 'user';
   const staffRole = (b) => (STAFF.includes(b.role) ? b.role : 'manager');
+  /** staff access from the form: a named role (its permissions are copied to the person), full-access admin, or hand-picked modules */
+  async function staffAccess(b) {
+    if (b.staff_role_id !== undefined && b.staff_role_id !== '' && b.staff_role_id !== null && b.staff_role_id !== 'null') {
+      const sr = await StaffRole.findByPk(b.staff_role_id);
+      if (!sr) fail(422, 'Validation failed', { staff_role_id: 'Choose a role from the list' });
+      return { role: 'manager', staff_role_id: sr.id, permissions: perms.clean(sr.permissions) };
+    }
+    const out = { staff_role_id: null };
+    if (b.role !== undefined) out.role = staffRole(b);
+    if (out.role === 'admin') out.permissions = null; else if (b.permissions !== undefined) out.permissions = perms.clean(parseList(b.permissions));
+    return out;
+  }
+
+  if (role === 'admin') {
+    /* ------------------------------------------------------------ roles */
+    const roleRules = { name: 'required|max:60', description: 'max:255' };
+    const roleLabels = { name: 'Role name', description: 'Description' };
+    const seedRoles = async () => {
+      if (await StaffRole.count()) return;
+      await StaffRole.bulkCreate([
+        { name: 'Manager', description: 'Runs daily operations: users, cards, orders, invoices', permissions: perms.DEFAULTS.manager },
+        { name: 'Supervisor', description: 'Handles orders and looks things up', permissions: perms.DEFAULTS.supervisor },
+      ]);
+    };
+    r.get('/roles', wrap(async (_req, res) => {
+      await seedRoles();
+      const roles = await StaffRole.findAll({ order: [['name', 'ASC']] });
+      const counts = await User.count({ where: { role: STAFF, staff_role_id: roles.map((x) => x.id) }, group: ['staff_role_id'] });
+      const by = Object.fromEntries(counts.map((c) => [c.staff_role_id, c.count]));
+      res.json({ data: roles.map((x) => ({ ...x.toJSON(), permissions: perms.clean(x.permissions), users_count: by[x.id] || 0 })), modules: perms.ADMIN_MODULES });
+    }));
+    const rolePerms = (b) => { const list = perms.clean(parseList(b.permissions)); if (!list.length) fail(422, 'Validation failed', { permissions: 'Give the role access to at least one module' }); return list; };
+    r.post('/roles', wrap(async (req, res) => {
+      validate(req.body, roleRules, roleLabels);
+      const name = String(req.body.name).trim();
+      if (await StaffRole.findOne({ where: { name } })) fail(422, 'Validation failed', { name: 'A role with this name already exists' });
+      const sr = await StaffRole.create({ name, description: req.body.description || null, permissions: rolePerms(req.body) });
+      audit(req, 'role.create', 'staff_role', sr.id, { name });
+      res.status(201).json({ data: sr, message: 'Role created' });
+    }));
+    r.put('/roles/:rid', wrap(async (req, res) => {
+      const sr = await StaffRole.findByPk(req.params.rid);
+      if (!sr) fail(404, 'Not found');
+      validate(req.body, roleRules, roleLabels);
+      const name = String(req.body.name).trim();
+      const dup = await StaffRole.findOne({ where: { name } });
+      if (dup && dup.id !== sr.id) fail(422, 'Validation failed', { name: 'A role with this name already exists' });
+      const list = rolePerms(req.body);
+      const changed = JSON.stringify([...list].sort()) !== JSON.stringify([...perms.clean(sr.permissions)].sort());
+      await sr.update({ name, description: req.body.description || null, permissions: list });
+      // everyone with this role gets the new access at once (their open sessions are refreshed on the next request)
+      if (changed) await User.update({ permissions: list }, { where: { role: STAFF, staff_role_id: sr.id } });
+      audit(req, 'role.update', 'staff_role', sr.id, { name, changed });
+      res.json({ data: sr, message: changed ? 'Role saved. Everyone with this role now has the new access.' : 'Role saved' });
+    }));
+    r.delete('/roles/:rid', wrap(async (req, res) => {
+      const sr = await StaffRole.findByPk(req.params.rid);
+      if (!sr) fail(404, 'Not found');
+      const n = await User.count({ where: { role: STAFF, staff_role_id: sr.id } });
+      if (n) fail(422, `${n} staff member${n > 1 ? 's have' : ' has'} this role. Give them another role first.`);
+      await sr.destroy();
+      audit(req, 'role.delete', 'staff_role', sr.id, { name: sr.name });
+      res.json({ message: 'Role deleted' });
+    }));
+  }
 
   r.get('/', wrap(async (req, res) => {
     const p = paginate(req);
@@ -66,8 +131,10 @@ module.exports = function usersRouter(role) {
     const orgNames = orgIds.length ? Object.fromEntries((await Organisation.findAll({ where: { owner_id: orgIds }, attributes: ['owner_id', 'name'] })).map((o) => [o.owner_id, o.name])) : {};
     const planLimits = {};
     for (const u of rows.filter((x) => x.is_organisation)) planLimits[u.id] = await org.seatLimit(u);
+    const roleIds = role === 'admin' ? [...new Set(rows.map((u) => u.staff_role_id).filter(Boolean))] : [];
+    const roleNames = roleIds.length ? Object.fromEntries((await StaffRole.findAll({ where: { id: roleIds }, attributes: ['id', 'name'] })).map((x) => [x.id, x.name])) : {};
     res.json(paged(rows.map((u) => ({
-      ...u.toJSON(), vcards_count: byUser[u.id] || 0, plan: u.subscriptions?.[0]?.plan || null,
+      ...u.toJSON(), vcards_count: byUser[u.id] || 0, ...(role === 'admin' ? { staff_role_name: u.staff_role_id ? roleNames[u.staff_role_id] || null : null } : { plan: u.subscriptions?.[0]?.plan || null }),
       members_count: u.is_organisation ? membersOf[u.id] || 0 : undefined, seats: u.is_organisation ? planLimits[u.id] : undefined,
       organisation_name: u.organisation_id ? orgNames[u.organisation_id] || null : undefined,
     })), count, p));
@@ -99,9 +166,10 @@ module.exports = function usersRouter(role) {
     if (!invited && req.body.password !== req.body.password_confirmation) fail(422, 'Validation failed', { password_confirmation: 'Passwords do not match' });
     const email = String(req.body.email).toLowerCase().trim();
     if (await User.findOne({ where: { email } })) fail(422, 'Validation failed', { email: 'This e-mail is already registered' });
+    const access = role === 'admin' ? await staffAccess(req.body) : {};
     const user = await User.create({
-      ...pick(req.body, ['first_name', 'last_name', 'contact', 'region_code']), email, role: role === 'admin' ? staffRole(req.body) : 'user',
-      permissions: role === 'admin' && req.body.permissions !== undefined ? perms.clean(parseList(req.body.permissions)) : null,
+      ...pick(req.body, ['first_name', 'last_name', 'contact', 'region_code']), email, role: role === 'admin' ? (access.role || staffRole(req.body)) : 'user',
+      permissions: role === 'admin' ? access.permissions ?? null : null, staff_role_id: role === 'admin' ? access.staff_role_id : null,
       is_active: req.body.is_active === undefined ? true : toBool(req.body.is_active),
       password: await bcrypt.hash(invited ? crypto.randomBytes(24).toString('hex') : String(req.body.password), 12), email_verified_at: new Date(),
       affiliate_code: crypto.randomBytes(5).toString('hex'), avatar: fileUrl('avatars', fileOf(req, 'avatar')),
@@ -165,8 +233,7 @@ module.exports = function usersRouter(role) {
     const data = { ...pick(req.body, ['first_name', 'last_name', 'contact', 'region_code']), email };
     if (req.body.is_active !== undefined) data.is_active = toBool(req.body.is_active);
     if (role === 'admin') {
-      if (req.body.role !== undefined) data.role = staffRole(req.body);
-      if (req.body.permissions !== undefined) data.permissions = perms.clean(parseList(req.body.permissions));
+      if (req.body.role !== undefined || req.body.permissions !== undefined || req.body.staff_role_id !== undefined) Object.assign(data, await staffAccess(req.body));
       if (data.role && data.role !== user.role) data.token_version = (user.token_version || 0) + 1;
     }
     if (req.body.password) {

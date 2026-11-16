@@ -67,3 +67,30 @@ test('a deactivated sub admin is refused at once and gets no codes', async () =>
   outbox.length = 0; await client(ctx.base).post('/api/auth/login-code', { email: staff.email });
   assert.equal(outbox.filter((m) => m.key === 'login_code').length, 0, 'no code for a deactivated account');
 });
+
+test('roles: the super admin creates a role, gives it to staff, and editing the role changes their access; staff never get a plan', async () => {
+  const { c } = await superAdmin();
+  const list = await c.get('/api/admin/admins/roles'); assert.equal(list.status, 200); assert.ok(list.body.data.some((x) => x.name === 'Manager') && list.body.data.some((x) => x.name === 'Supervisor'), 'starter roles');
+  assert.equal((await c.post('/api/admin/admins/roles', { name: '', permissions: ['orders.view'] })).status, 422);
+  assert.equal((await c.post('/api/admin/admins/roles', { name: 'Nothing', permissions: ['made.up'] })).status, 422, 'a role needs at least one real permission');
+  const made = await c.post('/api/admin/admins/roles', { name: 'Order desk', description: 'Orders only', permissions: ['orders.view', 'orders.manage', 'bogus.key'] });
+  assert.equal(made.status, 201, made.text); assert.deepEqual(made.body.data.permissions, ['orders.view', 'orders.manage']);
+  assert.equal((await c.post('/api/admin/admins/roles', { name: 'Order desk', permissions: ['orders.view'] })).status, 422, 'names are unique');
+  const email = `desk_${++seq}@example.test`;
+  const add = await c.post('/api/admin/admins', { first_name: 'Dua', email, staff_role_id: made.body.data.id }); assert.equal(add.status, 201, add.text);
+  const u = await M.User.findOne({ where: { email } }); assert.equal(u.staff_role_id, made.body.data.id); assert.deepEqual(u.permissions, ['orders.view', 'orders.manage']); assert.equal(u.role, 'manager');
+  assert.equal(await M.Subscription.count({ where: { user_id: u.id } }), 0, 'staff have no plan'); assert.equal(await M.Vcard.count({ where: { user_id: u.id } }), 0);
+  const row = (await c.get('/api/admin/admins')).body.data.find((x) => x.id === u.id); assert.equal(row.staff_role_name, 'Order desk'); assert.ok(!('plan' in row));
+  assert.equal((await c.post('/api/admin/admins', { first_name: 'X', email: `x_${++seq}@example.test`, staff_role_id: 999999 })).status, 422);
+  // the staff member can open orders but not users
+  await settings.set({ require_totp_staff: '0' }); const s = client(ctx.base); const a = await s.post('/api/auth/login-code', { email }); await s.post('/api/auth/two-factor', { challenge: a.body.challenge, code: codeFromMail() });
+  assert.equal((await s.get('/api/admin/orders')).status, 200); assert.equal((await s.get('/api/admin/users')).status, 403); assert.equal((await s.get('/api/admin/admins/roles')).status, 403, 'only the super admin manages roles');
+  // editing the role reaches the person at once, without signing in again
+  const up = await c.put(`/api/admin/admins/roles/${made.body.data.id}`, { name: 'Order desk', permissions: ['orders.view', 'users.view'] }); assert.equal(up.status, 200, up.text);
+  assert.equal((await s.get('/api/admin/users')).status, 200); assert.equal((await s.post('/api/admin/order-sources', { name: 'X' })).status, 403, 'manage was removed');
+  assert.equal((await c.del(`/api/admin/admins/roles/${made.body.data.id}`)).status, 422, 'a role in use cannot be deleted');
+  // switch the person to full-access admin: role link and hand-picked access are cleared
+  assert.equal((await c.put(`/api/admin/admins/${u.id}`, { first_name: 'Dua', email, role: 'admin', staff_role_id: '' })).status, 200);
+  const after = await M.User.findByPk(u.id); assert.equal(after.role, 'admin'); assert.equal(after.staff_role_id, null); assert.equal(after.permissions, null);
+  assert.equal((await c.del(`/api/admin/admins/roles/${made.body.data.id}`)).status, 200);
+});

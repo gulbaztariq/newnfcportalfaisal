@@ -44,6 +44,7 @@ const User = sequelize.define('user', {
   two_factor_recovery: json('two_factor_recovery', []),
   email_verify_token: T.STRING(191),
   storage_used: { type: T.BIGINT, defaultValue: 0 }, // bytes uploaded
+  staff_role_id: T.INTEGER, // staff only: the role whose permissions this person has (null = full-access admin or hand-picked access)
   is_organisation: { type: T.BOOLEAN, defaultValue: false }, // company owner account
   organisation_id: T.INTEGER, // member of the organisation owned by this user id
   org_status: { type: T.STRING(10), defaultValue: 'active' }, // set by the organisation: active | locked (no sign-in) | blocked (no sign-in, cards hidden)
@@ -100,6 +101,12 @@ const City = sequelize.define('city', { name: { type: T.STRING(120), allowNull: 
 Country.hasMany(State, { foreignKey: 'country_id', onDelete: 'CASCADE' }); State.belongsTo(Country, { foreignKey: 'country_id' });
 State.hasMany(City, { foreignKey: 'state_id', onDelete: 'CASCADE' }); City.belongsTo(State, { foreignKey: 'state_id' });
 
+/** a named set of admin-panel permissions the super admin creates and gives to staff (staff never have plans) */
+const StaffRole = sequelize.define('staff_role', {
+  name: { type: T.STRING(60), allowNull: false, unique: true },
+  description: T.STRING(255),
+  permissions: json('permissions', []), // ['orders.view', 'orders.manage', ...]
+});
 const Language = sequelize.define('language', {
   name: { type: T.STRING(60), allowNull: false },
   iso_code: { type: T.STRING(10), allowNull: false, unique: true },
@@ -661,7 +668,7 @@ const business = require('./business')(sequelize, json, { User, Vcard, NfcCard, 
 module.exports = {
   sequelize, PLAN_FEATURES, STAFF_ROLES, COMPANY_ROLES, ...business,
   User, Organisation, Currency, Country, State, City, Language, Template, Plan, CouponCode, Transaction, Subscription,
-  Vcard, VcardService, VcardGallery, VcardTestimonial, VcardEnquiry, WhatsappLine, WhatsappContact, WhatsappMessage, WaLease, UserSetting, VcardOrder, StoreSubscriber, VcardView, VcardEvent, VcardProduct, Appointment, VcardBlog, VcardPage, VcardSubscriber,
+  Vcard, VcardService, VcardGallery, VcardTestimonial, VcardEnquiry, WhatsappLine, WhatsappContact, WhatsappMessage, WaLease, UserSetting, VcardOrder, StoreSubscriber, StaffRole, VcardView, VcardEvent, VcardProduct, Appointment, VcardBlog, VcardPage, VcardSubscriber,
   FrontBlog, WhatsappStore, StoreCategory, StoreProduct, StoreOrder,
   NfcCard, NfcOrder, AffiliateUser, Withdrawal,
   Setting, Feature, AboutUs, FrontTestimonial, FrontFaq, Enquiry, EmailSubscription, SentEmail,
