@@ -440,7 +440,7 @@ export default function OrderWizard() {
                   <span className="flex gap-1"><Button size="sm" variant="ghost" onClick={() => { navigator.clipboard?.writeText(t.url); toast.success('Tag link copied'); }}><Copy />Tag link</Button><Button size="sm" variant="ghost" onClick={() => { navigator.clipboard?.writeText(t.manage_url); toast.success('Owner link copied'); }}><Copy />Owner link</Button></span>
                 </div>
               ))}
-              <p className="px-1 text-xs text-muted-foreground">{result.tags.length > 5 ? 'All tags are in ' : 'Find them again in '}<Link to="/admin/contact-tags" className="text-primary hover:underline">Contact tags</Link> (with a CSV of links for programming the chips). The owner link is private: send it only to the customer.</p>
+              <p className="px-1 text-xs text-muted-foreground">{result.tags.length > 5 ? 'All tags are in ' : 'Find them again in '}<Link to="/admin/orders?view=tags" className="text-primary hover:underline">Contact tags</Link> (with a CSV of links for programming the chips). The owner link is private: send it only to the customer.</p>
             </div>
           )}
           {result.renewed && <p className="relative mt-1 font-medium text-success">Plan {o.order_type === 'upgrade' ? 'upgraded, valid until' : 'renewed until'} {new Date(result.renewed.ends_at).toLocaleDateString()}</p>}

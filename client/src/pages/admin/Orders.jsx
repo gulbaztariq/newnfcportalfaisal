@@ -1,6 +1,7 @@
 /* Admin: orders (shop + portal + manual) with workflow, Leopards courier, invoices, NFC writing; products with costing */
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { ContactTags } from './ContactTags';
 import { motion } from 'motion/react';
 import { toast } from 'sonner';
 import {
@@ -14,7 +15,7 @@ import { cn } from '@/lib/cn';
 import { fmtDate, fmtDateTime, label } from '@/lib/format';
 import {
   PageHeader, TableCard, DataTable, SearchInput, FilterSelect, Action, Actions, Dialog, Sheet, Button, ButtonLink, Field, Input, Textarea, Select, Switch, SwitchRow,
-  ImageUpload, Badge, StatusBadge, EmptyState, Card, CardHeader, CardBody, Skeleton, Tip, useList, useForm, run, confirm,
+  ImageUpload, Badge, StatusBadge, EmptyState, Card, CardHeader, CardBody, Skeleton, Tip, Segmented, useList, useForm, run, confirm,
 } from '@/components/ui';
 
 export const rs = (v, cur = 'Rs') => `${cur} ${Number(v || 0).toLocaleString('en-US', { maximumFractionDigits: 2 })}`;
@@ -33,6 +34,8 @@ export function Orders() {
   const [syncing, setSyncing] = useState(false);
   const [sources, setSources] = useState([]);
   const navigate = useNavigate();
+  const [sp, setSp] = useSearchParams();
+  const view = sp.get('view') === 'tags' ? 'tags' : 'orders';
   useEffect(() => { api.get('/admin/order-sources', { params: { all: 1 } }).then(({ data }) => setSources(data.data)).catch(() => {}); }, []);
   useEffect(() => { if (list.extra?.counts) setMeta({ counts: list.extra.counts, labels: list.extra.labels, steps: list.extra.steps }); }, [list.extra]);
   const status = list.params.order_status || '';
@@ -45,6 +48,14 @@ export function Orders() {
         <ButtonLink as={Link} to="/admin/order-sources" variant="outline"><Globe />Order sources</ButtonLink>
         <ButtonLink as={Link} to="/admin/orders/new"><Plus />New order</ButtonLink>
       </PageHeader>
+      <div className="mb-4"><Segmented id="orders-view" value={view} onChange={(v) => setSp(v === 'tags' ? { view: 'tags' } : {}, { replace: true })} options={[{ value: 'orders', label: 'Orders' }, { value: 'tags', label: 'Contact tags' }]} /></div>
+      {view === 'tags' ? (
+        <>
+          <p className="mb-4 text-sm text-muted-foreground">QR / NFC tags that let anyone reach the owner without seeing their phone number. Car contact tags and airport (luggage) tags, one row per tag made by an order.</p>
+          <ContactTags embedded />
+        </>
+      ) : (
+        <>
       <div className="-mx-1 mb-4 flex gap-1.5 overflow-x-auto px-1 pb-1">
         {tabs.map(([k, l]) => (
           <button key={k || 'all'} type="button" onClick={() => list.set({ order_status: k })} className={cn('flex shrink-0 cursor-pointer items-center gap-2 rounded-full border px-3.5 py-1.5 text-sm font-medium transition', status === k ? 'border-primary bg-primary text-white shadow-glow' : 'border-border bg-card text-muted-foreground hover:border-primary/40 hover:text-foreground')}>
@@ -74,6 +85,8 @@ export function Orders() {
           { key: '_a', label: '', className: 'text-right', render: (o) => <Actions><Action icon={Eye} label="Open order" to={`/admin/orders/${o.id}`} /></Actions> },
         ]} />
       </TableCard>
+        </>
+      )}
     </>
   );
 }
