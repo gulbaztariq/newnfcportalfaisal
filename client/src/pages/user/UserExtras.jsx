@@ -166,13 +166,17 @@ export function Subscribers() {
 
 /* ------------------------------------------------- virtual background */
 const BG_STYLES = [['aurora', 'Aurora'], ['minimal', 'Minimal'], ['split', 'Split'], ['dark', 'Midnight']];
-function drawBackground(canvas, { style, primary, secondary, name, title, company, email, phone, qr, logo }) {
+function drawBackground(canvas, { style, primary, secondary, name, title, company, email, phone, qr, logo, photo }) {
   const W = 1920; const H = 1080;
   canvas.width = W; canvas.height = H;
   const c = canvas.getContext('2d');
   const grad = c.createLinearGradient(0, 0, W, H);
   if (style === 'dark') { grad.addColorStop(0, '#0b0b14'); grad.addColorStop(1, '#1a1433'); } else if (style === 'minimal') { grad.addColorStop(0, '#f7f7fb'); grad.addColorStop(1, '#eceaf6'); } else { grad.addColorStop(0, primary); grad.addColorStop(1, secondary); }
   c.fillStyle = grad; c.fillRect(0, 0, W, H);
+  if (style === 'custom' && photo) { // own picture, scaled to cover the whole frame
+    const k = Math.max(W / photo.width, H / photo.height); const w = photo.width * k; const h = photo.height * k;
+    c.drawImage(photo, (W - w) / 2, (H - h) / 2, w, h);
+  }
   if (style === 'aurora' || style === 'dark') {
     for (const [x, y, r, col] of [[W * 0.85, H * 0.1, 520, 'rgba(255,255,255,.18)'], [W * 0.1, H * 0.95, 480, 'rgba(255,255,255,.1)']]) {
       const g = c.createRadialGradient(x, y, 0, x, y, r); g.addColorStop(0, style === 'dark' ? primary : col); g.addColorStop(1, 'rgba(0,0,0,0)'); c.globalAlpha = style === 'dark' ? 0.45 : 1; c.fillStyle = g; c.fillRect(0, 0, W, H); c.globalAlpha = 1;
@@ -182,7 +186,7 @@ function drawBackground(canvas, { style, primary, secondary, name, title, compan
   const light = style === 'minimal' || style === 'split';
   const tx = light ? '#16162a' : '#ffffff';
   const panelX = style === 'split' ? W * 0.65 : W - 640; const panelY = H - 380;
-  if (style !== 'split') { c.fillStyle = light ? 'rgba(255,255,255,.85)' : 'rgba(255,255,255,.12)'; c.beginPath(); c.roundRect(panelX - 40, panelY - 40, 620, 340, 36); c.fill(); }
+  if (style !== 'split') { c.fillStyle = style === 'custom' ? 'rgba(10,10,20,.62)' : light ? 'rgba(255,255,255,.85)' : 'rgba(255,255,255,.12)'; c.beginPath(); c.roundRect(panelX - 40, panelY - 40, 620, 340, 36); c.fill(); }
   c.fillStyle = tx; c.font = '700 64px Inter, system-ui, sans-serif'; c.fillText(name || 'Your Name', panelX, panelY + 40, 520);
   c.globalAlpha = 0.8; c.font = '500 34px Inter, system-ui, sans-serif'; c.fillText([title, company].filter(Boolean).join(' · ') || 'Your title', panelX, panelY + 95, 520);
   c.font = '400 28px Inter, system-ui, sans-serif'; if (email) c.fillText(email, panelX, panelY + 170, 360); if (phone) c.fillText(phone, panelX, panelY + 215, 360); c.globalAlpha = 1;
@@ -197,6 +201,14 @@ export function VirtualBackground() {
   const [style, setStyle] = useState('aurora');
   const [colors, setColors] = useState({ primary: '#6d5dfc', secondary: '#b44cf5' });
   const [withQr, setWithQr] = useState(true);
+  const [photo, setPhoto] = useState(null);
+  const pick = useRef(null);
+  const onPhoto = (e) => {
+    const f = e.target.files?.[0]; if (!f) return;
+    if (!f.type.startsWith('image/')) { toast.error('Background must be an image (JPG, PNG or WebP)'); return; }
+    if (f.size > 10 * 1024 * 1024) { toast.error('Background image must be 10 MB or smaller'); return; }
+    const i = new Image(); i.onload = () => { setPhoto(i); setStyle('custom'); }; i.onerror = () => toast.error('This image could not be opened'); i.src = URL.createObjectURL(f);
+  };
   const canvas = useRef(null);
   const [features, setFeatures] = useState(null);
   useEffect(() => { api.get('/user/vcards').then(({ data }) => { setVcards(data.data); if (data.data[0]) setSel(String(data.data[0].id)); }); api.get('/user/features').then(({ data }) => setFeatures(data.features)); }, []);
@@ -207,10 +219,10 @@ export function VirtualBackground() {
     let alive = true;
     Promise.all([withQr && v ? loadImg(`/api/user/vcards/${v.id}/qrcode?size=300`) : null, v?.profile_image ? loadImg(v.profile_image) : null]).then(([qr, logo]) => {
       if (!alive) return;
-      drawBackground(canvas.current, { style, ...colors, name: v ? [v.first_name, v.last_name].filter(Boolean).join(' ') || v.name : '', title: v?.job_title || v?.occupation, company: v?.company, email: v?.email, phone: v?.phone ? `+${v.region_code || ''} ${v.phone}` : '', qr, logo });
+      drawBackground(canvas.current, { style, ...colors, name: v ? [v.first_name, v.last_name].filter(Boolean).join(' ') || v.name : '', title: v?.job_title || v?.occupation, company: v?.company, email: v?.email, phone: v?.phone ? `+${v.region_code || ''} ${v.phone}` : '', qr, logo, photo });
     });
     return () => { alive = false; };
-  }, [v, style, colors, withQr]);
+  }, [v, style, colors, withQr, photo]);
   const download = () => { const a = document.createElement('a'); a.download = `${v?.url_alias || 'virtual'}-background.png`; a.href = canvas.current.toDataURL('image/png'); a.click(); toast.success('Background downloaded - set it in Zoom, Teams or Meet'); };
   if (features && !features.virtual_background) {
     return <><PageHeader title="Virtual background" /><Card><EmptyState icon={MonitorPlay} title="Virtual backgrounds aren't in your plan" action={<ButtonLink as={Link} to="/user/plans">Upgrade plan</ButtonLink>} /></Card></>;
@@ -226,6 +238,11 @@ export function VirtualBackground() {
             <Field label="Style">
               <div className="grid grid-cols-2 gap-2">{BG_STYLES.map(([k, l]) => <button key={k} type="button" onClick={() => setStyle(k)} className={cn('cursor-pointer rounded-xl border-2 px-3 py-2 text-sm font-medium transition', style === k ? 'border-primary bg-primary-soft text-primary' : 'border-border hover:border-primary/40')}>{l}</button>)}</div>
             </Field>
+            <div>
+              <input ref={pick} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={onPhoto} />
+              <Button variant="outline" className="w-full" onClick={() => pick.current?.click()}><ImageDown />{photo ? 'Change my own picture' : 'Use my own picture'}</Button>
+              <p className="mt-1.5 text-xs text-muted-foreground">Your picture stays on this device; it is only used to make the download. Best size 1920×1080.</p>
+            </div>
             <div className="grid grid-cols-2 gap-3"><ColorInput label="Primary" value={colors.primary} onChange={(x) => setColors({ ...colors, primary: x })} /><ColorInput label="Secondary" value={colors.secondary} onChange={(x) => setColors({ ...colors, secondary: x })} /></div>
             <label className="flex cursor-pointer items-center justify-between rounded-2xl border border-border p-3 text-sm font-medium">Show QR code<Switch checked={withQr} onChange={setWithQr} /></label>
             <Button className="w-full" size="lg" onClick={download} disabled={!v}><ImageDown />Download 1920×1080 PNG</Button>

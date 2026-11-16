@@ -126,6 +126,22 @@ export function LegalTab({ v, form }) {
 }
 
 /* ------------------------------------------------------------ QR */
+/** PNG of the saved QR. A styled code only exists as SVG on the server, so it is drawn to a canvas here. */
+async function downloadQrPng(vcardId, alias, size) {
+  try {
+    const r = await fetch(`/api/user/vcards/${vcardId}/qrcode?inline=1&size=${size}`, { credentials: 'include' });
+    const blob = await r.blob();
+    let out = blob;
+    if (blob.type.includes('svg')) {
+      const img = new Image(); const u = URL.createObjectURL(blob);
+      await new Promise((ok, no) => { img.onload = ok; img.onerror = no; img.src = u; });
+      const c = document.createElement('canvas'); c.width = size; c.height = size; c.getContext('2d').drawImage(img, 0, 0, size, size); URL.revokeObjectURL(u);
+      out = await new Promise((ok) => c.toBlob(ok, 'image/png'));
+    }
+    const a = document.createElement('a'); a.href = URL.createObjectURL(out); a.download = `${alias || 'card'}-qr.png`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  } catch { toast.error('Could not make the PNG. Save the card first, then try again.'); }
+}
+
 export function QrTab({ v, form, locked, vcardId, alias, rev }) {
   const q = v.qr_settings || {};
   const set = (k, x) => form.set('qr_settings', { ...q, [k]: x });
@@ -152,6 +168,12 @@ export function QrTab({ v, form, locked, vcardId, alias, rev }) {
               <ColorInput label="Background" value={q.bg || '#ffffff'} onChange={(x) => set('bg', x)} />
             </div>
           )}
+          {!locked('custom_qrcode') && (
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label="Dot style"><Select value={q.style || 'square'} onChange={(x) => set('style', x)} options={[{ value: 'square', label: 'Squares (classic)' }, { value: 'rounded', label: 'Rounded' }, { value: 'dots', label: 'Dots' }]} /></Field>
+              <Field label="Corner (eye) style"><Select value={q.eye || 'square'} onChange={(x) => set('eye', x)} options={[{ value: 'square', label: 'Square' }, { value: 'rounded', label: 'Rounded' }, { value: 'circle', label: 'Circle' }]} /></Field>
+            </div>
+          )}
           <Field label={`Download size: ${q.size || 600}px`}><input type="range" min="200" max="1200" step="50" value={q.size || 600} onChange={(e) => set('size', Number(e.target.value))} className="w-full accent-[var(--primary)]" /></Field>
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Error correction" hint="Higher survives print damage and logos"><Select value={q.ec || 'M'} onChange={(x) => set('ec', x)} options={[{ value: 'L', label: 'Low (7%)' }, { value: 'M', label: 'Medium (15%)' }, { value: 'Q', label: 'Quartile (25%)' }, { value: 'H', label: 'High (30%)' }]} /></Field>
@@ -160,9 +182,9 @@ export function QrTab({ v, form, locked, vcardId, alias, rev }) {
           <SwitchRow id="showqr" title="Show QR code on the card" checked={v.show_qr_code} onChange={(x) => form.set('show_qr_code', x)} />
         </div>
         <div className="text-center">
-          <div className="rounded-3xl border border-border bg-white p-4 shadow-soft"><img key={rev} src={`/api/user/vcards/${vcardId}/qrcode?size=400&r=${rev}`} alt="QR code" className="mx-auto aspect-square w-full" /></div>
+          <div className="rounded-3xl border border-border bg-white p-4 shadow-soft"><img key={rev} src={`/api/user/vcards/${vcardId}/qrcode?size=400&inline=1&r=${rev}`} alt="QR code" className="mx-auto aspect-square w-full" /></div>
           <div className="mt-3 grid gap-2">
-            <ButtonLink href={`/api/user/vcards/${vcardId}/qrcode`} variant="outline" size="sm"><Download />PNG</ButtonLink>
+            <Button variant="outline" size="sm" onClick={() => downloadQrPng(vcardId, alias, q.size || 600)}><Download />PNG</Button>
             <ButtonLink href={`/api/user/vcards/${vcardId}/qrcode?format=svg`} variant="outline" size="sm"><Download />SVG (print)</ButtonLink>
           </div>
         </div>
@@ -366,6 +388,34 @@ export const BlogTab = (p) => <ContentList {...p} kind="blogs" />;
 export const PagesTab = (p) => <ContentList {...p} kind="pages" />;
 
 /* -------------------------------------------------- advanced extras */
+const DOB_ICONS = [['', 'Cake (default)'], ['ri-gift-line', 'Gift'], ['ri-calendar-event-line', 'Calendar'], ['ri-star-smile-line', 'Star'], ['ri-heart-3-line', 'Heart'], ['ri-emotion-happy-line', 'Smile']];
+function CardExtras({ v, form }) {
+  const x = v.extras || {}; const bn = x.banner || {};
+  const set = (patch) => form.set('extras', { ...x, ...patch });
+  const setBn = (patch) => set({ banner: { ...bn, ...patch } });
+  const [stores, setStores] = useState([]);
+  useEffect(() => { api.get('/user/stores', { params: { limit: 100 } }).then(({ data }) => setStores(data.data || [])).catch(() => {}); }, []);
+  return (
+    <>
+      <SwitchRow id="shr" title="Share menu" description="The Share button opens WhatsApp, Facebook, X, LinkedIn, Telegram, Snapchat, e-mail and copy link" checked={x.share_sheet !== false} onChange={(val) => set({ share_sheet: val })} />
+      <SwitchRow id="trm" title="Ask visitors to accept your terms" description="Adds a checkbox to the enquiry and appointment forms. Needs Terms or a Privacy policy on the Legal tab." checked={!!x.terms_checkbox} onChange={(val) => set({ terms_checkbox: val })} />
+      <SwitchRow id="bnr" title="Popup banner" description="A message with a button, shown once when someone opens your card" checked={!!bn.enabled} onChange={(val) => setBn({ enabled: val })} />
+      {bn.enabled && (
+        <div className="grid gap-3 rounded-2xl border border-border p-4 sm:grid-cols-2">
+          <Field label="Banner title" required error={!String(bn.title || '').trim() ? 'Banner title is required' : form.errors.banner_title}><Input value={bn.title || ''} maxLength={80} onChange={(e) => setBn({ title: e.target.value })} placeholder="Eid sale: 20% off" /></Field>
+          <Field label="Button text"><Input value={bn.button || ''} maxLength={30} onChange={(e) => setBn({ button: e.target.value })} placeholder="Shop now" /></Field>
+          <div className="sm:col-span-2"><Field label="Banner text"><Textarea rows={2} value={bn.text || ''} maxLength={300} onChange={(e) => setBn({ text: e.target.value })} /></Field></div>
+          <div className="sm:col-span-2"><Field label="Button link" error={form.errors.banner_url}><Input type="url" value={bn.url || ''} onChange={(e) => setBn({ url: e.target.value })} placeholder="https://" /></Field></div>
+        </div>
+      )}
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field label="Birthday icon" hint="Shown next to your date of birth"><Select value={x.dob_icon || ''} onChange={(val) => set({ dob_icon: val })} options={DOB_ICONS.map(([value, label]) => ({ value, label }))} /></Field>
+        <Field label="Show a WhatsApp store on this card" hint={stores.length ? 'Adds a Shop section that opens your store' : 'Create a WhatsApp store first'}><Select value={x.store_id ? String(x.store_id) : ''} onChange={(val) => set({ store_id: val ? Number(val) : null })} allowEmpty placeholder="No store" options={stores.map((st) => ({ value: String(st.id), label: st.name }))} /></Field>
+      </div>
+    </>
+  );
+}
+
 export function AdvancedExtras({ v, form, locked, data }) {
   const { settings } = useAuth();
   const statusTone = { approved: 'success', pending: 'warning', rejected: 'danger' }[data.custom_domain_status];
@@ -381,6 +431,7 @@ export function AdvancedExtras({ v, form, locked, data }) {
           <SwitchRow id="sticky" title="Sticky quick-action bar" description="Floating call / WhatsApp / save buttons at the bottom" checked={v.sticky_bar !== false} onChange={(x) => form.set('sticky_bar', x)} />
           <SwitchRow id="ask" title="Ask for details before saving the contact" description="Visitors leave their name before downloading your vCard file - you get them as leads" checked={!!v.ask_before_contact} onChange={(x) => form.set('ask_before_contact', x)} />
           <SwitchRow id="att" title="Allow attachments in enquiries" description="Visitors can attach an image or PDF (max 5 MB)" checked={!!v.enquiry_attachment} onChange={(x) => form.set('enquiry_attachment', x)} />
+          <CardExtras v={v} form={form} />
           <SwitchRow id="nl" title="Newsletter popup" description={locked('newsletter') ? 'Not included in your plan' : 'Collect e-mail subscribers with a friendly popup'} checked={!!v.newsletter_popup} disabled={locked('newsletter')} onChange={(x) => form.set('newsletter_popup', x)} />
           <SwitchRow id="pwa" title="Installable app (PWA)" description={locked('pwa') ? 'Not included in your plan' : 'Visitors can add your card to their home screen'} checked={!!v.pwa_enable} disabled={locked('pwa')} onChange={(x) => form.set('pwa_enable', x)} />
           {settings.business_directory_enable !== '0' && <SwitchRow id="dir" title="List in the business directory" description={locked('business_directory') ? 'Not included in your plan' : 'Appear on the public directory so new clients can find you'} checked={!!v.business_directory} disabled={locked('business_directory')} onChange={(x) => form.set('business_directory', x)} />}

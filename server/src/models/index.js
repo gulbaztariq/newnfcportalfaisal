@@ -254,7 +254,8 @@ const Vcard = sequelize.define('vcard', {
   pwa_enable: { type: T.BOOLEAN, defaultValue: true },
   week_format: { type: T.STRING(3), defaultValue: 'mon' }, // week starts on mon | sun
   business_directory: { type: T.BOOLEAN, defaultValue: false },
-  qr_settings: json('qr_settings', {}), // { fg, bg, size, margin }
+  qr_settings: json('qr_settings', {}), // { fg, bg, size, margin, ec, style, eye }
+  extras: json('extras', {}), // { banner:{enabled,title,text,button,url}, terms_checkbox, dob_icon, share_sheet, store_id }
   appointment_settings: json('appointment_settings', {}), // { enabled, paid, price, duration, slots:{mon:[{from,to}]}, blocked:[date] }
   custom_domain: T.STRING(191),
   custom_domain_status: T.STRING(20), // pending | approved | rejected
@@ -275,7 +276,7 @@ const VcardGallery = sequelize.define('vcard_gallery', {
   image: T.STRING(255),
   caption: T.STRING(150),
   category: T.STRING(80),
-  type: { type: T.STRING(10), defaultValue: 'image' }, // image | youtube
+  type: { type: T.STRING(10), defaultValue: 'image' }, // image | youtube | audio | video | file (the file itself is in video_url)
   video_url: T.STRING(500),
 });
 const VcardTestimonial = sequelize.define('vcard_testimonial', {
