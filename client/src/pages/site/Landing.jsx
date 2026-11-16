@@ -508,18 +508,18 @@ export default function Landing() {
       <Navbar settings={s} />
       <Hero s={s} professions={professions.length ? professions : ['everyone']} />
       <Professions templates={d.templates} />
-      <Features features={d.features} />
+      {s.front_sec_features !== '0' && <Features features={d.features} />}
       <ShopSection />
       <Stats templates={d.templates} plans={d.plans} />
       <HowItWorks />
-      <Templates templates={d.templates} />
-      <About about={d.about} appName={s.app_name} />
-      <Pricing plans={d.plans} registerEnabled={reg} />
-      <Testimonials testimonials={d.testimonials} />
-      <Faq faqs={d.faqs} />
+      {s.front_sec_templates !== '0' && <Templates templates={d.templates} />}
+      {s.front_sec_about !== '0' && <About about={d.about} appName={s.app_name} />}
+      {s.front_sec_pricing !== '0' && <Pricing plans={d.plans} registerEnabled={reg} />}
+      {s.front_sec_testimonials !== '0' && <Testimonials testimonials={d.testimonials} />}
+      {s.front_sec_faqs !== '0' && <Faq faqs={d.faqs} />}
       <BlogSection blogs={d.blogs} enabled={s.front_blog_enable !== '0'} />
       <Cta registerEnabled={reg} />
-      <ContactSection s={s} />
+      {s.front_sec_contact !== '0' && <ContactSection s={s} />}
       <Footer settings={s} />
       <Banner s={s} />
       <SiteExtras settings={s} />

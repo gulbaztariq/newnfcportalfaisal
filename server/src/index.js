@@ -26,16 +26,18 @@ app.use(require('express-rate-limit')({ windowMs: 60 * 1000, limit: 600, standar
 
 // per-request nonce for the small inline scripts on server rendered pages
 app.use((_req, res, next) => { res.locals.nonce = crypto.randomBytes(16).toString('base64'); next(); });
+// origins of the extra scripts the super admin added in Front settings (a widget may also call home or open a frame)
+const extraOrigins = () => { const o = [...new Set(require('./services/settings').extraScripts().map((u) => new URL(u).origin))]; return o.length ? o.join(' ') : "'self'"; };
 app.use(helmet({
   contentSecurityPolicy: {
     useDefaults: true,
     directives: {
-      'script-src': ["'self'", (_req, res) => `'nonce-${res.locals.nonce}'`, 'https://www.googletagmanager.com', 'https://js.stripe.com', 'https://accounts.google.com', 'https://www.google.com', 'https://www.gstatic.com'],
+      'script-src': ["'self'", (_req, res) => `'nonce-${res.locals.nonce}'`, 'https://www.googletagmanager.com', 'https://js.stripe.com', 'https://accounts.google.com', 'https://www.google.com', 'https://www.gstatic.com', 'https://connect.facebook.net', extraOrigins],
       'style-src': ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com', 'https://accounts.google.com'],
       'font-src': ["'self'", 'data:', 'https://fonts.gstatic.com'],
       'img-src': ["'self'", 'data:', 'blob:', 'https:'],
-      'connect-src': ["'self'", 'https://www.google-analytics.com', 'https://*.google-analytics.com', 'https://accounts.google.com'],
-      'frame-src': ["'self'", 'https://js.stripe.com', 'https://accounts.google.com', 'https://www.google.com'],
+      'connect-src': ["'self'", 'https://www.google-analytics.com', 'https://*.google-analytics.com', 'https://accounts.google.com', 'https://graph.facebook.com', 'https://www.facebook.com', extraOrigins],
+      'frame-src': ["'self'", 'https://js.stripe.com', 'https://accounts.google.com', 'https://www.google.com', 'https://www.facebook.com', 'https://staticxx.facebook.com', extraOrigins],
       'frame-ancestors': ["'self'", config.clientUrl],
       'form-action': ["'self'"],
       'upgrade-insecure-requests': config.isProd ? [] : null,

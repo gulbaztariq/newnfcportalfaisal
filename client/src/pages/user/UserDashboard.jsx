@@ -7,6 +7,7 @@ import { useAuth } from '@/lib/auth';
 import { fmtDate, fmtDateTime } from '@/lib/format';
 import { Card, CardHeader, CardBody, ButtonLink, EmptyState, Skeleton, Reveal, Ripples, Segmented, Menu, MenuTrigger, MenuContent, MenuItem, MenuLabel } from '@/components/ui';
 import { AnalyticsDashboard } from './Analytics';
+import WelcomeGuide from '@/components/WelcomeGuide';
 
 export default function UserDashboard() {
   const { user } = useAuth();
@@ -30,6 +31,7 @@ export default function UserDashboard() {
             <h1 className="mt-1 font-display text-3xl font-bold md:text-4xl">Hey {user.first_name} 👋</h1>
             <p className="mt-2 max-w-md text-white/65">Here is how your cards are performing. Share your link, QR code or NFC card to grow these numbers.</p>
             <div className="mt-6 flex flex-wrap gap-3">
+              <WelcomeGuide userId={user.id} />
               {d.vcards?.length === 1 && <ButtonLink as={Link} to={`/user/vcards/${d.vcards[0].id}/edit`} variant="white"><Pencil />Edit my vCard</ButtonLink>}
               {d.vcards?.length > 1 && (
                 <Menu>

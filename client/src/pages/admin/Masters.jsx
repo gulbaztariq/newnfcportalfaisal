@@ -1,8 +1,9 @@
 import { Coins, Globe2, Map as MapIcon, Building2, Languages as LangIcon, TicketPercent, Sparkles, Info, Quote, HelpCircle, Inbox, MailCheck, CreditCard, ImageOff } from 'lucide-react';
+import { useState } from 'react';
 import api from '@/lib/api';
 import CrudPage from '@/components/CrudPage';
 import ExportMenu from '@/components/ExportMenu';
-import { Badge, StatusBadge, Switch, run } from '@/components/ui';
+import { Badge, StatusBadge, Switch, Dialog, Button, Skeleton, run } from '@/components/ui';
 import { fmtDate, fmtDateTime, money } from '@/lib/format';
 
 const toggleCol = (endpoint, field = 'status', label = 'Status') => ({
@@ -57,12 +58,31 @@ export const Languages = () => (
     fields={[{ name: 'name', label: 'Name', half: true, required: true }, { name: 'iso_code', label: 'ISO code', half: true, required: true, hint: 'e.g. en, fr, ar' }, { name: 'status', label: 'Enabled for vCards', type: 'switch' }]} />
 );
 
+function CouponUses({ coupon }) {
+  const [rows, setRows] = useState(null);
+  const [open, setOpen] = useState(false);
+  const show = (e) => { e.stopPropagation(); setOpen(true); setRows(null); api.get(`/admin/coupon-uses/${coupon.id}`).then(({ data }) => setRows(data.data)).catch(() => setRows([])); };
+  return (
+    <>
+      <button type="button" onClick={show} className="cursor-pointer text-sm font-medium text-primary hover:underline">View users</button>
+      <Dialog open={open} onOpenChange={setOpen} size="md" icon={TicketPercent} title={`Who used ${coupon.coupon_name}`} footer={<Button variant="outline" onClick={() => setOpen(false)}>Close</Button>}>
+        {!rows ? <Skeleton className="h-24 rounded-2xl" /> : !rows.length ? <p className="text-sm text-muted-foreground">Nobody has used this coupon yet.</p> : (
+          <div className="divide-y divide-border rounded-2xl border border-border">
+            {rows.map((u) => <div key={u.id} className="flex items-center justify-between gap-3 px-4 py-3 text-sm"><div className="min-w-0"><p className="truncate font-medium">{u.user?.name || 'Deleted user'}</p><p className="truncate text-xs text-muted-foreground">{u.user?.email}</p></div><div className="text-right"><p>{u.plan}</p><p className="text-xs text-muted-foreground">{fmtDate(u.date)}</p></div></div>)}
+          </div>
+        )}
+      </Dialog>
+    </>
+  );
+}
+
 export const CouponCodes = () => (
   <CrudPage title="Coupon Codes" description="Discounts users can apply at checkout." endpoint="/admin/coupon-codes" singular="Coupon" icon={TicketPercent}
     columns={[
       { key: 'coupon_name', label: 'Code', render: (r) => <span className="rounded-lg border border-dashed border-primary/50 bg-primary-soft px-2.5 py-1 font-mono text-xs font-semibold text-primary">{r.coupon_name}</span> },
       { key: 'discount', label: 'Discount', render: (r) => <span className="font-semibold">{r.type === 'percentage' ? `${Number(r.discount)}%` : money(r.discount)}</span> },
       { key: 'usage', label: 'Usage left', render: (r) => (r.coupon_limit ? `${r.coupon_limit_left ?? r.coupon_limit} / ${r.coupon_limit}` : <span className="text-muted-foreground">Unlimited</span>) },
+      { key: 'used', label: 'Used by', render: (r) => <CouponUses coupon={r} /> },
       { key: 'expire_at', label: 'Expires', render: (r) => (r.expire_at ? fmtDate(r.expire_at) : <span className="text-muted-foreground">Never</span>) },
       toggleCol('/admin/coupon-codes'),
     ]}

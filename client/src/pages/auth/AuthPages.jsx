@@ -6,7 +6,7 @@ import api from '@/lib/api';
 import { check } from '@/lib/validate';
 import { useAuth, homeFor } from '@/lib/auth';
 import Logo from '@/components/Logo';
-import { recaptchaToken, googleEnabled, renderGoogleButton } from '@/lib/thirdparty';
+import { recaptchaToken, googleEnabled, renderGoogleButton, facebookEnabled, facebookLogin } from '@/lib/thirdparty';
 import { Button, Input, Field, Checkbox, Ripples, Aurora } from '@/components/ui';
 
 /* ------------------------------------------------------------- showcase */
@@ -59,6 +59,23 @@ function Showcase() {
 
 function Shell({ title, subtitle, children, footer }) {
   useEffect(() => { document.title = title; }, [title]);
+  const { settings } = useAuth();
+  const theme = settings?.auth_theme || 'split';
+  if (theme === 'centered' || theme === 'minimal') {
+    // one centred column: "centered" sits in a card on a soft colour wash, "minimal" is plain
+    return (
+      <div className={`flex min-h-screen flex-col items-center px-5 py-10 ${theme === 'centered' ? 'bg-linear-to-br from-primary-soft via-background to-primary-soft' : 'bg-background'}`}>
+        <Link to="/" className="mb-8"><Logo /></Link>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }} className={`w-full max-w-md ${theme === 'centered' ? 'rounded-3xl border border-border bg-card p-8 shadow-lift' : 'p-2'}`}>
+          <h1 className="font-display text-3xl font-bold tracking-tight">{title}</h1>
+          <p className="mt-2 text-sm text-muted-foreground">{subtitle}</p>
+          <div className="mt-8">{children}</div>
+          {footer && <div className="mt-8 text-center text-sm text-muted-foreground">{footer}</div>}
+        </motion.div>
+        <p className="mt-8 text-xs text-muted-foreground">© {new Date().getFullYear()} {settings?.app_name || 'NFC Profile'} · <Link to="/privacy-policy" className="hover:text-foreground">Privacy</Link> · <Link to="/terms-conditions" className="hover:text-foreground">Terms</Link></p>
+      </div>
+    );
+  }
   return (
     <div className="grid min-h-screen lg:grid-cols-[1fr_1.05fr]">
       <div className="relative flex flex-col px-6 py-8 sm:px-12 lg:px-16">
@@ -112,13 +129,27 @@ function GoogleSignIn({ text, referral, onError }) {
       } catch (ex) { onError?.(ex.message); }
     }, text).catch(() => {});
   }, [settings.google_client_id]); // eslint-disable-line
-  if (!googleEnabled(settings)) return null;
+  const fb = facebookEnabled(settings);
+  const [fbBusy, setFbBusy] = useState(false);
+  const withFacebook = async () => {
+    setFbBusy(true);
+    try {
+      const access_token = await facebookLogin(settings);
+      const { data } = await api.post('/auth/facebook', { access_token, referral });
+      if (data.setup_required) return setChallenge({ setup: data.setup_token });
+      if (data.two_factor) return setChallenge({ id: data.challenge, method: data.method, hint: data.email_hint });
+      setUser(data.user); navigate(afterLogin(data.user));
+    } catch (ex) { onError?.(ex.message); } finally { setFbBusy(false); }
+    return undefined;
+  };
+  if (!googleEnabled(settings) && !fb) return null;
   if (challenge?.setup) return <SetupAuthenticator token={challenge.setup} onBack={() => setChallenge(null)} />;
   if (challenge) return <TwoFactorStep challenge={challenge.id} method={challenge.method} hint={challenge.hint} onBack={() => setChallenge(null)} />;
   return (
     <div className="mt-6">
       <div className="relative mb-6 text-center text-xs text-muted-foreground"><span className="absolute inset-x-0 top-1/2 h-px bg-border" /><span className="relative bg-background px-3">or continue with</span></div>
-      <div ref={ref} className="flex min-h-11 justify-center" />
+      {googleEnabled(settings) && <div ref={ref} className="flex min-h-11 justify-center" />}
+      {fb && <Button type="button" variant="outline" className="mt-3 w-full" onClick={withFacebook} loading={fbBusy}><span className="grid size-5 place-items-center rounded-full bg-[#1877f2] text-xs font-bold text-white">f</span>Continue with Facebook</Button>}
     </div>
   );
 }

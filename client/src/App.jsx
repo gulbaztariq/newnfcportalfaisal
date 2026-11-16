@@ -62,6 +62,7 @@ const AX = {
   Blog: lazyNamed(() => import('@/pages/admin/AdminExtras'), 'FrontBlogs'),
 };
 const BZ = {
+  Translations: lazyNamed(() => import('@/pages/admin/Translations'), 'Translations'),
   WhatsappLeads: lazyNamed(() => import('@/pages/admin/WhatsappLeads'), 'WhatsappLeads'),
   Orders: lazyNamed(() => import('@/pages/admin/Orders'), 'Orders'),
   OrderDetail: lazyNamed(() => import('@/pages/admin/Orders'), 'OrderDetail'),
@@ -195,6 +196,7 @@ export default function App() {
                 <Route path="states" element={<MS.States />} />
                 <Route path="cities" element={<MS.Cities />} />
                 <Route path="languages" element={<MS.Languages />} />
+                <Route path="translations" element={<BZ.Translations />} />
                 <Route path="send-email" element={<A.SendEmail />} />
                 <Route path="cms/settings" element={<A.FrontSettings />} />
                 <Route path="cms/subscribers" element={<MS.Subscribers />} />

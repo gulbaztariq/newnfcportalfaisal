@@ -71,6 +71,7 @@ export const adminMenu = (user) => filterMenu([
       { label: 'Currencies', icon: Coins, to: '/admin/currencies', perm: 'masters' },
       { label: 'Locations', icon: Globe2, perm: 'masters', children: [{ label: 'Countries', to: '/admin/countries' }, { label: 'States', to: '/admin/states' }, { label: 'Cities', to: '/admin/cities' }] },
       { label: 'Languages', icon: Languages, to: '/admin/languages', perm: 'masters' },
+      { label: 'Translations', icon: Languages, to: '/admin/translations', perm: 'settings' },
       {
         label: 'Front CMS', icon: Newspaper, perm: 'cms', children: [
           { label: 'Front Settings', to: '/admin/cms/settings', perm: 'settings' }, { label: 'Email Subscribers', to: '/admin/cms/subscribers' },

@@ -5,7 +5,7 @@ import api from '@/lib/api';
 import CrudPage from '@/components/CrudPage';
 import { fmtDate, fmtDateTime } from '@/lib/format';
 import {
-  PageHeader, TableCard, DataTable, SearchInput, Segmented, Action, Actions, Switch, Badge, StatusBadge, UserCell, EmptyState, Card, CardBody, useList, run, confirm,
+  PageHeader, TableCard, DataTable, SearchInput, Segmented, Action, Actions, Switch, Badge, StatusBadge, UserCell, EmptyState, Card, CardBody, useList, run, confirm, ButtonLink,
 } from '@/components/ui';
 
 const DOMAIN_TONE = { pending: 'warning', approved: 'success', rejected: 'danger' };
@@ -21,6 +21,7 @@ export function CustomDomains() {
   return (
     <>
       <PageHeader title="Custom Domains" description="Users can point their own domain at a vCard. Approve a domain once its DNS is set up.">
+        <ButtonLink href="/api/admin/custom-domains/guide" variant="outline">Download setup guide (PDF)</ButtonLink>
         <Segmented id="cds" value={status} onChange={setStatus} options={[{ value: '', label: 'All' }, { value: 'pending', label: 'Pending' }, { value: 'approved', label: 'Approved' }, { value: 'rejected', label: 'Rejected' }]} />
       </PageHeader>
       {data && (
