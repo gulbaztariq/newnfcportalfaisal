@@ -97,7 +97,7 @@ r.patch('/appointments/:aid', wrap(async (req, res) => {
   if (req.body.paid !== undefined) data.paid = toBool(req.body.paid);
   await a.update(data);
   if (data.status && a.email && data.status !== 'pending') {
-    mail.sendTemplate('appointment_status', a.email, { customer: a.name, date: a.date, time: `${a.from_time} - ${a.to_time}`, vcard: a.vcard?.name, status: data.status }).catch(() => {});
+    mail.sendTemplate('appointment_status', a.email, { customer: a.name, date: a.date, time: `${a.from_time} - ${a.to_time}`, vcard: a.vcard?.name, status: data.status }, { ownerId: req.user.id }).catch(() => {});
   }
   res.json({ message: 'Appointment updated' });
 }));

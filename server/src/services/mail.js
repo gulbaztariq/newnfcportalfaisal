@@ -56,6 +56,9 @@ const TEMPLATES = {
   plan_expiring: { subject: 'Your {{plan}} plan expires in {{days}} day(s), on {{date}}', body: '<p>Hello {{name}},</p><p>Your <b>{{plan}}</b> plan expires on <b>{{date}}</b> (in {{days}} day(s)). Renew now to keep your vCards online.</p><p><a href="{{plans_url}}">Renew plan</a></p>' },
   payment_status: { subject: 'Payment {{status}}', body: '<p>Your payment of <b>{{amount}}</b> has been <b>{{status}}</b>.</p>' },
   nfc_status: { subject: 'NFC order {{order}} is {{status}}', body: '<p>Your NFC card order <b>{{order}}</b> status is now <b>{{status}}</b>.</p>' },
+  vcard_order_owner: { subject: 'New order {{order}}: {{item}}', body: '<p><b>{{customer}}</b> ({{contact}}) ordered <b>{{quantity}} x {{item}}</b> on {{vcard}}.</p><p><b>Total:</b> {{amount}}<br><b>Payment:</b> {{status}}<br><b>Address:</b> {{address}}</p><p>{{notes}}</p>' },
+  vcard_order_customer: { subject: 'Your order {{order}} with {{vcard}}', body: '<p>Hello {{customer}},</p><p>Thank you for your order of <b>{{quantity}} x {{item}}</b>.</p><p><b>Order:</b> {{order}}<br><b>Total:</b> {{amount}}<br><b>Payment:</b> {{status}}</p><p>{{vcard}} will contact you shortly.</p>' },
+  vcard_order_status: { subject: 'Order {{order}} is {{status}}', body: '<p>Hello {{customer}},</p><p>Your order <b>{{order}}</b> ({{item}}) with {{vcard}} is now <b>{{status}}</b>.</p>' },
   appointment_booked: { subject: 'New appointment on {{date}}', body: '<p><b>{{customer}}</b> booked an appointment on <b>{{date}}</b> at <b>{{time}}</b> via {{vcard}}.</p><p>{{notes}}</p>' },
   appointment_status: { subject: 'Your appointment is {{status}}', body: '<p>Hello {{customer}},</p><p>Your appointment on <b>{{date}}</b> at <b>{{time}}</b> with {{vcard}} is <b>{{status}}</b>.</p>' },
   enquiry_received: { subject: 'New enquiry from {{customer}}', body: '<p>You received a new enquiry on <b>{{vcard}}</b>.</p><p><b>{{customer}}</b> ({{contact}})</p><p>{{message}}</p>' },
@@ -67,17 +70,33 @@ const TEMPLATES = {
 };
 
 /** send a template; values are HTML-escaped (except keys ending in _url which are escaped as attributes) */
-async function sendTemplate(key, to, values = {}) {
+/** a card owner's own mail server (User > Settings > My e-mail) */
+function userTransport(all) {
+  return {
+    t: nodemailer.createTransport({ host: all.smtp_host, port: Number(all.smtp_port || 587), secure: all.smtp_secure === 'ssl' || Number(all.smtp_port) === 465, auth: all.smtp_user ? { user: all.smtp_user, pass: all.smtp_password || '' } : undefined, connectionTimeout: 15000, greetingTimeout: 15000 }),
+    from: `${all.smtp_from_name || all.smtp_from_email} <${all.smtp_from_email}>`,
+  };
+}
+async function sendVia(ut, { to, subject, html }) { return ut.t.sendMail({ from: ut.from, to, subject, html: await layout(subject, html) }); }
+
+/** opts.ownerId: e-mails to a card's customers go out through the owner's own mail server when they set one up (falls back to the system one) */
+async function sendTemplate(key, to, values = {}, opts = {}) {
   const s = await settings.all();
   const t = TEMPLATES[key];
   const subject = s[`mail_tpl_${key}_subject`] || t.subject;
   const body = s[`mail_tpl_${key}_body`] || t.body;
   const vals = { app_name: s.app_name, ...values };
   const fill = (str, html) => str.replace(/\{\{\s*(\w+)\s*\}\}/g, (_, k) => (vals[k] === undefined ? '' : html && !k.endsWith('_html') ? esc(vals[k]) : String(vals[k])));
+  if (opts.ownerId) {
+    try {
+      const all = await require('./usersettings').full(opts.ownerId);
+      if (all.smtp_enable === '1' && all.smtp_host && all.smtp_from_email) return await sendVia(userTransport(all), { to, subject: fill(subject, false), html: fill(body, true) });
+    } catch (e) { console.error('[mail] own server failed, using the system one:', e.message); }
+  }
   return send({ to, subject: fill(subject, false), html: fill(body, true) });
 }
 
 /** true when a real SMTP server is configured (otherwise mail is only logged) */
 async function isConfigured() { const s = await settings.all(); return !!(s.mail_host || mail.host); }
 
-module.exports = { send, sendTemplate, esc, TEMPLATES, isConfigured };
+module.exports = { send, sendTemplate, esc, TEMPLATES, isConfigured, userTransport, sendVia };

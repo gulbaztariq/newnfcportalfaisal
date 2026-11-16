@@ -73,6 +73,7 @@ export function VcardList() {
 /** Template gallery (search, categories, favourites, full-screen preview) */
 export const TemplatePicker = TemplateGallery;
 
+const randomAlias = () => { const w = ['card', 'hello', 'meet', 'tap', 'link', 'go', 'hi', 'my']; return `${w[Math.floor(Math.random() * w.length)]}-${Math.random().toString(36).slice(2, 8)}`; };
 export function VcardCreate() {
   const navigate = useNavigate();
   const { settings } = useAuth();
@@ -136,7 +137,7 @@ export function VcardCreate() {
             <Card className="max-w-2xl p-6">
               <div className="grid gap-5">
                 <Field label="Card name" required error={form.errors.name} hint="For you only, e.g. 'Work card'"><Input {...form.input('name')} autoFocus placeholder="My business card" /></Field>
-                <Field label="Your card link" required error={form.errors.url_alias || (alias === false ? 'This link is already taken' : null)}>
+                <Field label="Your card link" required hint={<button type="button" className="cursor-pointer text-primary hover:underline" onClick={() => { touched.current = true; form.set('url_alias', randomAlias()); }}>Give me a random link</button>} error={form.errors.url_alias || (alias === false ? 'This link is already taken' : null)}>
                   <Input prefix={`${(settings.app_url || '').replace(/^https?:\/\//, '')}/`} value={form.values.url_alias} onChange={(e) => { touched.current = true; form.set('url_alias', e.target.value.toLowerCase().replace(/[^a-z0-9-_]/g, '')); }}
                     suffix={<span className="px-2">{alias === 'checking' ? <Loader2 className="size-4 animate-spin text-muted-foreground" /> : alias === true ? <CheckCircle2 className="size-4 text-success" /> : alias === false ? <XCircle className="size-4 text-danger" /> : null}</span>} />
                 </Field>

@@ -278,7 +278,7 @@ export function Register() {
   const set = (k, v) => { setF((x) => ({ ...x, [k]: v })); setErr((e) => ({ ...e, errors: { ...e.errors, [k]: undefined } })); };
   const submit = async (e) => {
     e.preventDefault();
-    const bad = check(f, { first_name: 'required|max:100', last_name: 'required|max:100', email: 'required|email|max:191', contact: 'phone', password: 'required|min:8|max:100', password_confirmation: 'required|same:password' });
+    const bad = check(f, { first_name: 'required|max:100', last_name: 'required|max:100', email: 'required|email|max:191', contact: settings.mobile_validation === '1' ? 'required|phone' : 'phone', password: 'required|min:8|max:100', password_confirmation: 'required|same:password' }, { contact: 'Phone number' });
     if (!f.terms) bad.terms = 'You must accept the Terms and Privacy Policy to create an account';
     if (Object.keys(bad).length) { setErr({ message: '', errors: bad }); return; }
     setBusy(true);
@@ -308,7 +308,7 @@ export function Register() {
           <Field label="Last name" htmlFor="ln" error={err.errors.last_name}><Input id="ln" value={f.last_name} onChange={(e) => set('last_name', e.target.value)} aria-invalid={!!err.errors.last_name || undefined} /></Field>
         </div>
         <Field label="E-mail" htmlFor="em" error={err.errors.email}><Input id="em" icon={Mail} type="email" value={f.email} onChange={(e) => set('email', e.target.value)} placeholder="you@company.com" aria-invalid={!!err.errors.email || undefined} /></Field>
-        <Field label="Phone (optional)" htmlFor="ph" error={err.errors.contact}><Input id="ph" icon={Phone} type="tel" value={f.contact} onChange={(e) => set('contact', e.target.value)} placeholder="+44 7700 900123" autoComplete="tel" /></Field>
+        <Field label={settings.mobile_validation === '1' ? 'Phone number' : 'Phone (optional)'} required={settings.mobile_validation === '1'} htmlFor="ph" error={err.errors.contact}><Input id="ph" icon={Phone} type="tel" value={f.contact} onChange={(e) => set('contact', e.target.value)} placeholder="+44 7700 900123" autoComplete="tel" /></Field>
         <Field label="Password" htmlFor="p1" error={err.errors.password}>
           <PasswordInput id="p1" value={f.password} onChange={(v) => set('password', v)} invalid={!!err.errors.password} autoComplete="new-password" />
           <div className="mt-2 flex gap-1">{[0, 1, 2, 3].map((i) => <motion.span key={i} animate={{ backgroundColor: i < strength ? ['#ef4444', '#f59e0b', '#84cc16', '#22c55e'][strength - 1] : 'var(--muted)' }} className="h-1 flex-1 rounded-full" />)}</div>

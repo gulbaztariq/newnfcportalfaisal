@@ -349,6 +349,34 @@ const VcardProduct = sequelize.define('vcard_product', {
   in_stock: { type: T.BOOLEAN, defaultValue: true },
   sort: { type: T.INTEGER, defaultValue: 0 },
 });
+/** a user's own preferences, payment gateways and mail server. Secrets are stored encrypted and never sent back to the browser. */
+const UserSetting = sequelize.define('user_setting', {
+  user_id: { type: T.INTEGER, allowNull: false, unique: true },
+  data: json('data', {}), // { currency_code, time_format, manual_enable, manual_guide, stripe_enable, paypal_enable, paypal_mode, ..., smtp_host, smtp_port, smtp_user, smtp_from }
+  secrets: T.TEXT, // AES-256-GCM sealed JSON: gateway secret keys, smtp password
+});
+/** something a visitor bought on a vCard: a product, or a paid appointment. Paid to the card owner through the owner's own gateway. */
+const VcardOrder = sequelize.define('vcard_order', {
+  order_number: { type: T.STRING(30), allowNull: false, unique: true },
+  token: { type: T.STRING(64), allowNull: false, unique: true }, // public reference used by the payment return page
+  kind: { type: T.STRING(12), defaultValue: 'product' }, // product | appointment
+  product_id: T.INTEGER,
+  appointment_id: T.INTEGER,
+  item_name: T.STRING(190),
+  quantity: { type: T.INTEGER, defaultValue: 1 },
+  unit_price: { type: T.DECIMAL(12, 2), defaultValue: 0 },
+  amount: { type: T.DECIMAL(12, 2), defaultValue: 0 },
+  currency_code: { type: T.STRING(10), defaultValue: 'USD' },
+  customer_name: { type: T.STRING(120), allowNull: false },
+  customer_email: T.STRING(191),
+  customer_phone: T.STRING(30),
+  customer_address: T.STRING(500),
+  notes: T.STRING(1000),
+  gateway: T.STRING(20), // stripe | paypal | paystack | flutterwave | razorpay | manual
+  gateway_ref: T.STRING(191),
+  payment_status: { type: T.STRING(12), defaultValue: 'pending' }, // pending | paid | failed
+  status: { type: T.STRING(12), defaultValue: 'pending' }, // pending | approved | rejected | delivered | cancelled
+}, { indexes: [{ fields: ['vcard_id', 'created_at'] }] });
 const Appointment = sequelize.define('appointment', {
   name: { type: T.STRING(120), allowNull: false },
   email: T.STRING(191),
@@ -389,7 +417,7 @@ const VcardEvent = sequelize.define('vcard_event', {
   visitor: T.STRING(64), // same hash as the view, so one visitor can be followed across views and actions
   device: T.STRING(20),
 }, { updatedAt: false, indexes: [{ fields: ['vcard_id', 'created_at'] }] });
-for (const M of [VcardService, VcardGallery, VcardTestimonial, VcardEnquiry, VcardView, VcardEvent, VcardProduct, Appointment, VcardBlog, VcardPage, VcardSubscriber]) {
+for (const M of [VcardService, VcardGallery, VcardTestimonial, VcardEnquiry, VcardView, VcardEvent, VcardProduct, VcardOrder, Appointment, VcardBlog, VcardPage, VcardSubscriber]) {
   Vcard.hasMany(M, { foreignKey: 'vcard_id', onDelete: 'CASCADE' }); M.belongsTo(Vcard, { foreignKey: 'vcard_id' });
 }
 
@@ -629,7 +657,7 @@ const business = require('./business')(sequelize, json, { User, Vcard, NfcCard, 
 module.exports = {
   sequelize, PLAN_FEATURES, STAFF_ROLES, COMPANY_ROLES, ...business,
   User, Organisation, Currency, Country, State, City, Language, Template, Plan, CouponCode, Transaction, Subscription,
-  Vcard, VcardService, VcardGallery, VcardTestimonial, VcardEnquiry, WhatsappLine, WhatsappContact, WhatsappMessage, WaLease, VcardView, VcardEvent, VcardProduct, Appointment, VcardBlog, VcardPage, VcardSubscriber,
+  Vcard, VcardService, VcardGallery, VcardTestimonial, VcardEnquiry, WhatsappLine, WhatsappContact, WhatsappMessage, WaLease, UserSetting, VcardOrder, VcardView, VcardEvent, VcardProduct, Appointment, VcardBlog, VcardPage, VcardSubscriber,
   FrontBlog, WhatsappStore, StoreCategory, StoreProduct, StoreOrder,
   NfcCard, NfcOrder, AffiliateUser, Withdrawal,
   Setting, Feature, AboutUs, FrontTestimonial, FrontFaq, Enquiry, EmailSubscription, SentEmail,

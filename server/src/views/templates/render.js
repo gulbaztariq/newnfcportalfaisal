@@ -167,7 +167,7 @@ function footer(v, app, appUrl, L, pages) {
 /**
  * Render a public vCard page. Everything user-supplied is escaped; URLs are scheme-checked; colours are hex-checked.
  */
-function render({ v, template, services = [], gallery = [], testimonials = [], products = [], blogs = [], pages = [], app, appUrl, nonce, preview = null }) {
+function render({ v, template, services = [], gallery = [], testimonials = [], products = [], blogs = [], pages = [], app, appUrl, nonce, preview = null, payMethods = [] }) {
   const th = themeOf(v, template, app);
   const { layout, L } = th;
   const sec = { about: true, menu: true, contact: true, social: true, services: true, gallery: true, testimonials: true, hours: true, qr: true, enquiry: true, links: true, products: true, appointments: true, blog: true, embeds: true, payments: true, map: true, ...(v.sections || {}) };
@@ -217,12 +217,14 @@ function render({ v, template, services = [], gallery = [], testimonials = [], p
     ...(sec.links ? (v.custom_links || []).map((l) => card(l.url, /^ri-[a-z0-9-]+$/.test(l.icon || '') ? l.icon : 'ri-links-line', '#f59e0b', l.label, l.desc, { badge: l.badge, featured: l.featured })) : []),
   ] : [];
 
+  const canBuy = !preview && payMethods.length > 0;
+  const paySelect = (id) => `<select name="method" id="${id}" required style="width:100%;padding:13px 16px;border-radius:14px;border:1px solid var(--line);background:var(--bg);color:var(--tx);font-family:inherit;font-size:15px;margin-bottom:10px">${payMethods.length > 1 ? '<option value="">Payment method</option>' : ''}${payMethods.map((m) => `<option value="${esc(m.id)}">${esc(m.label)}</option>`).join('')}</select>`;
   const productsHtml = sec.products && products.length ? `<section class="sec s-products">${H('products', 'ri-shopping-bag-3-line', L.products)}<div class="prods">${products.map((pr) => {
     const img = (pr.images || [])[0];
     return `<div class="prod"><div class="img">${img ? `<img src="${url(img)}" alt="${esc(pr.name)}" loading="lazy" data-lb="${url(img)}">` : ''}${(pr.images || []).length > 1 ? `<div class="dots">${pr.images.map(() => '<span></span>').join('')}</div>` : ''}</div>
     <div class="body"><b>${esc(pr.name)}</b>${pr.price !== null && pr.price !== undefined ? `<span class="price">${money(pr.price, currencyOf(pr))}</span>` : ''}${pr.in_stock === false ? `<span class="out">${L.out}</span>` : ''}
     ${pr.description ? `<p style="font-size:12px;color:var(--muted)">${esc(String(pr.description).slice(0, 110))}</p>` : ''}
-    <div class="row2">${v.enable_enquiry_form ? `<button type="button" data-enq="${esc(pr.name)}">${L.enquire}</button>` : ''}${pr.product_url ? `<a class="pri" href="${url(pr.product_url)}" target="_blank" rel="noopener">${L.buy}</a>` : ''}</div></div></div>`;
+    <div class="row2">${v.enable_enquiry_form ? `<button type="button" data-enq="${esc(pr.name)}">${L.enquire}</button>` : ''}${pr.product_url ? `<a class="pri" href="${url(pr.product_url)}" target="_blank" rel="noopener">${L.buy}</a>` : canBuy && pr.id && pr.price > 0 && pr.in_stock !== false ? `<button type="button" class="pri" data-buy="${Number(pr.id)}" data-name="${esc(pr.name)}" data-price="${money(pr.price, currencyOf(pr))}">${L.buy}</button>` : ''}</div></div></div>`;
   }).join('')}</div></section>` : '';
 
   const galleryHtml = sec.gallery && gallery.length ? `<section class="sec s-gallery">${H('gallery', 'ri-image-2-line', L.gallery)}${cats.length > 1 ? `<div class="chips" id="gcats"><button class="on" data-cat="">${L.all}</button>${cats.map((c) => `<button data-cat="${esc(c)}">${esc(c)}</button>`).join('')}</div>` : ''}<div class="gal" id="gal">${gallery.map((g) => (g.type === 'youtube' && /^[\w-]{11}$/.test(g.video_url || '')
@@ -251,6 +253,7 @@ function render({ v, template, services = [], gallery = [], testimonials = [], p
       ${appt.by_service && services.length ? `<select name="service_name" style="width:100%;padding:12px 14px;border-radius:12px;border:1px solid var(--line);background:var(--bg);color:var(--tx);font-family:inherit"><option value="">${L.service}</option>${services.map((x) => `<option>${esc(x.name)}</option>`).join('')}</select>` : ''}
       <input name="name" placeholder="${L.name}" maxlength="120" required><input name="email" type="email" placeholder="${L.email}" maxlength="191"><input name="phone" placeholder="${L.phone}" maxlength="30">
       <textarea name="notes" rows="2" placeholder="${L.message}" maxlength="1000"></textarea>
+      ${canBuy && appt.paid && Number(appt.price) > 0 ? paySelect('book-method') : ''}
       <button class="btn" type="submit"><i class="ri-calendar-check-line"></i>${L.book}</button><div class="msg" id="book-msg"></div>
     </form></div></section>` : '',
     gallery: galleryHtml,
@@ -343,6 +346,7 @@ ${sig ? sig.dock : v.sticky_bar !== false ? stickyBar : ''}
 ${menuViewer}
 <div class="lb" id="lb"><button class="x" type="button" aria-label="Close">&times;</button><div id="lbc"></div></div>
 ${v.ask_before_contact ? `<div class="modal" id="askm"><div class="sheet"><h4>${L.save}</h4><p>${L.details}</p><form id="ask"><input name="name" placeholder="${L.name}" required maxlength="120"><input name="email" type="email" placeholder="${L.email}" maxlength="191"><input name="phone" placeholder="${L.phone}" maxlength="30"><button class="btn" type="submit">${L.continue}</button></form></div></div>` : ''}
+${canBuy ? `<div class="modal" id="buym"><div class="sheet" style="max-height:92vh;overflow:auto"><h4 id="buy-t"></h4><p id="buy-p"></p><form id="buy" novalidate><input type="hidden" name="product_id"><input name="customer_name" placeholder="${L.name}" required maxlength="120"><input name="customer_email" type="email" placeholder="${L.email}" maxlength="191"><input name="customer_phone" placeholder="${L.phone}" maxlength="30"><input name="customer_address" placeholder="Address" maxlength="500"><label style="display:block;font-size:12px;color:var(--muted);margin:2px 4px 4px">Quantity</label><input name="quantity" type="number" min="1" max="99" value="1" aria-label="Quantity">${paySelect('buy-method')}<button class="btn" type="submit">${L.buy}</button><div class="msg" id="buy-msg"></div></form></div></div>` : ''}
 ${v.newsletter_popup ? `<div class="modal" id="nlm"><div class="sheet"><h4>${L.newsletter}</h4><p>${L.newsletter_text}</p><form id="nl"><input name="email" type="email" placeholder="${L.email}" required maxlength="191"><button class="btn" type="submit">${L.subscribe}</button><div class="msg" id="nl-msg"></div></form></div></div>` : ''}
 <div class="toast" id="toast"></div>
 <script nonce="${nonce}">
@@ -376,6 +380,13 @@ ${v.newsletter_popup ? `<div class="modal" id="nlm"><div class="sheet"><h4>${L.n
   var nlm=$('#nlm');if(nlm){try{if(!sessionStorage.getItem('nl_'+A))setTimeout(function(){nlm.classList.add('show');sessionStorage.setItem('nl_'+A,'1')},8000)}catch(e){}
     nlm.addEventListener('click',function(e){if(e.target===nlm)nlm.classList.remove('show')});
     $('#nl').addEventListener('submit',function(e){e.preventDefault();post(API+'/subscribe',Object.fromEntries(new FormData(e.target))).then(function(x){$('#nl-msg').textContent=x.j.message||'';if(x.ok)setTimeout(function(){nlm.classList.remove('show')},1200)})})}
+  /* buy a product */
+  var buym=$('#buym');if(buym){var bf=$('#buy');buym.addEventListener('click',function(e){if(e.target===buym)buym.classList.remove('show')});
+    $$('[data-buy]').forEach(function(b){b.addEventListener('click',function(){bf.reset();bf.product_id.value=b.getAttribute('data-buy');$('#buy-t').textContent=b.getAttribute('data-name');$('#buy-p').textContent=b.getAttribute('data-price');$('#buy-msg').textContent='';buym.classList.add('show')})});
+    bf.addEventListener('submit',function(e){e.preventDefault();var d=Object.fromEntries(new FormData(bf)),m=$('#buy-msg'),bt=bf.querySelector('button');
+      if(!d.customer_name){m.textContent='Name is required';return}if(!d.customer_email&&!d.customer_phone){m.textContent='Please leave an e-mail address or phone number';return}if(!d.method){m.textContent='Payment method is required';return}
+      bt.disabled=true;post(API+'/orders',d).then(function(x){if(x.ok&&x.j.pay_url){location.href=x.j.pay_url;return}var er=x.j.errors?Object.values(x.j.errors)[0]:'';m.textContent=(er||x.j.message||'')+(x.j.guide?' '+String(x.j.guide).replace(/<[^>]+>/g,' '):'');if(x.ok)bf.reset()}).catch(function(){m.textContent='Could not place the order, please try again.'}).finally(function(){bt.disabled=false})})}
+  try{var oq=new URLSearchParams(location.search),os=oq.get('order');if(os){var on=oq.get('no')||'';setTimeout(function(){toast(os==='paid'?'Payment received. Order '+on+' confirmed.':os==='cancelled'?'Payment cancelled.':'Order '+on+' saved. Payment not confirmed yet.')},600);history.replaceState(null,'',location.pathname)}}catch(e){}
   /* appointments */
   var ap=$('#appt');if(ap){var sel={date:null,slot:null},days=$('#days'),slots=$('#slots'),book=$('#book'),W=['sun','mon','tue','wed','thu','fri','sat'],AV=${js(Object.fromEntries(Object.entries(appt.slots || {}).map(([d, x]) => [d, (x || []).length > 0])))},BL=${js(appt.blocked || [])};
     for(var i=0;i<21;i++){(function(i){var d=new Date();d.setDate(d.getDate()+i);var iso=d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2);var b=document.createElement('button');b.type='button';b.className='day';b.innerHTML='<small>'+d.toLocaleDateString(undefined,{weekday:'short'})+'</small><b>'+d.getDate()+'</b>';b.disabled=!AV[W[d.getDay()]]||BL.indexOf(iso)>-1;
@@ -383,7 +394,7 @@ ${v.newsletter_popup ? `<div class="modal" id="nlm"><div class="sheet"><h4>${L.n
         fetch(API+'/slots?date='+iso).then(function(r){return r.json()}).then(function(j){slots.innerHTML='';if(!j.data||!j.data.length){slots.textContent=${js(L.noslots)};return}
           j.data.forEach(function(s){var sb=document.createElement('button');sb.type='button';sb.className='slot';sb.textContent=s.from+' - '+s.to;sb.addEventListener('click',function(){$$('.slot').forEach(function(x){x.classList.remove('on')});sb.classList.add('on');sel.slot=s;book.style.display='grid'});slots.appendChild(sb)})})});days.appendChild(b)})(i)}
     book.addEventListener('submit',function(e){e.preventDefault();var d=Object.fromEntries(new FormData(book));if(!d.name||!sel.slot)return;d.date=sel.date;d.from_time=sel.slot.from;d.to_time=sel.slot.to;var bt=book.querySelector('button');bt.disabled=true;
-      post(API+'/appointments',d).then(function(x){$('#book-msg').textContent=x.j.message||'';if(x.ok){book.reset();book.style.display='none';slots.innerHTML=''}}).finally(function(){bt.disabled=false})})}
+      post(API+'/appointments',d).then(function(x){if(x.ok&&x.j.pay_url){location.href=x.j.pay_url;return}var er=x.j.errors?Object.values(x.j.errors)[0]:'';$('#book-msg').textContent=(er||x.j.message||'')+(x.j.guide?' '+String(x.j.guide).replace(/<[^>]+>/g,' '):'');if(x.ok){book.reset();book.style.display='none';slots.innerHTML=''}}).finally(function(){bt.disabled=false})})}
   /* menu viewer */
   var mv=$('#mv');if(mv){var mt=$('#mvt'),mc=$('#mvc'),sl=$$('.mv-s'),n=sl.length;
     var cur=0;function mpos(){cur=Math.round(mt.scrollLeft/Math.max(1,mt.clientWidth));mc.textContent=(cur+1)+' / '+n;return cur}

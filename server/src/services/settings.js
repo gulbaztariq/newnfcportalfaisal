@@ -78,7 +78,7 @@ const SECRET_KEYS = ['stripe_secret', 'paypal_secret', 'razorpay_secret', 'flutt
   'slack_webhook_url', 'recaptcha_secret', 'anthropic_api_key', 'leopards_api_password', 'whatsapp_access_token', 'whatsapp_app_secret', 'twilio_token'];
 const PUBLIC_KEYS = [
   'app_name', 'email', 'phone', 'region_code', 'address', 'app_logo', 'dashboard_logo', 'favicon', 'default_country_code',
-  'default_language', 'register_enable', 'front_theme', 'banner_enable', 'banner_title', 'banner_description', 'banner_url',
+  'default_language', 'register_enable', 'mobile_validation', 'front_theme', 'banner_enable', 'banner_title', 'banner_description', 'banner_url',
   'banner_button', 'home_title', 'home_sub_text', 'home_image', 'mobile_app_play_store_url', 'mobile_app_app_store_url',
   'facebook_url', 'twitter_url', 'instagram_url', 'linkedin_url', 'site_title', 'meta_keyword', 'meta_description',
   'stripe_enable', 'paypal_enable', 'razorpay_enable', 'flutterwave_enable', 'paystack_enable', 'phonepe_enable',
