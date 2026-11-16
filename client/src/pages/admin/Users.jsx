@@ -8,13 +8,14 @@ import api, { toFormData } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { fmtDate, fmtDateTime, fullName, label } from '@/lib/format';
 import PermissionMatrix from '@/components/PermissionMatrix';
+import StaffRoles from './StaffRoles';
 import ExportMenu from '@/components/ExportMenu';
 import {
   PageHeader, TableCard, DataTable, SearchInput, FilterSelect, Action, Actions, Dialog, Button, ButtonLink, Field, Input, Select, Switch, ImageUpload, Badge, StatusBadge,
-  UserCell, Avatar, Card, CardHeader, CardBody, EmptyState, Skeleton, useList, useForm, run, confirm,
+  UserCell, Avatar, Card, CardHeader, CardBody, EmptyState, Skeleton, Segmented, useList, useForm, run, confirm,
 } from '@/components/ui';
 
-const blank = { first_name: '', last_name: '', email: '', contact: '', region_code: '', password: '', password_confirmation: '', is_active: true, plan_id: '', avatar: null, role: 'manager', permissions: null };
+const blank = { first_name: '', last_name: '', email: '', contact: '', region_code: '', password: '', password_confirmation: '', is_active: true, plan_id: '', avatar: null, role: 'manager', permissions: null, access: 'custom' };
 // organisation accounts: the owner's user fields + company details
 const orgBlank = { is_organisation: false, org_name: '', org_website: '', org_email: '', org_phone: '', org_address: '', org_city: '', org_country: '', seats: '', logo: null };
 const orgValues = (o = {}) => ({ org_name: o.name || '', org_website: o.website || '', org_email: o.email || '', org_phone: o.phone || '', org_address: o.address || '', org_city: o.city || '', org_country: o.country || '', seats: o.seats || '', logo: o.logo || null });
@@ -35,6 +36,11 @@ export default function Users({ role = 'user' }) {
   const singular = isAdmin ? 'Staff member' : 'User';
   const [meta, setMeta] = useState(null);
   useEffect(() => { if (isAdmin) api.get('/admin/roles/meta').then(({ data }) => setMeta(data)); }, [isAdmin]);
+  // staff have roles, not plans: the roles the super admin made, plus the built-in full-access Admin
+  const [roles, setRoles] = useState(null);
+  const [tab, setTab] = useState('staff');
+  const loadRoles = () => api.get('/admin/admins/roles').then(({ data }) => setRoles(data.data)).catch(() => setRoles([]));
+  useEffect(() => { if (isAdmin) loadRoles(); }, [isAdmin]); // eslint-disable-line
   const navigate = useNavigate();
   const list = useList(endpoint);
   const [open, setOpen] = useState(false);
@@ -51,6 +57,7 @@ export default function Users({ role = 'user' }) {
     const base = row ? { ...blank, ...Object.fromEntries(Object.keys(blank).map((k) => [k, row[k] ?? blank[k]])), password: '', password_confirmation: '' } : blank;
     form.setValues({ ...base, ...orgBlank, is_organisation: row ? !!row.is_organisation : asOrg, ...(row?.is_organisation ? orgValues(row.organisation || {}) : {}) });
     if (isAdmin && row && !Array.isArray(row.permissions) && meta) form.set('permissions', meta.defaults[row.role] || null);
+    if (isAdmin) form.set('access', row ? (row.role === 'admin' ? 'admin' : row.staff_role_id ? `role:${row.staff_role_id}` : 'custom') : roles?.[0] ? `role:${roles[0].id}` : 'custom');
     setOpen(true);
   };
   const save = async (e) => {
@@ -60,7 +67,12 @@ export default function Users({ role = 'user' }) {
     const v = { ...form.values }; if (!(v.avatar instanceof File)) delete v.avatar;
     if (!(v.logo instanceof File)) delete v.logo;
     if (!v.is_organisation) for (const k of Object.keys(orgBlank)) delete v[k]; else v.is_organisation = '1';
-    if (isAdmin) { if (v.role === 'admin' || !Array.isArray(v.permissions)) delete v.permissions; else v.permissions = JSON.stringify(v.permissions); } else { delete v.role; delete v.permissions; }
+    if (isAdmin) {
+      if (v.access === 'admin') { v.role = 'admin'; v.staff_role_id = ''; delete v.permissions; }
+      else if (String(v.access).startsWith('role:')) { v.staff_role_id = v.access.slice(5); delete v.role; delete v.permissions; }
+      else { v.staff_role_id = ''; if (v.role === 'admin' || !v.role) v.role = 'manager'; v.permissions = JSON.stringify(Array.isArray(v.permissions) ? v.permissions : meta?.defaults.manager || []); }
+    } else { delete v.role; delete v.permissions; }
+    delete v.access; if (isAdmin) delete v.plan_id;
     try { const res = await run(editing ? api.put(`${endpoint}/${editing.id}`, toFormData(v)) : api.post(endpoint, toFormData(v))); setOpen(false); list.reload(); if (res?.invite_url && !res.invite_sent) setInvite({ name: fullName(res.data), url: res.invite_url }); } catch (ex) { form.setErrors(ex.errors); } finally { setSaving(false); }
   };
   const remove = async (u) => { if (await confirm({ title: `Delete ${fullName(u)}?`, description: isAdmin ? 'This admin will lose access immediately.' : 'The user and all of their vCards will be permanently deleted.' })) { await run(api.delete(`${endpoint}/${u.id}`)).catch(() => {}); list.reload(); } };
@@ -91,7 +103,7 @@ export default function Users({ role = 'user' }) {
       ) : u.organisation_id ? <div><Badge tone="info">{label(u.company_role || 'member')}</Badge><p className="mt-0.5 truncate text-xs text-muted-foreground">{u.organisation_name || 'Organisation'}</p></div>
         : <span className="text-xs text-muted-foreground">Individual</span>),
     },
-    isAdmin && { key: 'role', label: 'Role', render: (u) => <Badge tone={u.role === 'admin' ? 'primary' : u.role === 'manager' ? 'info' : 'neutral'}>{label(u.role)}</Badge> },
+    isAdmin && { key: 'role', label: 'Role', render: (u) => <Badge tone={u.role === 'admin' ? 'primary' : u.staff_role_name ? 'info' : 'neutral'}>{u.role === 'admin' ? 'Admin' : u.staff_role_name || 'Custom access'}</Badge> },
     isAdmin && { key: 'perm', label: 'Access', render: (u) => <span className="text-xs text-muted-foreground">{u.role === 'admin' ? 'Everything' : `${(Array.isArray(u.permissions) ? u.permissions : meta?.defaults[u.role] || []).filter((k) => k.endsWith('.view')).length} modules`}</span> },
     !isAdmin && { key: 'plan', label: 'Plan', render: (u) => (u.plan ? <Badge tone="primary">{u.plan.name}</Badge> : <span className="text-muted-foreground">-</span>) },
     !isAdmin && { key: 'vcards', label: 'vCards', render: (u) => <span className="font-medium">{u.vcards_count}</span> },
@@ -116,12 +128,15 @@ export default function Users({ role = 'user' }) {
 
   return (
     <>
-      <PageHeader title={isAdmin ? 'Staff & roles' : 'Users'} description={isAdmin ? 'Admins, managers and supervisors of the admin panel, with their permissions. Staff sign in with an e-mailed code, then a code from their authenticator app (set up on their first sign-in). Add someone with just a name and e-mail; they get an invitation. Lost phone? Reset their authenticator from this list.' : 'Everyone who has an account on the platform.'}>
+      <PageHeader title={isAdmin ? 'Staff & roles' : 'Users'} description={isAdmin ? 'The people who run the admin panel. Staff have a role with permissions, not a plan: make roles on the Roles tab, then give each person one. Staff sign in with an e-mailed code, then a code from their authenticator app (set up on their first sign-in). Add someone with just a name and e-mail; they get an invitation. Lost phone? Reset their authenticator from this list.' : 'Everyone who has an account on the platform.'}>
         {!isAdmin && <ExportMenu what="users" base="/api/admin/export" />}
         {!isAdmin && <Button variant="outline" onClick={() => openForm(null, true)}><Building2 />Add organisation</Button>}
         <Button onClick={() => openForm()}><Plus />Add {singular.toLowerCase()}</Button>
       </PageHeader>
-      <TableCard title={`All ${isAdmin ? 'admins' : 'users'}`} list={list} toolbar={<>
+      {isAdmin && <div className="mb-5"><Segmented id="staff-tab" value={tab} onChange={setTab} options={[{ value: 'staff', label: 'Staff' }, { value: 'roles', label: `Roles${roles ? ` (${roles.length})` : ''}` }]} /></div>}
+      {isAdmin && tab === 'roles' && meta && <StaffRoles roles={roles} modules={meta.modules} reload={() => { loadRoles(); list.reload(); }} />}
+      <div className={isAdmin && tab === 'roles' ? 'hidden' : undefined}>
+      <TableCard title={`All ${isAdmin ? 'staff' : 'users'}`} list={list} toolbar={<>
         {selected.length > 0 && <Button size="sm" variant="danger-soft" onClick={removeMany}><Trash2 />Delete {selected.length}</Button>}
         {!isAdmin && <FilterSelect value={list.params.type} onChange={(v) => list.set({ type: v })} placeholder="All accounts" options={[{ value: 'organisation', label: 'Organisations' }, { value: 'member', label: 'Organisation users' }, { value: 'individual', label: 'Individuals' }]} />}
         <FilterSelect value={list.params.status} onChange={(v) => list.set({ status: v })} placeholder="All statuses" options={[{ value: 'active', label: 'Active' }, { value: 'inactive', label: 'Deactivated' }]} />
@@ -130,6 +145,7 @@ export default function Users({ role = 'user' }) {
         <DataTable loading={list.loading} rows={list.rows} columns={columns} selected={selected} onSelect={isAdmin ? undefined : setSelected}
           empty={<EmptyState icon={isAdmin ? ShieldCheck : UsersIcon} title={`No ${isAdmin ? 'admins' : 'users'} found`} action={<Button onClick={() => openForm()}><Plus />Add {singular.toLowerCase()}</Button>} />} />
       </TableCard>
+      </div>
 
       <Dialog open={open} onOpenChange={setOpen} size="lg" icon={isAdmin ? ShieldCheck : isOrg ? Building2 : UsersIcon} title={`${editing ? 'Edit' : 'New'} ${isOrg ? 'organisation' : singular.toLowerCase()}`}
         description={editing ? undefined : isOrg ? 'The organisation owner signs in with the login below and manages their users. Login details are e-mailed automatically.' : 'Login details are e-mailed to the new account automatically.'}
@@ -164,10 +180,11 @@ export default function Users({ role = 'user' }) {
           {!isAdmin && !editing && <Field label="Plan" className="sm:col-span-2" hint={isOrg ? 'The organisation and all of its users work with this plan' : 'Leave empty to give the default plan'}><Select value={form.values.plan_id} onChange={(v) => form.set('plan_id', v)} options={plans} placeholder="Default plan" allowEmpty /></Field>}
           {isAdmin && (
             <div className="space-y-3 sm:col-span-2">
-              <Field label="Role" hint={ROLE_INFO[form.values.role]}>
-                <Select value={form.values.role} onChange={(v) => { form.set('role', v); if (v !== 'admin' && meta && !Array.isArray(form.values.permissions)) form.set('permissions', meta.defaults[v]); }} options={[{ value: 'admin', label: 'Admin' }, { value: 'manager', label: 'Manager' }, { value: 'supervisor', label: 'Supervisor' }]} />
+              <Field label="Role" required hint={form.values.access === 'admin' ? 'Full access to the admin panel (except staff and roles)' : form.values.access === 'custom' ? 'Pick the modules for this person only' : (roles || []).find((x) => `role:${x.id}` === form.values.access)?.description || 'Access comes from this role. Edit the role to change it for everyone who has it.'} error={form.errors.staff_role_id}>
+                <Select value={form.values.access} onChange={(v) => form.set('access', v)} options={[...(roles || []).map((x) => ({ value: `role:${x.id}`, label: x.name })), { value: 'admin', label: 'Admin (full access)' }, { value: 'custom', label: 'Custom access (this person only)' }]} />
               </Field>
-              {form.values.role !== 'admin' && meta && <PermissionMatrix modules={meta.modules} value={Array.isArray(form.values.permissions) ? form.values.permissions : meta.defaults[form.values.role]} defaults={meta.defaults[form.values.role]} onChange={(p) => form.set('permissions', p)} />}
+              {String(form.values.access).startsWith('role:') && meta && (() => { const sr = (roles || []).find((x) => `role:${x.id}` === form.values.access); return sr ? <p className="rounded-2xl bg-muted/50 p-3 text-xs text-muted-foreground"><b className="text-foreground">Can open:</b> {Object.entries(meta.modules).filter(([m]) => sr.permissions.includes(`${m}.view`) || sr.permissions.includes(`${m}.manage`)).map(([m, l]) => `${l}${sr.permissions.includes(`${m}.manage`) ? '' : ' (view only)'}`).join(', ')}</p> : null; })()}
+              {form.values.access === 'custom' && meta && <PermissionMatrix modules={meta.modules} value={Array.isArray(form.values.permissions) ? form.values.permissions : meta.defaults.manager} defaults={meta.defaults.manager} onChange={(p) => form.set('permissions', p)} />}
             </div>
           )}
           <Field label="Profile photo" className="sm:col-span-2"><ImageUpload value={form.values.avatar} onChange={(v) => form.set('avatar', v)} round /></Field>
