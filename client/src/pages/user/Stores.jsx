@@ -16,6 +16,47 @@ import {
 import { Bars } from '@/components/ui/charts';
 import AiButton from '@/components/AiButton';
 
+const STORE_FONTS = ['Plus Jakarta Sans', 'Inter', 'Poppins', 'Playfair Display', 'Noto Naskh Arabic', 'Noto Nastaliq Urdu'];
+function StoreExtras({ v, form, sid }) {
+  const x = v.extras || {};
+  const set = (patch) => form.set('extras', { ...x, ...patch });
+  const [subs, setSubs] = useState(null);
+  const [open, setOpen] = useState(false);
+  const showSubs = () => { setOpen(true); setSubs(null); api.get(`/user/stores/${sid}/subscribers`).then(({ data }) => setSubs(data.data)).catch(() => setSubs([])); };
+  const ytBad = x.trending_video && !/(?:youtu\.be\/|v=|embed\/|shorts\/)[\w-]{11}|^[\w-]{11}$/.test(x.trending_video);
+  return (
+    <>
+      <Card>
+        <CardHeader title="Language and font" description="Arabic and Urdu switch the whole store to right-to-left" />
+        <CardBody className="grid gap-4 sm:grid-cols-2">
+          <Field label="Store language"><Select value={x.language || 'en'} onChange={(val) => set({ language: val })} options={[{ value: 'en', label: 'English' }, { value: 'ar', label: 'Arabic (right-to-left)' }, { value: 'ur', label: 'Urdu (right-to-left)' }]} /></Field>
+          <Field label="Font"><Select value={x.font || ''} onChange={(val) => set({ font: val })} allowEmpty placeholder="Standard for the language" options={STORE_FONTS.map((f) => ({ value: f, label: f }))} /></Field>
+        </CardBody>
+      </Card>
+      <Card>
+        <CardHeader title="Store extras" />
+        <CardBody className="space-y-3">
+          <SwitchRow id="sx-nl" title="Newsletter popup" description="Asks visitors for their e-mail after a few seconds" checked={!!x.newsletter_popup} onChange={(val) => set({ newsletter_popup: val })} />
+          {x.newsletter_popup && <Button variant="outline" size="sm" onClick={showSubs}>View subscribers</Button>}
+          <SwitchRow id="sx-qr" title="Show a QR code" description="A scannable code for the store in the footer" checked={!!x.show_qr} onChange={(val) => set({ show_qr: val })} />
+          <SwitchRow id="sx-pwa" title="Installable app" description="Visitors can add the store to their home screen" checked={!!x.pwa} onChange={(val) => set({ pwa: val })} />
+          <SwitchRow id="sx-top" title="Back-to-top button" checked={x.scroll_top !== false} onChange={(val) => set({ scroll_top: val })} />
+          <Field label="Trending video" hint="A YouTube link shown in a 'Trending now' section under the products" error={ytBad ? 'Trending video must be a YouTube link' : undefined}><Input value={x.trending_video || ''} onChange={(e) => set({ trending_video: e.target.value })} placeholder="https://youtube.com/watch?v=..." /></Field>
+          <Field label="Custom CSS" hint="Extra styles for this store. Styles only; scripts are not accepted."><Textarea rows={5} className="font-mono text-xs" maxLength={10000} value={x.custom_css || ''} onChange={(e) => set({ custom_css: e.target.value })} placeholder=".card { border-radius: 8px; }" /></Field>
+        </CardBody>
+      </Card>
+      <Dialog open={open} onOpenChange={setOpen} size="md" title="Newsletter subscribers" footer={<Button variant="outline" onClick={() => setOpen(false)}>Close</Button>}>
+        {!subs ? <Skeleton className="h-24 rounded-2xl" /> : !subs.length ? <p className="text-sm text-muted-foreground">Nobody has subscribed yet.</p> : (
+          <>
+            <Button variant="outline" size="sm" className="mb-3" onClick={() => navigator.clipboard?.writeText(subs.map((u) => u.email).join('\n')).then(() => toast.success(`${subs.length} e-mail addresses copied`))}>Copy all</Button>
+            <div className="max-h-80 divide-y divide-border overflow-y-auto rounded-2xl border border-border">{subs.map((u) => <div key={u.id} className="flex justify-between gap-3 px-4 py-2.5 text-sm"><span className="truncate">{u.email}</span><span className="shrink-0 text-xs text-muted-foreground">{new Date(u.created_at).toLocaleDateString()}</span></div>)}</div>
+          </>
+        )}
+      </Dialog>
+    </>
+  );
+}
+
 const RichText = lazy(() => import('@/components/ui/RichText'));
 const Editor = (p) => <Suspense fallback={<Skeleton className="h-40 rounded-xl" />}><RichText {...p} /></Suspense>;
 const TEMPLATE_META = {
@@ -109,13 +150,13 @@ export function StoreEditor() {
   const [tab, setTab] = useState('details');
   const [saving, setSaving] = useState(false);
   const form = useForm({});
-  const load = () => api.get(`/user/stores/${sid}`).then(({ data }) => { setSt(data.data); form.setValues({ ...data.data, theme: data.data.theme || {}, business_hours: data.data.business_hours || {} }); });
+  const load = () => api.get(`/user/stores/${sid}`).then(({ data }) => { setSt(data.data); form.setValues({ ...data.data, theme: data.data.theme || {}, business_hours: data.data.business_hours || {}, extras: data.data.extras || {} }); });
   useEffect(() => { load(); }, [sid]); // eslint-disable-line
   if (!st) return <Skeleton className="h-[600px] rounded-3xl" />;
   const v = form.values;
   const save = async () => {
     setSaving(true);
-    const keys = ['name', 'url_alias', 'slogan', 'whatsapp_number', 'region_code', 'email', 'address', 'template', 'announcement', 'currency_code', 'currency_icon', 'delivery_charge', 'delivery_enabled', 'takeaway_enabled', 'status', 'business_directory', 'terms', 'privacy', 'refund_policy', 'shipping_policy', 'site_title', 'meta_description', 'theme', 'business_hours', 'youtube_banner'];
+    const keys = ['name', 'url_alias', 'slogan', 'whatsapp_number', 'region_code', 'email', 'address', 'template', 'announcement', 'currency_code', 'currency_icon', 'delivery_charge', 'delivery_enabled', 'takeaway_enabled', 'status', 'business_directory', 'terms', 'privacy', 'refund_policy', 'shipping_policy', 'site_title', 'meta_description', 'theme', 'business_hours', 'youtube_banner', 'extras'];
     const payload = Object.fromEntries(keys.map((k) => [k, typeof v[k] === 'boolean' ? (v[k] ? '1' : '0') : v[k] ?? '']));
     for (const f of ['logo', 'cover_image']) if (v[f] instanceof File) payload[f] = v[f];
     try { const d = await run(api.put(`/user/stores/${sid}`, toFormData(payload)), 'Store saved'); setSt((x) => ({ ...x, ...d.data })); } catch (e) { form.setErrors(e.errors || {}); } finally { setSaving(false); }
@@ -174,6 +215,7 @@ export function StoreEditor() {
                 <ColorInput label="Text" value={v.theme.text || '#16162a'} onChange={(x) => setIn('theme', 'text', x)} />
               </CardBody></Card>
               <Card><CardHeader title="YouTube banner" description="Plays muted as the cover (optional)" /><CardBody><Input value={v.youtube_banner || ''} onChange={(e) => form.set('youtube_banner', e.target.value)} placeholder="https://youtube.com/watch?v=..." /></CardBody></Card>
+              <StoreExtras v={v} form={form} sid={sid} />
             </>
           )}
           {tab === 'catalogue' && <Catalogue st={st} reload={load} />}
