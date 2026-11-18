@@ -72,7 +72,7 @@ export function SearchInput({ value, onChange, placeholder = 'Search...', classN
 /** Small native select used in toolbars */
 export function FilterSelect({ value, onChange, options, placeholder }) {
   return (
-    <select value={value ?? ''} onChange={(e) => onChange(e.target.value)} className="h-9 cursor-pointer rounded-xl border border-input bg-card px-3 text-sm outline-none focus:border-primary">
+    <select aria-label={placeholder || 'Filter'} value={value ?? ''} onChange={(e) => onChange(e.target.value)} className="h-9 cursor-pointer rounded-xl border border-input bg-card px-3 text-sm outline-none focus:border-primary">
       <option value="">{placeholder}</option>
       {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
     </select>

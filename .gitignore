@@ -11,3 +11,4 @@ server/e2e.sqlite
 *.pdf
 *.log
 .claude/
+e2e/.work

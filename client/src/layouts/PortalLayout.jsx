@@ -75,7 +75,7 @@ function SidebarContent({ menu, collapsed, pathname, user, sub, home, onNavigate
       <nav className="flex-1 space-y-5 overflow-y-auto px-3 pb-4">
         {menu.map((g) => (
           <div key={g.group}>
-            {!collapsed ? <p className="mb-1.5 px-3 text-[11px] font-semibold tracking-wider text-muted-foreground/70 uppercase">{g.group}</p> : <div className="mx-auto mb-2 h-px w-6 bg-border" />}
+            {!collapsed ? <p className="mb-1.5 px-3 text-[11px] font-semibold tracking-wider text-muted-foreground uppercase">{g.group}</p> : <div className="mx-auto mb-2 h-px w-6 bg-border" />}
             <div className="space-y-0.5">{g.items.map((it) => <NavItem key={it.label} item={it} collapsed={collapsed} pathname={pathname} onNavigate={onNavigate} />)}</div>
           </div>
         ))}

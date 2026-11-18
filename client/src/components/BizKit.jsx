@@ -128,7 +128,7 @@ export function downloadCsv(filename, cols, rows) {
 export function Hint({ children, side = 'top' }) {
   return (
     <Tip content={<span className="block max-w-64 leading-relaxed font-normal">{children}</span>} side={side}>
-      <button type="button" aria-label="How is this calculated?" className="inline-grid size-4 cursor-help place-items-center rounded-full text-muted-foreground/70 transition hover:text-primary" onClick={(e) => e.preventDefault()}><Info className="size-3.5" /></button>
+      <button type="button" aria-label="How is this calculated?" className="inline-grid size-6 cursor-help place-items-center rounded-full text-muted-foreground transition hover:text-primary" onClick={(e) => e.preventDefault()}><Info className="size-3.5" /></button>
     </Tip>
   );
 }
