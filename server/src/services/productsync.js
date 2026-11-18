@@ -152,13 +152,15 @@ async function syncSource(source) {
       const data = { source_price: p.price, source_url: p.url, synced_at: new Date(), compare_price: p.compare, images: images.length ? images : row.images, category: (p.category || '').slice(0, 60) || row.category };
       if (p.variants.length) data.variants = p.variants; // option prices always follow the website
       if (!row.price_locked) data.price = p.price; // an edited price is ours: keep it
-      if (!row.sku && p.sku) data.sku = p.sku;
+      if (!row.sku && p.sku && !(await NfcCard.findOne({ where: { sku: String(p.sku).trim().toUpperCase(), id: { [Op.ne]: row.id } }, attributes: ['id'] }))) data.sku = String(p.sku).trim().toUpperCase().slice(0, 80); // never a SKU another product already has
       await row.update(data); updated++;
     } else {
       let slug = `${slugify(p.name)}-s${source.id}`; let i = 1;
       while (await NfcCard.findOne({ where: { slug } })) slug = `${slugify(p.name)}-s${source.id}-${++i}`;
+      const wantSku = p.sku ? String(p.sku).trim().toUpperCase().slice(0, 60) : null;
+      const skuFree = wantSku && !(await NfcCard.findOne({ where: { sku: wantSku }, attributes: ['id'] }));
       await NfcCard.create({
-        name: p.name.slice(0, 120), description: p.description, short_description: p.description.slice(0, 500), price: p.price, source_price: p.price, compare_price: p.compare, category: (p.category || '').slice(0, 60) || null, sku: p.sku ? String(p.sku).slice(0, 60) : null,
+        name: p.name.slice(0, 120), description: p.description, short_description: p.description.slice(0, 500), price: p.price, source_price: p.price, compare_price: p.compare, category: (p.category || '').slice(0, 60) || null, sku: skuFree ? wantSku : null,
         product_kind: guessKind(p.name), images, front_image: images[0] && images[0].length <= 255 ? images[0] : null, variants: p.variants, status: true, show_in_shop: false, slug: slug.slice(0, 150),
         order_source_id: source.id, external_id: p.id, source_url: p.url, synced_at: new Date(),
       }); created++;
@@ -172,10 +174,10 @@ async function syncSource(source) {
 async function importPasted(source, text) {
   const { NfcCard } = M();
   const lines = String(text || '').split(/\r?\n/).map((l) => l.trim()).filter(Boolean).slice(0, 500);
-  let created = 0; let updated = 0;
+  let created = 0; let updated = 0; const skipped = [];
   for (const line of lines) {
     const m = line.match(/^(.*?)[\s,;\t|]+(?:rs\.?|pkr|\$)?\s*([\d.,]+)\s*$/i);
-    if (!m || !m[1].trim()) continue;
+    if (!m || !m[1].trim()) { skipped.push(line.slice(0, 80)); continue; }
     const name = m[1].trim().replace(/[,;|]+$/, '').slice(0, 120);
     const price = r2(m[2].replace(/,/g, ''));
     const ext = `manual:${slugify(name)}`;
@@ -186,7 +188,7 @@ async function importPasted(source, text) {
     await NfcCard.create({ name, price, source_price: price, status: true, show_in_shop: false, slug, order_source_id: source.id, external_id: ext, synced_at: new Date() }); created++;
   }
   await source.update({ platform: source.platform || 'manual', last_synced_at: new Date(), sync_message: `${created + updated} products from your list (${created} new, ${updated} updated)` });
-  return { total: created + updated, created, updated };
+  return { total: created + updated, created, updated, skipped };
 }
 
 /** Sync every active source that has a website address (three at a time). Returns one result per source. */

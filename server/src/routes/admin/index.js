@@ -19,6 +19,7 @@ const availability = require('../../services/availability');
 
 const r = express.Router();
 r.use(isAdmin, adminPermissions);
+r.use(require('../../services/security').adminAuditLogger); // M4 / M27: every create, update, delete and status change is written to Logs
 
 const richText = (html) => sanitizeHtml(html || '', {
   allowedTags: sanitizeHtml.defaults.allowedTags.concat(['img', 'h1', 'h2', 'span', 'u', 's']),
@@ -96,6 +97,12 @@ r.get('/templates', wrap(async (_req, res) => {
 r.patch('/templates/:id', wrap(async (req, res) => {
   const t = await M.Template.findByPk(req.params.id);
   if (!t) fail(404, 'Not found');
+  if (req.body.name !== undefined) {
+    const name = String(req.body.name).trim();
+    if (!name) fail(422, 'Validation failed', { name: 'Name is required' });
+    if ((await M.Template.findAll({ where: { id: { [Op.ne]: t.id } }, attributes: ['name'], raw: true })).some((x) => String(x.name).toLowerCase() === name.toLowerCase())) fail(422, 'Validation failed', { name: 'Another template already has this name' });
+    req.body.name = name;
+  }
   await t.update(pick({ ...req.body, status: req.body.status === undefined ? undefined : toBool(req.body.status) }, ['name', 'profession', 'status']));
   res.json({ data: t, message: 'Template updated' });
 }));
@@ -314,6 +321,13 @@ r.use('/countries', crud(M.Country, { fields: ['name', 'short_code', 'phone_code
 r.use('/states', crud(M.State, { fields: ['name', 'country_id'], rules: { name: 'required|max:120', country_id: 'required' }, search: ['name'], filters: ['country_id'], include: [M.Country], order: [['name', 'ASC']] }));
 r.use('/cities', crud(M.City, { fields: ['name', 'state_id'], rules: { name: 'required|max:120', state_id: 'required' }, search: ['name'], filters: ['state_id'], include: [{ model: M.State, include: [M.Country] }], order: [['name', 'ASC']] }));
 r.use('/languages', crud(M.Language, { fields: ['name', 'iso_code', 'status'], booleans: ['status'], rules: { name: 'required|max:60', iso_code: 'required|max:10' }, search: ['name', 'iso_code'], order: [['name', 'ASC']],
+  beforeSave: (data, _req, row) => {
+    if (data.iso_code !== undefined) {
+      data.iso_code = String(data.iso_code || '').trim().toLowerCase();
+      if (!/^[a-z]{2,3}(-[a-z]{2,4})?$/.test(data.iso_code)) fail(422, 'Validation failed', { iso_code: 'Language code must be 2 or 3 letters, like en or ur (optionally with a region, like pt-br)' });
+    }
+    return data;
+  },
   canDelete: async (row) => (row.is_default ? 'The default language cannot be deleted' : null) }));
 r.use('/coupon-codes', crud(M.CouponCode, {
   fields: ['coupon_name', 'type', 'discount', 'expire_at', 'coupon_limit', 'status'], booleans: ['status'], search: ['coupon_name'],
@@ -321,6 +335,7 @@ r.use('/coupon-codes', crud(M.CouponCode, {
   beforeSave: (data, _req, row) => {
     data.coupon_name = String(data.coupon_name || row?.coupon_name).toUpperCase().replace(/\s+/g, '');
     if (data.type === 'percentage' && Number(data.discount) > 100) fail(422, 'Validation failed', { discount: 'Percentage cannot exceed 100' });
+    if (data.expire_at && dayjs(data.expire_at).endOf('day').isBefore(dayjs()) && (data.status === undefined ? row?.status : data.status)) fail(422, 'Validation failed', { expire_at: 'Expiry date must be today or later. Switch the coupon off if it has ended.' });
     if (!row || Number(row.coupon_limit) !== Number(data.coupon_limit)) data.coupon_limit_left = data.coupon_limit || null;
     return data;
   },
@@ -361,12 +376,54 @@ const settingsUpload = makeUpload('settings', { maxMb: 2 }).fields([{ name: 'app
 r.get('/settings', wrap(async (_req, res) => {
   res.json({ data: await settings.adminSettings(), currencies: await M.Currency.findAll({ order: [['currency_name', 'ASC']] }) });
 }));
+/** number settings: every value needs a sane range, checked here and not only in the form (H7, M23) */
+const NUMBER_RULES = {
+  shop_min_order: { label: 'Minimum order', min: 0, max: 10000000 }, nfc_tax_rate: { label: 'Tax rate', min: 0, max: 100 }, cod_charges: { label: 'COD charges', min: 0, max: 1000000 },
+  delivery_charges: { label: 'Delivery charges', min: 0, max: 1000000 }, free_delivery_over: { label: 'Free delivery over', min: 0, max: 100000000 },
+  sample_markup_percent: { label: 'Sample markup', min: 0, max: 1000 }, sample_max_qty: { label: 'Sample quantity limit', min: 1, max: 1000, int: true },
+  invoice_next_number: { label: 'Next invoice number', min: 1, max: 99999999, int: true }, invoice_number_padding: { label: 'Invoice number digits', min: 1, max: 10, int: true },
+  invoice_due_days: { label: 'Invoice due days', min: 0, max: 365, int: true }, expiry_reminder_days: { label: 'Reminder days before expiry', min: 0, max: 365, int: true },
+  expiry_reminder_every_days: { label: 'Reminder repeat days', min: 1, max: 365, int: true }, min_withdrawal_amount: { label: 'Minimum withdrawal', min: 0, max: 100000000 },
+  affiliation_amount: { label: 'Affiliation amount', min: 0, max: 100000000 }, max_login_attempts: { label: 'Login attempts before lockout', min: 1, max: 100, int: true },
+};
+async function validateNumbers(values) {
+  const errors = {};
+  for (const [k, rule] of Object.entries(NUMBER_RULES)) {
+    if (values[k] === undefined || values[k] === '') continue;
+    const n = Number(values[k]);
+    if (Number.isNaN(n)) errors[k] = `${rule.label} must be a number`;
+    else if (rule.int && !Number.isInteger(n)) errors[k] = `${rule.label} must be a whole number`;
+    else if (n < rule.min) errors[k] = `${rule.label} must be ${rule.min} or more`;
+    else if (n > rule.max) errors[k] = `${rule.label} must be ${rule.max} or less`;
+  }
+  if (values.affiliation_amount !== undefined && (values.affiliation_amount_type || await settings.get('affiliation_amount_type')) === 'percent' && Number(values.affiliation_amount) > 100) errors.affiliation_amount = 'A percentage cannot be more than 100';
+  if (values.wholesale_tiers !== undefined && values.wholesale_tiers !== '') {
+    let tiers; try { tiers = JSON.parse(values.wholesale_tiers); } catch { tiers = null; }
+    if (!Array.isArray(tiers)) errors.wholesale_tiers = 'Quantity discount tiers are not valid';
+    else {
+      let last = 0;
+      for (const [i, t] of tiers.entries()) {
+        if (!Number.isInteger(Number(t.min)) || Number(t.min) < 1) { errors.wholesale_tiers = `Tier ${i + 1}: quantity must be a whole number, 1 or more`; break; }
+        if (!(Number(t.percent) >= 0 && Number(t.percent) <= 100)) { errors.wholesale_tiers = `Tier ${i + 1}: discount must be between 0 and 100`; break; }
+        if (Number(t.min) <= last) { errors.wholesale_tiers = `Tier ${i + 1}: quantities must go up from one tier to the next`; break; }
+        last = Number(t.min);
+      }
+    }
+  }
+  // the next invoice number can never sit at or below one that was already issued
+  if (values.invoice_next_number !== undefined && values.invoice_next_number !== '' && !errors.invoice_next_number) {
+    const highest = (await M.Invoice.findAll({ attributes: ['number'], raw: true })).map((i) => parseInt(String(i.number).replace(/\D/g, ''), 10) || 0).reduce((a, b) => Math.max(a, b), 0);
+    if (Number(values.invoice_next_number) <= highest) errors.invoice_next_number = `Next invoice number must be higher than the last one issued (${highest})`;
+  }
+  if (Object.keys(errors).length) fail(422, Object.values(errors)[0], errors);
+}
 r.put('/settings', settingsUpload, wrap(async (req, res) => {
   const values = { ...req.body };
   for (const k of settings.SECRET_KEYS) if (values[k] === '********') delete values[k]; // unchanged secret
   for (const k of ['terms_conditions', 'privacy_policy', 'manual_payment_guide']) if (values[k] !== undefined) values[k] = richText(values[k]);
   for (const k of Object.keys(values)) if (/^mail_tpl_\w+_body$/.test(k)) values[k] = richText(values[k]);
   if (values.home_custom_css !== undefined) values.home_custom_css = String(values.home_custom_css).replace(/<[^>]*>/g, '').slice(0, 20000);
+  await validateNumbers(values);
   if (values.panel_color !== undefined && values.panel_color !== '' && !/^#[0-9a-f]{6}$/i.test(values.panel_color)) fail(422, 'Validation failed', { panel_color: 'Panel colour must look like #2563eb' });
   if (values.auth_theme !== undefined && !['split', 'centered', 'minimal'].includes(values.auth_theme)) fail(422, 'Validation failed', { auth_theme: 'Choose a sign-in page design from the list' });
   if (values.front_extra_scripts !== undefined) {

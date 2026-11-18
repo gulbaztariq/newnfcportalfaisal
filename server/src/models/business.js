@@ -32,6 +32,7 @@ module.exports = function defineBusiness(sequelize, json, M) {
     sync_message: T.STRING(255),
   });
   NfcOrder.belongsTo(OrderSource, { as: 'order_source', foreignKey: 'order_source_id', constraints: false });
+  NfcCard.belongsTo(OrderSource, { as: 'order_source', foreignKey: 'order_source_id', constraints: false });
 
   /* ------------------------------------------------ guest customers (orders without an account, mostly non-plan products) */
   const GuestCustomer = sequelize.define('guest_customer', {

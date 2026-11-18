@@ -30,12 +30,17 @@ export const StaggerItem = ({ children, className }) => (
 export function CountUp({ value, format = (v) => Math.round(v).toLocaleString(), duration = 1.2 }) {
   const ref = useRef(null);
   const inView = useInView(ref, { once: true });
+  const target = Number(value) || 0;
   useEffect(() => {
-    if (!inView) return undefined;
-    const c = animate(0, Number(value) || 0, { duration, ease, onUpdate: (v) => { if (ref.current) ref.current.textContent = format(v); } });
-    return () => c.stop();
-  }, [inView, value]); // eslint-disable-line
-  return <span ref={ref}>{format(0)}</span>;
+    const el = ref.current;
+    const show = (v) => { if (el) el.textContent = format(v); };
+    // the real number is always shown: when the tab is hidden, the element is off screen or animation is unavailable it must never stay at 0
+    if (!inView || (typeof document !== 'undefined' && document.hidden)) { show(target); return undefined; }
+    const c = animate(0, target, { duration, ease, onUpdate: show, onComplete: () => show(target) });
+    const t = setTimeout(() => show(target), (duration + 0.4) * 1000);
+    return () => { c.stop(); clearTimeout(t); show(target); };
+  }, [inView, target]); // eslint-disable-line
+  return <span ref={ref}>{format(target)}</span>;
 }
 
 /** Infinite horizontal marquee */

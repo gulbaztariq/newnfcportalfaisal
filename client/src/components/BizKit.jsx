@@ -35,8 +35,11 @@ export const sum = (rows, f) => rows.reduce((a, r) => a + num(typeof f === 'func
 
 /** Coloured signed amount */
 export function Amount({ value, icon, tone, className, sign }) {
-  const t = tone || (num(value) < 0 ? 'out' : 'in');
-  return <span className={cn('font-semibold tabular-nums', t === 'in' && 'text-success', t === 'out' && 'text-danger', t === 'warn' && 'text-warning', className)}>{sign ? (t === 'out' ? '- ' : t === 'in' ? '+ ' : '') : ''}{pkr(Math.abs(num(value)), icon)}</span>;
+  const n = num(value);
+  const t = tone || (n < 0 ? 'out' : 'in');
+  // a negative amount always keeps its minus sign (a loss must never read as a profit); `sign` also adds +/- in front of positive amounts
+  const lead = n < 0 ? '' : sign ? (t === 'out' ? '- ' : t === 'in' ? '+ ' : '') : '';
+  return <span className={cn('font-semibold tabular-nums', t === 'in' && 'text-success', t === 'out' && 'text-danger', t === 'warn' && 'text-warning', className)}>{lead}{pkr(n, icon)}</span>;
 }
 
 export const PAYMENT_METHODS = ['Cash', 'Bank transfer', 'JazzCash', 'Easypaisa', 'Card', 'Cheque', 'Other'].map((m) => ({ value: m, label: m }));

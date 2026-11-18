@@ -237,7 +237,13 @@ const all = (keys, v = true) => Object.fromEntries(keys.map((k) => [k, v]));
 
   await M.CouponCode.findOrCreate({ where: { coupon_name: 'WELCOME10' }, defaults: { type: 'percentage', discount: 10, status: true } });
   const settings = require('../services/settings');
-  if (!(await settings.get('default_currency_id'))) await settings.set({ default_currency_id: usd.id });
+  // the shop runs in Pakistani rupees: new installs start with PKR as the default currency; an existing install is switched once
+  // (QA report 18 Nov 2026, M26) and can be changed back in Settings > General at any time
+  const pkrCur = await M.Currency.findOne({ where: { currency_code: 'PKR' } });
+  const curId = await settings.get('default_currency_id');
+  if (!curId) await settings.set({ default_currency_id: (pkrCur || usd).id });
+  else if (pkrCur && !(await settings.get('default_currency_pkr_applied')) && Number(curId) === usd.id) await settings.set({ default_currency_id: pkrCur.id });
+  await M.Setting.upsert({ key: 'default_currency_pkr_applied', value: '1' });
 
   console.log(`Seed complete. Super admin: ${seed.email}`);
   await M.sequelize.close();

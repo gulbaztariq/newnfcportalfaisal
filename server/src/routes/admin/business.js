@@ -55,17 +55,42 @@ r.get('/nfc-cards/:id/components', wrap(async (req, res) => {
 r.put('/nfc-cards/:id/components', wrap(async (req, res) => {
   const p = await M.NfcCard.findByPk(req.params.id);
   if (!p) fail(404, 'Not found');
-  const list = jsonList(req.body.components).filter((c) => c.inventory_item_id && Number(c.quantity) > 0);
+  const raw = jsonList(req.body.components).filter((c) => c.inventory_item_id);
+  if (raw.some((c) => !(Number(c.quantity) > 0))) fail(422, 'Validation failed', { components: 'Every component quantity must be more than 0' });
+  if (req.body.extra_cost !== undefined && !(Number(req.body.extra_cost || 0) >= 0)) fail(422, 'Validation failed', { extra_cost: 'Extra cost cannot be negative' });
+  const list = raw;
   await M.ProductComponent.destroy({ where: { nfc_card_id: p.id } });
   for (const c of list) await M.ProductComponent.create({ nfc_card_id: p.id, inventory_item_id: Number(c.inventory_item_id), quantity: Number(c.quantity) });
   if (req.body.extra_cost !== undefined) await p.update({ extra_cost: r2(req.body.extra_cost) });
   res.json({ message: 'Costing saved', unit_cost: await inventory.productUnitCost(p.id) });
 }));
+/** paginated, searchable product list (the shop catalogue and items synced from order sources are different things); `all=1` keeps the full list for dropdowns */
+r.get('/nfc-cards', (req, res, next) => (req.query.all === '1' ? next() : wrap(async () => {
+  const p = paginate(req, 24);
+  const where = {};
+  const q = String(req.query.search || '').trim().slice(0, 100);
+  if (q) where[Op.or] = ['name', 'sku', 'category'].map((f) => ({ [f]: { [Op.like]: `%${q.replace(/[%_]/g, '')}%` } }));
+  if (req.query.source === 'shop') where.order_source_id = null;
+  else if (req.query.source === 'synced') where.order_source_id = { [Op.ne]: null };
+  else if (req.query.source) where.order_source_id = Number(req.query.source) || -1;
+  if (req.query.visibility === 'shown') where.show_in_shop = true; else if (req.query.visibility === 'hidden') where.show_in_shop = false;
+  if (req.query.sku === 'missing') where[Op.and] = [...(where[Op.and] || []), { [Op.or]: [{ sku: null }, { sku: '' }] }];
+  if (req.query.category) where.category = req.query.category;
+  const { rows, count } = await M.NfcCard.findAndCountAll({ where, order: [['sort', 'ASC'], ['id', 'ASC']], limit: p.limit, offset: p.offset, include: [{ model: M.Plan, as: 'plan', attributes: ['id', 'name', 'frequency'] }, { model: M.OrderSource, as: 'order_source', attributes: ['id', 'name'], required: false }] });
+  const total = await M.NfcCard.count();
+  const synced = await M.NfcCard.count({ where: { order_source_id: { [Op.ne]: null } } });
+  res.json({ ...paged(rows, count, p), totals: { all: total, synced, shop: total - synced } });
+})(req, res, next)));
 r.use('/nfc-cards', crud(M.NfcCard, {
   fields: PRODUCT_FIELDS, booleans: ['status', 'featured', 'show_in_shop', 'track_stock', 'no_wholesale_tiers'], files: ['front_image', 'back_image'], folder: 'nfc',
-  rules: { name: 'required|max:120', price: 'required|numeric|minv:0' }, search: ['name', 'sku', 'category'], order: [['sort', 'ASC'], ['id', 'ASC']],
+  rules: { name: 'required|max:120', price: 'required|numeric|minv:0', compare_price: 'numeric|minv:0', customization_price: 'numeric|minv:0', sku: 'max:80' }, search: ['name', 'sku', 'category'], order: [['sort', 'ASC'], ['id', 'ASC']],
   include: [{ model: M.Plan, as: 'plan', attributes: ['id', 'name', 'frequency'] }],
   beforeSave: async (data, _req, row) => {
+    if (data.sku !== undefined) {
+      data.sku = String(data.sku || '').trim().toUpperCase() || null;
+      if (data.sku && (await M.NfcCard.findOne({ where: { sku: data.sku, id: { [Op.ne]: row?.id || 0 } }, attributes: ['id', 'name'] }))) fail(422, 'Validation failed', { sku: 'This SKU is already used by another product' });
+    }
+    if (data.compare_price !== undefined && data.compare_price !== null && data.compare_price !== '' && Number(data.compare_price) > 0 && Number(data.compare_price) < Number(data.price ?? row?.price ?? 0)) fail(422, 'Validation failed', { compare_price: 'Compare-at price cannot be lower than the price' });
     if (data.plan_id !== undefined) data.plan_id = Number(data.plan_id) || null; // empty = non-plan product
     if (data.order_source_id !== undefined) data.order_source_id = Number(data.order_source_id) || null;
     if (data.product_kind !== undefined) data.product_kind = PRODUCT_KINDS.includes(data.product_kind) ? data.product_kind : null;
@@ -431,7 +456,8 @@ r.post('/order-sources/:id/import', wrap(async (req, res) => {
   const src = await sourceOr404(req.params.id);
   const out = await productsync.importPasted(src, req.body.text);
   if (!out.total) fail(422, 'Validation failed', { text: 'Write one product per line, like: Blue NFC card, 1500' });
-  res.json({ data: out, message: `${out.total} products saved (${out.created} new, ${out.updated} updated)` });
+  const skip = out.skipped?.length ? `. ${out.skipped.length} line${out.skipped.length > 1 ? 's' : ''} skipped (no price found): ${out.skipped.slice(0, 3).map((l) => `"${l}"`).join(', ')}${out.skipped.length > 3 ? ' ...' : ''}` : '';
+  res.json({ data: out, message: `${out.total} products saved (${out.created} new, ${out.updated} updated)${skip}` });
 }));
 const PRICE_COLS = ['id', 'name', 'sku', 'front_image', 'images', 'price', 'source_price', 'price_locked', 'discount_type', 'discount_value', 'sample_price', 'wholesale_tiers', 'no_wholesale_tiers', 'product_kind', 'status', 'source_url', 'variants', 'synced_at'];
 r.get('/order-sources/:id/products', wrap(async (req, res) => {
@@ -454,6 +480,10 @@ r.put('/order-sources/:id/products', wrap(async (req, res) => {
     if (x.product_kind !== undefined) data.product_kind = PRODUCT_KINDS.includes(x.product_kind) ? x.product_kind : null;
     if (x.status !== undefined) data.status = toBool(x.status);
     if (x.no_wholesale_tiers !== undefined) data.no_wholesale_tiers = toBool(x.no_wholesale_tiers);
+    const price = data.price ?? Number(row.price); const dType = data.discount_type !== undefined ? data.discount_type : row.discount_type; const dVal = data.discount_value !== undefined ? data.discount_value : Number(row.discount_value || 0);
+    if (dVal > 0 && dType === 'fixed' && dVal > price) fail(422, `${row.name}: the discount (${dVal}) is more than the price (${price})`, { products: `${row.name}: discount cannot be more than the price` });
+    if (x.price !== undefined && x.price !== '' && !(Number(x.price) >= 0)) fail(422, `${row.name}: price cannot be negative`, { products: `${row.name}: price cannot be negative` });
+    if (x.sample_price !== undefined && x.sample_price !== '' && x.sample_price !== null && !(Number(x.sample_price) >= 0)) fail(422, `${row.name}: sample price cannot be negative`, { products: `${row.name}: sample price cannot be negative` });
     if (Object.keys(data).length) { await row.update(data); n++; }
   }
   res.json({ message: `${n} product${n === 1 ? '' : 's'} saved` });
@@ -620,10 +650,21 @@ r.put('/short-links/:id', wrap(async (req, res) => {
   res.json({ data: link, message: 'Redirect updated' });
 }));
 r.delete('/short-links/:id', wrap(async (req, res) => { await M.ShortLink.destroy({ where: { id: req.params.id } }); res.json({ message: 'Deleted' }); }));
+/** delete a whole generated batch, but only links nobody has activated or used yet */
+r.delete('/short-links/batch/:name', wrap(async (req, res) => {
+  const name = String(req.params.name || '').slice(0, 60);
+  const where = { batch: name };
+  const total = await M.ShortLink.count({ where });
+  if (!total) fail(404, 'No links in this batch');
+  const n = await M.ShortLink.destroy({ where: { ...where, target_type: 'unassigned', clicks: 0 } });
+  if (!n) fail(422, 'Every link in this batch is already in use, so nothing was deleted');
+  res.json({ message: n === total ? `${n} links deleted` : `${n} unused links deleted. ${total - n} that are already in use were kept.` });
+}));
 r.post('/short-links/bulk-delete', wrap(async (req, res) => { const n = await M.ShortLink.destroy({ where: { id: jsonList(req.body.ids).map(Number) } }); res.json({ message: `${n} deleted` }); }));
 /** bulk-generate unassigned links for pre-printed NFC tags / QR stickers */
 r.post('/short-links/bulk', wrap(async (req, res) => {
-  const count = Math.min(5000, Math.max(1, parseInt(req.body.count, 10) || 0));
+  validate(req.body, { count: 'required|integer|minv:1|maxv:5000', length: 'integer|minv:5|maxv:12' }, { count: 'Number of links', length: 'Code length' });
+  const count = parseInt(req.body.count, 10);
   const batch = String(req.body.batch || `Batch ${dayjs().format('YYYY-MM-DD HH:mm')}`).slice(0, 60);
   const d = req.body.target_url ? { target_type: 'url', target_url: req.body.target_url } : { target_type: 'unassigned' };
   if (d.target_url) validate(req.body, { target_url: 'url' });
@@ -761,16 +802,40 @@ r.get('/finance/report/export', wrap(async (req, res) => {
   await sendExport(res, req.query.format, 'profit-and-loss', `Profit & loss ${rep.range.from} to ${rep.range.to}`, [['month', 'Month'], ['orders', 'Orders'], ['revenue', 'Revenue'], ['cogs', 'Cost of goods'], ['courier', 'Courier'], ['expenses', 'Expenses'], ['profit', 'Net profit']],
     [...rep.series, { month: 'TOTAL', orders: rep.summary.orders, revenue: rep.summary.revenue, cogs: rep.summary.cogs, courier: rep.summary.courier, expenses: rep.summary.expenses, profit: rep.summary.net_profit }]);
 }));
-r.use('/finance/accounts', crud(M.FinanceAccount, { fields: ['name', 'type', 'opening_balance', 'note', 'status'], booleans: ['status'], rules: { name: 'required|max:120' }, order: [['id', 'ASC']] }));
-r.use('/finance/partners', crud(M.Partner, { fields: ['name', 'email', 'phone', 'share_percent', 'note', 'status'], booleans: ['status'], rules: { name: 'required|max:120', email: 'email|max:191' }, order: [['id', 'ASC']] }));
-r.use('/finance/categories', crud(M.FinanceCategory, { fields: ['name', 'type'], rules: { name: 'required|max:120', type: 'required|in:expense,income' }, order: [['name', 'ASC']], filters: ['type'] }));
+r.use('/finance/accounts', crud(M.FinanceAccount, { fields: ['name', 'type', 'opening_balance', 'note', 'status'], booleans: ['status'], rules: { name: 'required|max:120', opening_balance: 'numeric' }, order: [['id', 'ASC']],
+  canDelete: async (row) => {
+    const n = (await Promise.all([M.FinanceEntry, M.VendorPayment, M.Purchase, M.CourierSettlement].map((X) => X.count({ where: { account_id: row.id } })))).reduce((a, b) => a + b, 0);
+    return n ? `This account has ${n} transaction${n > 1 ? 's' : ''} recorded against it, so it cannot be deleted. Switch it off instead.` : null;
+  } }));
+r.use('/finance/partners', crud(M.Partner, { fields: ['name', 'email', 'phone', 'share_percent', 'note', 'status'], booleans: ['status'], rules: { name: 'required|max:120', email: 'email|max:191', phone: 'phone', share_percent: 'numeric|minv:0|maxv:100' }, order: [['id', 'ASC']],
+  beforeSave: async (data, _req, row) => {
+    if (data.share_percent === undefined || data.share_percent === null || data.share_percent === '') return data;
+    const others = (await M.Partner.findAll({ where: { id: { [Op.ne]: row?.id || 0 }, status: true }, attributes: ['share_percent'], raw: true })).reduce((a, p) => a + Number(p.share_percent || 0), 0);
+    if (others + Number(data.share_percent) > 100.0001) fail(422, 'Validation failed', { share_percent: `Total partner shares would be ${r2(others + Number(data.share_percent))}%. They cannot be more than 100% (other partners already have ${r2(others)}%).` });
+    return data;
+  },
+  canDelete: async (row) => ((await M.FinanceEntry.count({ where: { partner_id: row.id } })) ? 'This partner has recorded expenses or income. Switch them off instead.' : null) }));
+r.use('/finance/categories', crud(M.FinanceCategory, { fields: ['name', 'type'], rules: { name: 'required|max:120', type: 'required|in:expense,income' }, order: [['name', 'ASC']], filters: ['type'],
+  beforeSave: async (data, _req, row) => {
+    data.name = String(data.name ?? row?.name ?? '').trim();
+    const same = (await M.FinanceCategory.findAll({ where: { type: data.type || row?.type, id: { [Op.ne]: row?.id || 0 } }, attributes: ['name'], raw: true })).some((c) => String(c.name).toLowerCase() === data.name.toLowerCase());
+    if (same) fail(422, 'Validation failed', { name: 'A category with this name already exists' });
+    return data;
+  } }));
 r.use('/finance/entries', crud(M.FinanceEntry, {
   fields: ['type', 'date', 'title', 'category', 'amount', 'account_id', 'partner_id', 'vendor_id', 'payment_method', 'reference', 'description', 'status'],
   files: ['attachment'], folder: 'finance', types: DOC_TYPES, search: ['title', 'category', 'reference', 'description'], filters: ['type', 'partner_id', 'account_id', 'category', 'status', 'vendor_id'],
   rules: { type: 'required|in:expense,income', date: 'required|date', title: 'required|max:200', amount: 'required|numeric|minv:0.01', status: 'in:paid,unpaid' },
   include: [{ model: M.Partner, as: 'partner', attributes: ['id', 'name'] }, { model: M.FinanceAccount, as: 'account', attributes: ['id', 'name'] }, { model: M.Vendor, attributes: ['id', 'name'] }, { model: M.User, as: 'creator', attributes: ['id', 'first_name', 'last_name'] }],
   order: [['date', 'DESC'], ['id', 'DESC']],
-  beforeSave: (data, req, row) => { if (!row) data.created_by = req.user.id; return data; },
+  beforeSave: async (data, req, row) => {
+    if (!row) data.created_by = req.user.id;
+    const status = data.status ?? row?.status ?? 'paid';
+    const acc = data.account_id !== undefined ? data.account_id : row?.account_id;
+    if (status === 'paid' && !acc) fail(422, 'Validation failed', { account_id: 'Choose the account the money was paid from or received into' });
+    if (acc && !(await M.FinanceAccount.findByPk(acc))) fail(422, 'Validation failed', { account_id: 'Choose an account from the list' });
+    return data;
+  },
 }));
 r.use('/finance/settlements', crud(M.CourierSettlement, {
   fields: ['courier', 'date', 'reference', 'cod_amount', 'charges', 'net_amount', 'tracking_numbers', 'note', 'account_id'], files: ['attachment'], folder: 'finance', types: DOC_TYPES,
