@@ -459,7 +459,7 @@ export default function OrderWizard() {
               {acc.created && <p className="px-1 text-xs text-muted-foreground">The password is shown only once.</p>}
             </div>
           )}
-          <div className="relative mt-6 flex justify-center gap-2">
+          <div className="relative mt-6 flex flex-wrap justify-center gap-2">
             {o.order_type === 'sample' && <Button variant="outline" onClick={() => navigate(`/admin/orders/new?sample=${o.id}`)}><Boxes />Bulk order from this sample</Button>}
             {result.guest && <Button variant="outline" onClick={() => navigate(`/admin/guest-customers/${result.guest.id}`)}><UserRound />Guest journey</Button>}
             <Button variant="outline" onClick={restart}><Plus />New order</Button>
