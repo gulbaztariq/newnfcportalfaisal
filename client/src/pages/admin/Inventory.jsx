@@ -256,7 +256,7 @@ export function StockMovements() {
             { key: 'type', label: 'Type', render: (m) => <MovementBadge type={m.type} /> },
             { key: 'quantity', label: 'Qty', className: 'text-right', render: (m) => <span className={cn('font-semibold tabular-nums', num(m.quantity) < 0 ? 'text-danger' : 'text-success')}>{num(m.quantity) > 0 ? '+' : ''}{fq(m.quantity)} <span className="text-xs font-normal text-muted-foreground">{m.item?.unit}</span></span> },
             { key: 'unit_cost', label: 'Unit cost', className: 'text-right', render: (m) => pkr(m.unit_cost) },
-            { key: 'value', label: 'Value', className: 'text-right', render: (m) => <span className="text-muted-foreground">{pkr(Math.abs(num(m.quantity) * num(m.unit_cost)))}</span> },
+            { key: 'value', label: 'Value', className: 'text-right', render: (m) => { const v = num(m.quantity) * num(m.unit_cost); return <span className={v < 0 ? "text-danger" : "text-muted-foreground"}>{pkr(v)}</span>; } },
             { key: 'location', label: 'Location', render: (m) => (m.location ? <span className="inline-flex items-center gap-1"><MapPin className="size-3.5 text-info" />{m.location.name}</span> : <span className="inline-flex items-center gap-1"><Home className="size-3.5 text-muted-foreground" />Main store</span>) },
             { key: 'reference', label: 'Reference', render: (m) => <div className="max-w-52"><p className="truncate">{m.nfc_order?.order_number || m.reference || '-'}</p>{m.note && <p className="truncate text-xs text-muted-foreground">{m.note}</p>}</div> },
             { key: 'creator', label: 'By', render: (m) => <span className="text-muted-foreground">{m.creator ? fullName(m.creator) : 'System'}</span> },

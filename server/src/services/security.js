@@ -78,10 +78,39 @@ const unban = (ip) => banned.delete(ip);
 
 /* ------------------------------------------------------------ audit log */
 async function audit(req, action, entity, entityId, meta) {
+  req._audited = true; // the generic admin logger (below) skips requests that already wrote a detailed entry
   try {
     const { ActivityLog } = require('../models');
     await ActivityLog.create({ user_id: req.actor?.id || req.user?.id || null, action, entity, entity_id: entityId || null, ip: req.ip, user_agent: String(req.get('user-agent') || '').slice(0, 250), meta: meta || {} });
   } catch (e) { console.error('[audit]', e.message); }
 }
 
-module.exports = { sendLoginCode, checkLoginCode, lockoutState, registerFailure, clearFailures, ipGuard, strike, bannedList, unban, audit };
+/** every admin change is logged: who did what, to which record, with the values (never passwords, tokens or keys) */
+const SENSITIVE = /pass|secret|token|key|credential|otp|code|hash|authorization/i;
+function safeMeta(body) {
+  const out = {};
+  for (const [k, v] of Object.entries(body && typeof body === 'object' ? body : {}).slice(0, 25)) {
+    if (SENSITIVE.test(k) || v === undefined || v === null || typeof v === 'object') continue;
+    out[k] = String(v).slice(0, 160);
+  }
+  return out;
+}
+function adminAuditLogger(req, res, next) {
+  if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return next();
+  res.on('finish', () => {
+    if (res.statusCode >= 400 || req._audited) return;
+    // req.path is rewritten by nested routers while the request runs, so the full original URL is used
+    const full = String(req.originalUrl || '').split('?')[0].replace(/^\/api\/admin/, '');
+    const parts = full.split('/').filter(Boolean);
+    const id = parts.find((x, i) => i > 0 && /^\d+$/.test(x)) || null;
+    const words = parts.filter((x) => !/^\d+$/.test(x));
+    const verb = { POST: 'create', PUT: 'update', PATCH: 'update', DELETE: 'delete' }[req.method] || req.method.toLowerCase();
+    // POST /inventory/adjust -> inventory.adjust ; POST /inventory/items -> inventory.items.create ; DELETE /vendors/4 -> vendors.delete
+    const named = ['adjust', 'transfer', 'send', 'sync', 'import', 'bulk', 'bulk-delete', 'resend-invite', 'resend-verification', 'reset-authenticator', 'sign-out', 'unlink', 'connect', 'test', 'notify', 'track', 'book', 'refresh', 'db-upgrade', 'default', 'status', 'config', 'qr-config', 'limits', 'reset-price', 'short-link', 'invoice', 'impersonate', 'courier', 'components', 'payments', 'clone'];
+    const action = words.length > 1 && named.includes(words.at(-1)) ? words.join('.') : `${words.join('.') || 'admin'}.${verb}`;
+    audit(req, action, words[0] || 'admin', id ? Number(id) : null, { path: req.originalUrl.split('?')[0], values: safeMeta(req.body), changed: full.startsWith('/settings') ? Object.keys(req.body || {}).filter((k) => !SENSITIVE.test(k)).slice(0, 40) : undefined });
+  });
+  next();
+}
+
+module.exports = { adminAuditLogger, sendLoginCode, checkLoginCode, lockoutState, registerFailure, clearFailures, ipGuard, strike, bannedList, unban, audit };

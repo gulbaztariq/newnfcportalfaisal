@@ -32,7 +32,12 @@ export function useList(url, initial = {}) {
   const load = useCallback(async () => {
     setState((s) => ({ ...s, loading: true }));
     try {
-      const { data } = await api.get(url, { params });
+      const clean = { ...params };
+      // search text goes to the server as plain words: quotes, semicolons, comment marks and angle brackets only trigger the web server's firewall
+      if (typeof clean.search === 'string') clean.search = clean.search.replace(/['";`\\<>]|--|\/\*|\*\//g, ' ').replace(/\s+/g, ' ').trim().slice(0, 100);
+      const { data } = await api.get(url, { params: clean });
+      // the last row of the last page was deleted: step back to the last page that still has rows
+      if (!data.data.length && data.meta?.last_page && params.page > data.meta.last_page && data.meta.last_page >= 1) { setParams((x) => ({ ...x, page: data.meta.last_page })); return; }
       setState({ rows: data.data, meta: data.meta, loading: false, extra: data });
     } catch (e) { toast.error(e.message); setState((s) => ({ ...s, loading: false })); }
   }, [url, JSON.stringify(params)]); // eslint-disable-line
@@ -114,7 +119,7 @@ export function DataTable({ columns: cols, rows, loading, empty, onRowClick, row
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-border bg-muted/40">
-            {columns.map((c) => <th key={c.key || String(c.label)} className={cn('px-5 py-3 text-left text-xs font-semibold tracking-wide whitespace-nowrap text-muted-foreground uppercase', c.className)}>{c.label}</th>)}
+            {columns.map((c) => <th key={c.key || String(c.label)} className={cn('px-5 py-3 text-left text-xs font-semibold tracking-wide whitespace-nowrap text-muted-foreground uppercase', c.className, c.key === '_a' && 'sticky right-0 z-10 bg-muted/90 backdrop-blur')}>{c.label}</th>)}
           </tr>
         </thead>
         <tbody className={cn('divide-y divide-border transition-opacity', loading && 'opacity-60')}>
@@ -122,7 +127,7 @@ export function DataTable({ columns: cols, rows, loading, empty, onRowClick, row
             {rows.map((row, i) => (
               <motion.tr key={row[rowKey] ?? i} layout initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0, transition: { delay: Math.min(i * 0.025, 0.25) } }} exit={{ opacity: 0 }}
                 onClick={onRowClick ? () => onRowClick(row) : undefined} className={cn('group transition-colors hover:bg-muted/40', onRowClick && 'cursor-pointer')}>
-                {columns.map((c) => <td key={c.key || c.label} className={cn('px-5 py-3.5 whitespace-nowrap', c.className)}>{c.render ? c.render(row) : row[c.key]}</td>)}
+                {columns.map((c) => <td key={c.key || c.label} className={cn('px-5 py-3.5 whitespace-nowrap', c.className, c.key === '_a' && 'sticky right-0 z-10 bg-card/95 shadow-[-8px_0_8px_-8px_rgba(0,0,0,0.15)] backdrop-blur group-hover:bg-muted')}>{c.render ? c.render(row) : row[c.key]}</td>)}
               </motion.tr>
             ))}
           </AnimatePresence>

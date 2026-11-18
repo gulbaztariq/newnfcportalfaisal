@@ -140,6 +140,11 @@ export function useForm(initial) {
   /** props for <Input>/<Textarea> */
   const input = (name) => ({ id: `f-${name}`, name, value: values[name] ?? '', onChange: (e) => set(name, e.target.value), 'aria-invalid': !!errors[name] || undefined });
   /** run instant checks (same wording as the server); shows the messages and returns true when everything is fine */
-  const validate = (rules, labels) => { const e = check(values, rules, labels); setErrors(e); return Object.keys(e).length === 0; };
-  return { values, setValues, errors, setErrors, set, input, validate };
+  // a problem further down a long form (a purchase, an invoice) must not stay off screen: the first error is scrolled into view
+  const showErrors = (e) => {
+    setErrors(e);
+    if (e && Object.values(e).some(Boolean)) setTimeout(() => { const el = document.querySelector('[data-field-error]'); if (el) { const r = el.getBoundingClientRect(); if (r.top < 60 || r.bottom > window.innerHeight - 20) el.scrollIntoView({ block: 'center', behavior: 'smooth' }); } }, 80);
+  };
+  const validate = (rules, labels) => { const e = check(values, rules, labels); showErrors(e); return Object.keys(e).length === 0; };
+  return { values, setValues, errors, setErrors: showErrors, set, input, validate };
 }

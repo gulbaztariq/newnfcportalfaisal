@@ -70,7 +70,8 @@ async function transfer({ itemId, fromVendorId, toVendorId, quantity, date, note
   const item = await InventoryItem.findByPk(itemId);
   if (!item) throw new HttpError(404, 'Item not found');
   await sequelize.transaction(async (t) => {
-    if ((await qtyAt(item.id, fromVendorId, t)) < q) throw new HttpError(422, 'Not enough stock at the source location');
+    const have = await qtyAt(item.id, fromVendorId, t);
+    if (have < q) throw new HttpError(422, `Not enough stock at the source location. Only ${Math.max(0, have)} available`);
     const common = { inventory_item_id: item.id, unit_cost: item.purchase_price, date: date || dayjs().format('YYYY-MM-DD'), note, created_by: userId, reference: 'Transfer' };
     await StockMovement.create({ ...common, vendor_id: fromVendorId || null, type: 'transfer_out', quantity: -q }, { transaction: t });
     await StockMovement.create({ ...common, vendor_id: toVendorId || null, type: 'transfer_in', quantity: q }, { transaction: t });
@@ -114,9 +115,22 @@ async function restoreForOrder(order, userId) {
 
 /** Items at or below their reorder level */
 async function lowStock() {
-  const items = await M().InventoryItem.findAll({ where: { status: true, reorder_level: { [Op.gt]: 0 } } });
+  const items = await M().InventoryItem.findAll({ where: { status: true } });
   const lv = await levels(items.map((i) => i.id));
-  return items.filter((i) => (lv[i.id]?.total || 0) <= i.reorder_level).map((i) => ({ id: i.id, name: i.name, qty: lv[i.id]?.total || 0, reorder_level: i.reorder_level }));
+  // below the reorder level, or out / negative (negative stock is always a problem to look at)
+  return items.filter((i) => { const q = lv[i.id]?.total || 0; return q < 0 || (Number(i.reorder_level) > 0 && q <= Number(i.reorder_level)); })
+    .map((i) => ({ id: i.id, name: i.name, qty: lv[i.id]?.total || 0, reorder_level: i.reorder_level, negative: (lv[i.id]?.total || 0) < 0 }));
 }
 
-module.exports = { levels, qtyAt, productUnitCost, applyPurchase, transfer, consumeForOrder, restoreForOrder, lowStock, r2 };
+/** next free auto SKU: INV-00001, INV-00002, ... (case-insensitive unique) */
+async function nextSku() {
+  const { InventoryItem } = M();
+  let n = (await InventoryItem.count()) + 1;
+  for (let i = 0; i < 50; i += 1, n += 1) {
+    const sku = `INV-${String(n).padStart(5, '0')}`;
+    if (!(await InventoryItem.findOne({ where: { sku } }))) return sku;
+  }
+  return `INV-${Date.now().toString(36).toUpperCase()}`;
+}
+
+module.exports = { nextSku, levels, qtyAt, productUnitCost, applyPurchase, transfer, consumeForOrder, restoreForOrder, lowStock, r2 };

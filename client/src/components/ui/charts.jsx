@@ -28,7 +28,7 @@ export function AreaTrend({ data, dataKey = 'value', name = 'Value', height = 30
           </linearGradient>
         </defs>
         <CartesianGrid strokeDasharray="4 4" vertical={false} />
-        <XAxis dataKey="label" tickLine={false} axisLine={false} tickMargin={10} minTickGap={16} />
+        <XAxis dataKey="label" tickLine={false} axisLine={false} tickMargin={10} minTickGap={16} interval={(data || []).length <= 12 ? 0 : 'preserveStartEnd'} />
         <YAxis tickLine={false} axisLine={false} tickFormatter={format} width={56} allowDecimals={false} />
         <Tooltip content={<ChartTip format={format} />} />
         <Area type="monotone" dataKey={dataKey} name={name} stroke="var(--primary)" strokeWidth={2.5} fill={`url(#g-${dataKey})`} animationDuration={1200} activeDot={{ r: 5, strokeWidth: 3, stroke: 'var(--card)' }} />
@@ -48,7 +48,7 @@ export function Bars({ data, dataKey = 'value', name = 'Value', height = 300 }) 
           </linearGradient>
         </defs>
         <CartesianGrid strokeDasharray="4 4" vertical={false} />
-        <XAxis dataKey="label" tickLine={false} axisLine={false} tickMargin={10} minTickGap={12} />
+        <XAxis dataKey="label" tickLine={false} axisLine={false} tickMargin={10} minTickGap={12} interval={(data || []).length <= 12 ? 0 : 'preserveStartEnd'} />
         <YAxis tickLine={false} axisLine={false} allowDecimals={false} />
         <Tooltip content={<ChartTip />} />
         <Bar dataKey={dataKey} name={name} fill="url(#bar-g)" radius={[6, 6, 2, 2]} maxBarSize={28} animationDuration={1000} />

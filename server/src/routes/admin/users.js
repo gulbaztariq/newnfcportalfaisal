@@ -21,7 +21,7 @@ const STAFF = ['admin', 'manager', 'supervisor'];
 const parseList = (v) => { if (Array.isArray(v)) return v; try { return JSON.parse(v); } catch { return String(v || '').split(',').filter(Boolean); } };
 
 /* organisation accounts: company details sent as org_* fields next to the owner's user fields */
-const ORG_RULES = { org_name: 'required|max:150', org_email: 'email|max:191', org_phone: 'phone', org_address: 'max:500', org_city: 'max:120', org_country: 'max:120', seats: 'numeric' };
+const ORG_RULES = { org_name: 'required|max:150', org_email: 'email|max:191', org_phone: 'phone', org_address: 'max:500', org_city: 'max:120', org_country: 'max:120', seats: 'integer|minv:1|maxv:100000' };
 function orgData(b) {
   const w = String(b.org_website || '').trim();
   const d = {
@@ -40,6 +40,16 @@ module.exports = function usersRouter(role) {
   if (role === 'admin') r.use(isSuperAdmin); // only the super admin manages admins
   const upload = makeUpload('avatars', { maxMb: 2 }).fields([{ name: 'avatar', maxCount: 1 }, { name: 'logo', maxCount: 1 }]);
   const roleWhere = role === 'admin' ? STAFF : 'user';
+  /** "0300 1234567" with no country -> region 92 and 3001234567, so it never shows as "+ 3001234567" */
+  async function normalisePhone(d) {
+    if (d.contact === undefined || d.contact === null || d.contact === '') return d;
+    let digits = String(d.contact).replace(/[^\d+]/g, ''); let region = String(d.region_code || '').replace(/\D/g, '');
+    if (digits.startsWith('+')) { digits = digits.slice(1); if (!region) { const cc = String(await settings.get('phone_default_region') || '92'); region = digits.startsWith(cc) ? cc : ''; if (region) digits = digits.slice(cc.length); } }
+    else if (digits.startsWith('00')) digits = digits.slice(2);
+    if (!region) region = String(await settings.get('phone_default_region') || '92').replace(/\D/g, '');
+    digits = digits.replace(/^0+/, '');
+    return { ...d, region_code: region, contact: digits };
+  }
   const staffRole = (b) => (STAFF.includes(b.role) ? b.role : 'manager');
   /** staff access from the form: a named role (its permissions are copied to the person), full-access admin, or hand-picked modules */
   async function staffAccess(b) {
@@ -168,10 +178,10 @@ module.exports = function usersRouter(role) {
     if (await User.findOne({ where: { email } })) fail(422, 'Validation failed', { email: 'This e-mail is already registered' });
     const access = role === 'admin' ? await staffAccess(req.body) : {};
     const user = await User.create({
-      ...pick(req.body, ['first_name', 'last_name', 'contact', 'region_code']), email, role: role === 'admin' ? (access.role || staffRole(req.body)) : 'user',
+      ...(await normalisePhone(pick(req.body, ['first_name', 'last_name', 'contact', 'region_code']))), email, role: role === 'admin' ? (access.role || staffRole(req.body)) : 'user',
       permissions: role === 'admin' ? access.permissions ?? null : null, staff_role_id: role === 'admin' ? access.staff_role_id : null,
       is_active: req.body.is_active === undefined ? true : toBool(req.body.is_active),
-      password: await bcrypt.hash(invited ? crypto.randomBytes(24).toString('hex') : String(req.body.password), 12), email_verified_at: new Date(),
+      password: await bcrypt.hash(invited ? crypto.randomBytes(24).toString('hex') : String(req.body.password), 12), email_verified_at: invited ? null : new Date(), // an invited person verifies the address by opening the e-mailed link
       affiliate_code: crypto.randomBytes(5).toString('hex'), avatar: fileUrl('avatars', fileOf(req, 'avatar')),
       is_organisation: isOrg, company_role: isOrg ? 'owner' : null,
     });
@@ -230,7 +240,7 @@ module.exports = function usersRouter(role) {
     validate(req.body, { first_name: 'required|max:100', last_name: 'max:100', email: 'required|email|max:191', password: 'min:6|max:100', ...(isOrg && req.body.org_name !== undefined ? ORG_RULES : {}) });
     const email = String(req.body.email).toLowerCase().trim();
     if (email !== user.email && (await User.findOne({ where: { email } }))) fail(422, 'Validation failed', { email: 'This e-mail is already registered' });
-    const data = { ...pick(req.body, ['first_name', 'last_name', 'contact', 'region_code']), email };
+    const data = { ...(await normalisePhone(pick(req.body, ['first_name', 'last_name', 'contact', 'region_code']))), email };
     if (req.body.is_active !== undefined) data.is_active = toBool(req.body.is_active);
     if (role === 'admin') {
       if (req.body.role !== undefined || req.body.permissions !== undefined || req.body.staff_role_id !== undefined) Object.assign(data, await staffAccess(req.body));

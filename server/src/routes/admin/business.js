@@ -55,17 +55,42 @@ r.get('/nfc-cards/:id/components', wrap(async (req, res) => {
 r.put('/nfc-cards/:id/components', wrap(async (req, res) => {
   const p = await M.NfcCard.findByPk(req.params.id);
   if (!p) fail(404, 'Not found');
-  const list = jsonList(req.body.components).filter((c) => c.inventory_item_id && Number(c.quantity) > 0);
+  const raw = jsonList(req.body.components).filter((c) => c.inventory_item_id);
+  if (raw.some((c) => !(Number(c.quantity) > 0))) fail(422, 'Validation failed', { components: 'Every component quantity must be more than 0' });
+  if (req.body.extra_cost !== undefined && !(Number(req.body.extra_cost || 0) >= 0)) fail(422, 'Validation failed', { extra_cost: 'Extra cost cannot be negative' });
+  const list = raw;
   await M.ProductComponent.destroy({ where: { nfc_card_id: p.id } });
   for (const c of list) await M.ProductComponent.create({ nfc_card_id: p.id, inventory_item_id: Number(c.inventory_item_id), quantity: Number(c.quantity) });
   if (req.body.extra_cost !== undefined) await p.update({ extra_cost: r2(req.body.extra_cost) });
   res.json({ message: 'Costing saved', unit_cost: await inventory.productUnitCost(p.id) });
 }));
+/** paginated, searchable product list (the shop catalogue and items synced from order sources are different things); `all=1` keeps the full list for dropdowns */
+r.get('/nfc-cards', (req, res, next) => (req.query.all === '1' ? next() : wrap(async () => {
+  const p = paginate(req, 24);
+  const where = {};
+  const q = String(req.query.search || '').trim().slice(0, 100);
+  if (q) where[Op.or] = ['name', 'sku', 'category'].map((f) => ({ [f]: { [Op.like]: `%${q.replace(/[%_]/g, '')}%` } }));
+  if (req.query.source === 'shop') where.order_source_id = null;
+  else if (req.query.source === 'synced') where.order_source_id = { [Op.ne]: null };
+  else if (req.query.source) where.order_source_id = Number(req.query.source) || -1;
+  if (req.query.visibility === 'shown') where.show_in_shop = true; else if (req.query.visibility === 'hidden') where.show_in_shop = false;
+  if (req.query.sku === 'missing') where[Op.and] = [...(where[Op.and] || []), { [Op.or]: [{ sku: null }, { sku: '' }] }];
+  if (req.query.category) where.category = req.query.category;
+  const { rows, count } = await M.NfcCard.findAndCountAll({ where, order: [['sort', 'ASC'], ['id', 'ASC']], limit: p.limit, offset: p.offset, include: [{ model: M.Plan, as: 'plan', attributes: ['id', 'name', 'frequency'] }, { model: M.OrderSource, as: 'order_source', attributes: ['id', 'name'], required: false }] });
+  const total = await M.NfcCard.count();
+  const synced = await M.NfcCard.count({ where: { order_source_id: { [Op.ne]: null } } });
+  res.json({ ...paged(rows, count, p), totals: { all: total, synced, shop: total - synced } });
+})(req, res, next)));
 r.use('/nfc-cards', crud(M.NfcCard, {
   fields: PRODUCT_FIELDS, booleans: ['status', 'featured', 'show_in_shop', 'track_stock', 'no_wholesale_tiers'], files: ['front_image', 'back_image'], folder: 'nfc',
-  rules: { name: 'required|max:120', price: 'required|numeric|minv:0' }, search: ['name', 'sku', 'category'], order: [['sort', 'ASC'], ['id', 'ASC']],
+  rules: { name: 'required|max:120', price: 'required|numeric|minv:0', compare_price: 'numeric|minv:0', customization_price: 'numeric|minv:0', sku: 'max:80' }, search: ['name', 'sku', 'category'], order: [['sort', 'ASC'], ['id', 'ASC']],
   include: [{ model: M.Plan, as: 'plan', attributes: ['id', 'name', 'frequency'] }],
   beforeSave: async (data, _req, row) => {
+    if (data.sku !== undefined) {
+      data.sku = String(data.sku || '').trim().toUpperCase() || null;
+      if (data.sku && (await M.NfcCard.findOne({ where: { sku: data.sku, id: { [Op.ne]: row?.id || 0 } }, attributes: ['id', 'name'] }))) fail(422, 'Validation failed', { sku: 'This SKU is already used by another product' });
+    }
+    if (data.compare_price !== undefined && data.compare_price !== null && data.compare_price !== '' && Number(data.compare_price) > 0 && Number(data.compare_price) < Number(data.price ?? row?.price ?? 0)) fail(422, 'Validation failed', { compare_price: 'Compare-at price cannot be lower than the price' });
     if (data.plan_id !== undefined) data.plan_id = Number(data.plan_id) || null; // empty = non-plan product
     if (data.order_source_id !== undefined) data.order_source_id = Number(data.order_source_id) || null;
     if (data.product_kind !== undefined) data.product_kind = PRODUCT_KINDS.includes(data.product_kind) ? data.product_kind : null;
@@ -107,7 +132,12 @@ const listOrders = wrap(async (req, res) => {
   if (req.query.courier === 'unbooked') where.tracking_number = null;
   if (req.query.from) where.created_at = { [Op.gte]: dayjs(req.query.from).startOf('day').toDate(), ...(req.query.to ? { [Op.lte]: dayjs(req.query.to).endOf('day').toDate() } : {}) };
   const q = (req.query.search || '').trim();
-  if (q) where[Op.or] = ['order_number', 'name', 'email', 'phone', 'company_name', 'tracking_number', 'city'].map((f) => ({ [f]: { [Op.like]: `%${q}%` } }));
+  if (q) {
+    where[Op.or] = ['order_number', 'name', 'email', 'phone', 'company_name', 'tracking_number', 'city'].map((f) => ({ [f]: { [Op.like]: `%${q.replace(/[%_]/g, '')}%` } }));
+    // a phone typed as +92 300 1234567 finds 03001234567 and the other way round: compare the last 10 digits with the spaces and dashes removed
+    const digits = q.replace(/\D/g, '');
+    if (digits.length >= 7) where[Op.or].push(M.sequelize.where(M.sequelize.fn('REPLACE', M.sequelize.fn('REPLACE', M.sequelize.fn('REPLACE', M.sequelize.col('nfc_order.phone'), ' ', ''), '-', ''), '+', ''), { [Op.like]: `%${digits.slice(-10)}%` }));
+  }
   const { rows, count } = await M.NfcOrder.findAndCountAll({ where, order: [['id', 'DESC']], limit: p.limit, offset: p.offset, include: ORDER_INCLUDE(), distinct: true });
   const counts = await M.NfcOrder.count({ group: ['order_status'] });
   res.json({ ...paged(rows, count, p), counts: Object.fromEntries(counts.map((c) => [c.order_status, c.count])), labels: orders.LABELS, steps: orders.STEPS });
@@ -194,6 +224,14 @@ r.post('/orders', wrap(async (req, res) => {
   // phone and address are optional for staff orders
   validate(b, { name: 'required|max:120', phone: 'phone', address: 'max:1000', city: 'max:120', email: `${type === 'new' ? 'required|' : ''}email|max:191`, company_name: 'max:150', discount_value: 'numeric', delivery_charges: 'numeric|minv:0' });
   if (b.discount_type === 'percent' && Number(b.discount_value) > 100) fail(422, 'Validation failed', { discount_value: 'A percentage cannot be more than 100' });
+  // a parcel that goes by courier needs somewhere to go and someone to call (office collection and digital orders do not)
+  if (!collection && !orders.NO_SHIP_TYPES.includes(b.order_type || 'nfc_profile')) {
+    const miss = {};
+    if (!String(b.phone || '').trim()) miss.phone = 'Phone number is required for courier delivery';
+    if (!String(b.address || '').trim()) miss.address = 'Delivery address is required for courier delivery';
+    if (!String(b.city || '').trim()) miss.city = 'City is required for courier delivery';
+    if (Object.keys(miss).length) fail(422, Object.values(miss)[0], miss);
+  }
   const source = b.order_source_id ? await M.OrderSource.findByPk(b.order_source_id) : null;
   if (b.order_source_id && !source) fail(422, 'Validation failed', { order_source_id: 'Unknown order source' });
   if (b.order_type && !orders.ORDER_TYPES[b.order_type]) fail(422, 'Validation failed', { order_type: 'Unknown order type' });
@@ -423,7 +461,8 @@ r.post('/order-sources/:id/import', wrap(async (req, res) => {
   const src = await sourceOr404(req.params.id);
   const out = await productsync.importPasted(src, req.body.text);
   if (!out.total) fail(422, 'Validation failed', { text: 'Write one product per line, like: Blue NFC card, 1500' });
-  res.json({ data: out, message: `${out.total} products saved (${out.created} new, ${out.updated} updated)` });
+  const skip = out.skipped?.length ? `. ${out.skipped.length} line${out.skipped.length > 1 ? 's' : ''} skipped (no price found): ${out.skipped.slice(0, 3).map((l) => `"${l}"`).join(', ')}${out.skipped.length > 3 ? ' ...' : ''}` : '';
+  res.json({ data: out, message: `${out.total} products saved from your list (${out.created} new, ${out.updated} updated)${skip}` });
 }));
 const PRICE_COLS = ['id', 'name', 'sku', 'front_image', 'images', 'price', 'source_price', 'price_locked', 'discount_type', 'discount_value', 'sample_price', 'wholesale_tiers', 'no_wholesale_tiers', 'product_kind', 'status', 'source_url', 'variants', 'synced_at'];
 r.get('/order-sources/:id/products', wrap(async (req, res) => {
@@ -446,6 +485,10 @@ r.put('/order-sources/:id/products', wrap(async (req, res) => {
     if (x.product_kind !== undefined) data.product_kind = PRODUCT_KINDS.includes(x.product_kind) ? x.product_kind : null;
     if (x.status !== undefined) data.status = toBool(x.status);
     if (x.no_wholesale_tiers !== undefined) data.no_wholesale_tiers = toBool(x.no_wholesale_tiers);
+    const price = data.price ?? Number(row.price); const dType = data.discount_type !== undefined ? data.discount_type : row.discount_type; const dVal = data.discount_value !== undefined ? data.discount_value : Number(row.discount_value || 0);
+    if (dVal > 0 && dType === 'fixed' && dVal > price) fail(422, `${row.name}: the discount (${dVal}) is more than the price (${price})`, { products: `${row.name}: discount cannot be more than the price` });
+    if (x.price !== undefined && x.price !== '' && !(Number(x.price) >= 0)) fail(422, `${row.name}: price cannot be negative`, { products: `${row.name}: price cannot be negative` });
+    if (x.sample_price !== undefined && x.sample_price !== '' && x.sample_price !== null && !(Number(x.sample_price) >= 0)) fail(422, `${row.name}: sample price cannot be negative`, { products: `${row.name}: sample price cannot be negative` });
     if (Object.keys(data).length) { await row.update(data); n++; }
   }
   res.json({ message: `${n} product${n === 1 ? '' : 's'} saved` });
@@ -474,7 +517,7 @@ r.patch('/orders/:id', wrap(async (req, res) => {
   if (req.body.courier_charges !== undefined) data.courier_charges = r2(req.body.courier_charges);
   if (req.body.payment_status !== undefined) { validate(req.body, { payment_status: 'in:pending,paid,rejected' }); data.payment_status = req.body.payment_status; }
   if (req.body.is_cod !== undefined) data.is_cod = toBool(req.body.is_cod);
-  if (req.body.cod_settled !== undefined) data.cod_settled = toBool(req.body.cod_settled);
+  if (req.body.cod_settled !== undefined) { data.cod_settled = toBool(req.body.cod_settled); if (data.cod_settled && o.is_cod) { data.payment_status = 'paid'; await finance.settleCodOrders([o.tracking_number]).catch(() => {}); } }
   if (req.body.nfc_written !== undefined) data.nfc_written = toBool(req.body.nfc_written);
   if (Object.keys(data).length) await o.update(data);
   if (data.payment_status === 'paid') await orders.applyRenewal(o);
@@ -564,7 +607,7 @@ r.post('/courier/payments-sync', wrap(async (_req, res) => {
   for (const p of pays) {
     if (!/paid|settled|cheque|transferred/i.test(p.status)) continue;
     const o = list.find((x) => x.tracking_number === p.track_number);
-    if (o) { await o.update({ cod_settled: true, ...(p.charges && !Number(o.courier_charges) ? { courier_charges: p.charges } : {}) }); settled += 1; }
+    if (o) { await o.update({ cod_settled: true, payment_status: 'paid', ...(p.charges && !Number(o.courier_charges) ? { courier_charges: p.charges } : {}) }); await finance.settleCodOrders([o.tracking_number]).catch(() => {}); settled += 1; }
   }
   res.json({ data: pays, message: `${settled} COD shipment(s) marked as settled` });
 }));
@@ -612,10 +655,21 @@ r.put('/short-links/:id', wrap(async (req, res) => {
   res.json({ data: link, message: 'Redirect updated' });
 }));
 r.delete('/short-links/:id', wrap(async (req, res) => { await M.ShortLink.destroy({ where: { id: req.params.id } }); res.json({ message: 'Deleted' }); }));
+/** delete a whole generated batch, but only links nobody has activated or used yet */
+r.delete('/short-links/batch/:name', wrap(async (req, res) => {
+  const name = String(req.params.name || '').slice(0, 60);
+  const where = { batch: name };
+  const total = await M.ShortLink.count({ where });
+  if (!total) fail(404, 'No links in this batch');
+  const n = await M.ShortLink.destroy({ where: { ...where, target_type: 'unassigned', clicks: 0 } });
+  if (!n) fail(422, 'Every link in this batch is already in use, so nothing was deleted');
+  res.json({ message: n === total ? `${n} links deleted` : `${n} unused links deleted. ${total - n} that are already in use were kept.` });
+}));
 r.post('/short-links/bulk-delete', wrap(async (req, res) => { const n = await M.ShortLink.destroy({ where: { id: jsonList(req.body.ids).map(Number) } }); res.json({ message: `${n} deleted` }); }));
 /** bulk-generate unassigned links for pre-printed NFC tags / QR stickers */
 r.post('/short-links/bulk', wrap(async (req, res) => {
-  const count = Math.min(5000, Math.max(1, parseInt(req.body.count, 10) || 0));
+  validate(req.body, { count: 'required|integer|minv:1|maxv:5000', length: 'integer|minv:5|maxv:12' }, { count: 'Number of links', length: 'Code length' });
+  const count = parseInt(req.body.count, 10);
   const batch = String(req.body.batch || `Batch ${dayjs().format('YYYY-MM-DD HH:mm')}`).slice(0, 60);
   const d = req.body.target_url ? { target_type: 'url', target_url: req.body.target_url } : { target_type: 'unassigned' };
   if (d.target_url) validate(req.body, { target_url: 'url' });
@@ -660,7 +714,7 @@ r.get('/invoices', wrap(async (req, res) => {
   const { rows, count } = await M.Invoice.findAndCountAll({ where, order: [['id', 'DESC']], limit: p.limit, offset: p.offset, include: [{ model: M.NfcOrder, attributes: ['id', 'order_number'] }] });
   const sums = await M.Invoice.findAll({ attributes: ['status', 'total', 'paid_amount'], raw: true });
   const s = { total: 0, paid: 0, outstanding: 0, overdue: 0 };
-  for (const i of sums) { if (i.status === 'cancelled') continue; s.total += Number(i.total); s.paid += Number(i.paid_amount); if (i.status !== 'draft') s.outstanding += Number(i.total) - Number(i.paid_amount); if (i.status === 'overdue') s.overdue += Number(i.total) - Number(i.paid_amount); }
+  for (const i of sums) { if (i.status === 'cancelled' || i.status === 'draft') continue; s.total += Number(i.total); s.paid += Number(i.paid_amount); if (i.status !== 'draft') s.outstanding += Number(i.total) - Number(i.paid_amount); if (i.status === 'overdue') s.overdue += Number(i.total) - Number(i.paid_amount); }
   res.json({ ...paged(rows, count, p), summary: Object.fromEntries(Object.entries(s).map(([k, v]) => [k, r2(v)])) });
 }));
 r.get('/invoices/:id', wrap(async (req, res) => {
@@ -682,6 +736,8 @@ const invoiceBody = (b) => {
     if (Number.isNaN(Number(it.price ?? it.unit_price ?? 0)) || Number(it.price ?? it.unit_price ?? 0) < 0) fail(422, 'Validation failed', { items: `Line ${n}: price must be zero or more` });
   });
   for (const k of ['issue_date', 'due_date']) if (d[k] === '') d[k] = null;
+  if (d.issue_date && d.due_date && d.due_date < d.issue_date) fail(422, 'Validation failed', { due_date: 'Due date cannot be before the issue date' });
+  if (Number(d.discount) > d.items.reduce((a, it) => a + Number(it.quantity || 1) * Number(it.price ?? it.unit_price ?? 0), 0) + 0.001) fail(422, 'Validation failed', { discount: 'Discount cannot be more than the invoice subtotal' });
   return d;
 };
 r.post('/invoices', wrap(async (req, res) => {
@@ -701,6 +757,8 @@ r.delete('/invoices/:id', wrap(async (req, res) => { await M.Invoice.destroy({ w
 r.post('/invoices/:id/payments', wrap(async (req, res) => {
   const inv = await M.Invoice.findByPk(req.params.id);
   if (!inv) fail(404, 'Not found');
+  if (inv.status === 'draft') fail(422, 'Send the invoice first: a draft cannot take a payment', { amount: 'A draft invoice cannot take a payment. Send it first.' });
+  if (inv.status === 'cancelled') fail(422, 'A cancelled invoice cannot take a payment', { amount: 'A cancelled invoice cannot take a payment' });
   await invoices.addPayment(inv, req.body);
   res.json({ data: inv, message: 'Payment recorded' });
 }));
@@ -749,26 +807,55 @@ r.get('/finance/report/export', wrap(async (req, res) => {
   await sendExport(res, req.query.format, 'profit-and-loss', `Profit & loss ${rep.range.from} to ${rep.range.to}`, [['month', 'Month'], ['orders', 'Orders'], ['revenue', 'Revenue'], ['cogs', 'Cost of goods'], ['courier', 'Courier'], ['expenses', 'Expenses'], ['profit', 'Net profit']],
     [...rep.series, { month: 'TOTAL', orders: rep.summary.orders, revenue: rep.summary.revenue, cogs: rep.summary.cogs, courier: rep.summary.courier, expenses: rep.summary.expenses, profit: rep.summary.net_profit }]);
 }));
-r.use('/finance/accounts', crud(M.FinanceAccount, { fields: ['name', 'type', 'opening_balance', 'note', 'status'], booleans: ['status'], rules: { name: 'required|max:120' }, order: [['id', 'ASC']] }));
-r.use('/finance/partners', crud(M.Partner, { fields: ['name', 'email', 'phone', 'share_percent', 'note', 'status'], booleans: ['status'], rules: { name: 'required|max:120', email: 'email|max:191' }, order: [['id', 'ASC']] }));
-r.use('/finance/categories', crud(M.FinanceCategory, { fields: ['name', 'type'], rules: { name: 'required|max:120', type: 'required|in:expense,income' }, order: [['name', 'ASC']], filters: ['type'] }));
+r.use('/finance/accounts', crud(M.FinanceAccount, { fields: ['name', 'type', 'opening_balance', 'note', 'status'], booleans: ['status'], rules: { name: 'required|max:120', opening_balance: 'numeric' }, order: [['id', 'ASC']],
+  canDelete: async (row) => {
+    const n = (await Promise.all([M.FinanceEntry, M.VendorPayment, M.Purchase, M.CourierSettlement].map((X) => X.count({ where: { account_id: row.id } })))).reduce((a, b) => a + b, 0);
+    return n ? `This account has ${n} transaction${n > 1 ? 's' : ''} recorded against it, so it cannot be deleted. Switch it off instead.` : null;
+  } }));
+r.use('/finance/partners', crud(M.Partner, { fields: ['name', 'email', 'phone', 'share_percent', 'note', 'status'], booleans: ['status'], rules: { name: 'required|max:120', email: 'email|max:191', phone: 'phone', share_percent: 'numeric|minv:0|maxv:100' }, order: [['id', 'ASC']],
+  beforeSave: async (data, _req, row) => {
+    if (data.share_percent === undefined || data.share_percent === null || data.share_percent === '') return data;
+    const others = (await M.Partner.findAll({ where: { id: { [Op.ne]: row?.id || 0 }, status: true }, attributes: ['share_percent'], raw: true })).reduce((a, p) => a + Number(p.share_percent || 0), 0);
+    if (others + Number(data.share_percent) > 100.0001) fail(422, 'Validation failed', { share_percent: `Total partner shares would be ${r2(others + Number(data.share_percent))}%. They cannot be more than 100% (other partners already have ${r2(others)}%).` });
+    return data;
+  },
+  canDelete: async (row) => ((await M.FinanceEntry.count({ where: { partner_id: row.id } })) ? 'This partner has recorded expenses or income. Switch them off instead.' : null) }));
+r.use('/finance/categories', crud(M.FinanceCategory, { fields: ['name', 'type'], rules: { name: 'required|max:120', type: 'required|in:expense,income' }, order: [['name', 'ASC']], filters: ['type'],
+  beforeSave: async (data, _req, row) => {
+    data.name = String(data.name ?? row?.name ?? '').trim();
+    const same = (await M.FinanceCategory.findAll({ where: { type: data.type || row?.type, id: { [Op.ne]: row?.id || 0 } }, attributes: ['name'], raw: true })).some((c) => String(c.name).toLowerCase() === data.name.toLowerCase());
+    if (same) fail(422, 'Validation failed', { name: 'A category with this name already exists' });
+    return data;
+  } }));
 r.use('/finance/entries', crud(M.FinanceEntry, {
   fields: ['type', 'date', 'title', 'category', 'amount', 'account_id', 'partner_id', 'vendor_id', 'payment_method', 'reference', 'description', 'status'],
   files: ['attachment'], folder: 'finance', types: DOC_TYPES, search: ['title', 'category', 'reference', 'description'], filters: ['type', 'partner_id', 'account_id', 'category', 'status', 'vendor_id'],
   rules: { type: 'required|in:expense,income', date: 'required|date', title: 'required|max:200', amount: 'required|numeric|minv:0.01', status: 'in:paid,unpaid' },
   include: [{ model: M.Partner, as: 'partner', attributes: ['id', 'name'] }, { model: M.FinanceAccount, as: 'account', attributes: ['id', 'name'] }, { model: M.Vendor, attributes: ['id', 'name'] }, { model: M.User, as: 'creator', attributes: ['id', 'first_name', 'last_name'] }],
   order: [['date', 'DESC'], ['id', 'DESC']],
-  beforeSave: (data, req, row) => { if (!row) data.created_by = req.user.id; return data; },
+  beforeSave: async (data, req, row) => {
+    if (!row) data.created_by = req.user.id;
+    const status = data.status ?? row?.status ?? 'paid';
+    const acc = data.account_id !== undefined ? data.account_id : row?.account_id;
+    if (status === 'paid' && !acc) fail(422, 'Validation failed', { account_id: 'Choose the account the money was paid from or received into' });
+    if (acc && !(await M.FinanceAccount.findByPk(acc))) fail(422, 'Validation failed', { account_id: 'Choose an account from the list' });
+    return data;
+  },
 }));
 r.use('/finance/settlements', crud(M.CourierSettlement, {
   fields: ['courier', 'date', 'reference', 'cod_amount', 'charges', 'net_amount', 'tracking_numbers', 'note', 'account_id'], files: ['attachment'], folder: 'finance', types: DOC_TYPES,
-  rules: { date: 'required|date', cod_amount: 'numeric|minv:0', charges: 'numeric|minv:0' }, order: [['date', 'DESC']],
+  rules: { date: 'required|date', cod_amount: 'required|numeric|minv:0.01', charges: 'numeric|minv:0' }, order: [['date', 'DESC']],
   include: [{ model: M.FinanceAccount, as: 'account', attributes: ['id', 'name'] }],
-  beforeSave: async (data) => {
+  beforeSave: async (data, req, row) => {
+    const cod = Number(data.cod_amount ?? row?.cod_amount ?? 0); const ch = Number(data.charges ?? row?.charges ?? 0);
+    if (ch > cod) fail(422, 'Courier charges cannot be more than the COD collected', { charges: `Charges cannot be more than the COD amount (${r2(cod)})` });
     const list = Array.isArray(data.tracking_numbers) ? data.tracking_numbers : String(data.tracking_numbers || '').split(/[\s,;]+/).filter(Boolean);
     data.tracking_numbers = list;
     data.net_amount = r2(data.net_amount !== undefined && data.net_amount !== null && data.net_amount !== '' ? data.net_amount : Number(data.cod_amount || 0) - Number(data.charges || 0));
-    if (list.length) await M.NfcOrder.update({ cod_settled: true }, { where: { tracking_number: list } });
+    if (list.length) {
+      const out = await finance.settleCodOrders(list);
+      if (out.unknown.length && !out.settled) fail(422, 'No order has these tracking numbers', { tracking_numbers: `No order found for: ${out.unknown.join(', ')}` });
+    }
     return data;
   },
 }));
@@ -792,9 +879,10 @@ r.get('/inventory/items', wrap(async (req, res) => {
 }));
 r.use('/inventory/items', crud(M.InventoryItem, {
   fields: ['name', 'sku', 'category', 'unit', 'purchase_price', 'sale_price', 'reorder_level', 'description', 'status'], booleans: ['status'],
-  rules: { name: 'required|max:150', purchase_price: 'numeric|minv:0', sale_price: 'numeric|minv:0' },
+  rules: { name: 'required|max:150', purchase_price: 'numeric|minv:0', sale_price: 'numeric|minv:0', reorder_level: 'numeric|minv:0', opening_stock: 'numeric|minv:0' },
   beforeSave: async (data, req, row) => {
-    if (data.sku) { if (await M.InventoryItem.findOne({ where: { sku: data.sku, id: { [Op.ne]: row?.id || 0 } } })) fail(422, 'Validation failed', { sku: 'SKU already used' }); } else if (!row) data.sku = `INV-${Date.now().toString(36).toUpperCase()}`;
+    if (data.sku) data.sku = String(data.sku).trim().toUpperCase();
+    if (data.sku) { if (await M.InventoryItem.findOne({ where: { sku: data.sku, id: { [Op.ne]: row?.id || 0 } } })) fail(422, 'Validation failed', { sku: 'SKU already used' }); } else if (!row) data.sku = await inventory.nextSku();
     return data;
   },
   afterSave: async (row, req) => {
@@ -816,7 +904,12 @@ r.post('/inventory/adjust', wrap(async (req, res) => {
   const item = await M.InventoryItem.findByPk(req.body.inventory_item_id);
   if (!item) fail(404, 'Item not found');
   let q = Number(req.body.quantity);
+  if (!Number.isFinite(q) || q === 0) fail(422, 'Validation failed', { quantity: 'Quantity must not be 0' });
+  if (Math.abs(q) > 1000000) fail(422, 'Validation failed', { quantity: 'Quantity is too large' });
   if (req.body.type === 'damage') q = -Math.abs(q);
+  // same rule as a transfer: stock can never go below 0 at a location
+  const have = await inventory.qtyAt(item.id, req.body.vendor_id || null);
+  if (have + q < 0) fail(422, `Stock cannot go below 0. Only ${Math.max(0, have)} on hand at this location`, { quantity: `Only ${Math.max(0, have)} on hand at this location` });
   await M.StockMovement.create({ inventory_item_id: item.id, vendor_id: req.body.vendor_id || null, type: req.body.type, quantity: q, unit_cost: item.purchase_price, date: req.body.date || today(), note: req.body.note, reference: req.body.reference || 'Manual', created_by: req.user.id });
   res.json({ message: 'Stock updated' });
 }));
@@ -836,7 +929,12 @@ r.get('/purchases', wrap(async (req, res) => {
   res.json(paged(rows, count, p));
 }));
 r.post('/purchases', purchaseUpload, wrap(async (req, res) => {
-  validate(req.body, { date: 'required|date' });
+  validate(req.body, { date: 'required|date', exchange_rate: 'numeric|minv:0.0001|maxv:1000000', shipping_cost: 'numeric|minv:0', customs_duty: 'numeric|minv:0', clearing_charges: 'numeric|minv:0', other_charges: 'numeric|minv:0', paid_amount: 'numeric|minv:0' },
+    { exchange_rate: 'Exchange rate', shipping_cost: 'Shipping / freight', customs_duty: 'Customs duty', clearing_charges: 'Clearing charges', other_charges: 'Other charges', paid_amount: 'Paid amount' });
+  for (const [i, l] of jsonList(req.body.items).entries()) {
+    if (!(Number(l.quantity) > 0)) fail(422, 'Validation failed', { items: `Line ${i + 1}: quantity must be more than 0` });
+    if (!(Number(l.unit_price || 0) >= 0)) fail(422, 'Validation failed', { items: `Line ${i + 1}: unit price cannot be negative` });
+  }
   const data = {
     ...pick(req.body, ['supplier_name', 'invoice_no', 'date', 'origin_country', 'currency', 'note']),
     is_import: toBool(req.body.is_import), exchange_rate: Number(req.body.exchange_rate || 1) || 1,
@@ -884,8 +982,15 @@ r.get('/vendors', wrap(async (req, res) => {
 }));
 r.use('/vendors', crud(M.Vendor, {
   fields: ['name', 'type', 'contact_person', 'phone', 'email', 'address', 'rates', 'opening_balance', 'notes', 'status'], booleans: ['status'],
-  rules: { name: 'required|max:150', email: 'email|max:191' },
-  beforeSave: (data) => { if (data.rates !== undefined) data.rates = jsonList(data.rates).filter((x) => x && x.label).map((x) => ({ label: String(x.label).slice(0, 120), rate: r2(x.rate), unit: String(x.unit || 'pc').slice(0, 20) })); return data; },
+  rules: { name: 'required|max:150', email: 'email|max:191', phone: 'phone', opening_balance: 'numeric|minv:0' },
+  beforeSave: (data) => {
+    if (data.rates !== undefined) {
+      const rates = jsonList(data.rates).filter((x) => x && x.label);
+      if (rates.some((x) => !(Number(x.rate) >= 0))) fail(422, 'Validation failed', { rates: 'A rate cannot be negative' });
+      data.rates = rates.map((x) => ({ label: String(x.label).slice(0, 120), rate: r2(x.rate), unit: String(x.unit || 'pc').slice(0, 20) }));
+    }
+    return data;
+  },
 }));
 r.use('/vendor-bills', crud(M.VendorBill, {
   fields: ['vendor_id', 'bill_no', 'date', 'due_date', 'amount', 'category', 'description', 'items'], files: ['attachment'], folder: 'vendors', types: DOC_TYPES,
@@ -895,8 +1000,20 @@ r.use('/vendor-bills', crud(M.VendorBill, {
 }));
 r.use('/vendor-payments', crud(M.VendorPayment, {
   fields: ['vendor_id', 'vendor_bill_id', 'amount', 'date', 'method', 'reference', 'note', 'account_id', 'partner_id'], files: ['attachment'], folder: 'vendors', types: DOC_TYPES,
-  rules: { vendor_id: 'required', date: 'required|date', amount: 'required|numeric|minv:0.01' }, filters: ['vendor_id', 'partner_id'], order: [['date', 'DESC']],
+  rules: { vendor_id: 'required', date: 'required|date', amount: 'required|numeric|minv:0.01', account_id: 'required' }, filters: ['vendor_id', 'partner_id'], order: [['date', 'DESC']],
   include: [{ model: M.Vendor, attributes: ['id', 'name'] }, { model: M.Partner, as: 'partner', attributes: ['id', 'name'] }, { model: M.FinanceAccount, as: 'account', attributes: ['id', 'name'] }],
+  beforeSave: async (data, req, row) => {
+    const vendorId = data.vendor_id || row?.vendor_id;
+    if (data.account_id && !(await M.FinanceAccount.findByPk(data.account_id))) fail(422, 'Validation failed', { account_id: 'Choose an account from the list' });
+    // never pay a vendor more than is owed (bills + opening balance - payments already made)
+    const v = await M.Vendor.findByPk(vendorId);
+    if (!v) fail(422, 'Validation failed', { vendor_id: 'Choose a vendor from the list' });
+    const [billed, paid] = await Promise.all([M.VendorBill.sum('amount', { where: { vendor_id: v.id } }), M.VendorPayment.sum('amount', { where: { vendor_id: v.id, ...(row ? { id: { [Op.ne]: row.id } } : {}) } })]);
+    const owed = r2(Number(v.opening_balance || 0) + Number(billed || 0) - Number(paid || 0));
+    const amount = Number(data.amount ?? row?.amount);
+    if (amount > owed + 0.004) fail(422, owed > 0 ? `This is more than you owe ${v.name} (Rs ${owed.toLocaleString('en-US')}). Enter the amount owed or less.` : `You owe ${v.name} nothing. Add a bill first, then record the payment.`, { amount: owed > 0 ? `You owe only Rs ${owed.toLocaleString('en-US')}` : 'No bills to pay for this vendor' });
+    return data;
+  },
 }));
 
 /* ============================================================== announcements */

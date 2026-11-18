@@ -6,7 +6,7 @@ import { Check, X, Crown, TicketPercent, CreditCard, Banknote, Receipt, Nfc, Plu
 import api, { toFormData } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import { useAuth } from '@/lib/auth';
-import { fmtDate, fmtDateTime, money, label } from '@/lib/format';
+import { fmtDate, fmtDateTime, money, label, formatDays } from '@/lib/format';
 import {
   PageHeader, Card, CardHeader, CardBody, Button, ButtonLink, Field, Input, Textarea, Select, ImageUpload, Dialog, Segmented, Badge, StatusBadge, StatCard,
   EmptyState, Skeleton, Spinner, TableCard, DataTable, useList, useForm, run,
@@ -87,7 +87,7 @@ export function UserPlans() {
                 <p className="mt-3 flex items-baseline gap-1"><span className="font-display text-4xl font-extrabold">{money(p.price, p.currency)}</span><span className="text-sm text-muted-foreground">/{p.frequency === 'unlimited' ? 'lifetime' : p.frequency === 'yearly' ? 'year' : 'month'}</span></p>
                 {p.trial_days > 0 && <p className="mt-1 text-sm text-primary">{p.trial_days}-day free trial</p>}
                 {Number(p.tax_rate) > 0 && <p className="mt-1 text-xs text-muted-foreground">+ {p.tax_name || 'tax'} {Number(p.tax_rate)}%</p>}
-                {p.custom_duration_days && <p className="mt-1 text-xs text-muted-foreground">Valid for {p.custom_duration_days} days</p>}
+                {p.custom_duration_days && <p className="mt-1 text-xs text-muted-foreground">Valid for {formatDays(p.custom_duration_days)}</p>}
                 <ul className="mt-6 flex-1 space-y-2.5 text-sm">
                   <li className="flex gap-2.5"><Check className="size-4.5 text-success" /><b>{p.no_of_vcards}</b> vCards</li>
                   <li className="flex gap-2.5"><Check className="size-4.5 text-success" /><b>{p.templates.length}</b> templates</li>

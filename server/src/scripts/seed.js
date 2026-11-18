@@ -17,7 +17,7 @@ const COUNTRIES = [
   ['United States', 'US', '1', { California: ['Los Angeles', 'San Francisco', 'San Diego'], 'New York': ['New York City', 'Buffalo'], Texas: ['Houston', 'Austin', 'Dallas'] }],
   ['United Kingdom', 'GB', '44', { England: ['London', 'Manchester', 'Birmingham'], Scotland: ['Edinburgh', 'Glasgow'] }],
   ['India', 'IN', '91', { Maharashtra: ['Mumbai', 'Pune'], Gujarat: ['Ahmedabad', 'Surat'], Karnataka: ['Bengaluru'] }],
-  ['Pakistan', 'PK', '92', { Punjab: ['Lahore', 'Faisalabad', 'Rawalpindi'], Sindh: ['Karachi', 'Hyderabad'], 'Islamabad Capital Territory': ['Islamabad'] }],
+  ['Pakistan', 'PK', '92', { Punjab: ['Lahore', 'Faisalabad', 'Rawalpindi', 'Multan', 'Gujranwala', 'Sialkot'], Sindh: ['Karachi', 'Hyderabad', 'Sukkur'], 'Khyber Pakhtunkhwa': ['Peshawar', 'Mardan', 'Abbottabad', 'Swat'], Balochistan: ['Quetta', 'Gwadar', 'Turbat'], 'Gilgit-Baltistan': ['Gilgit', 'Skardu'], 'Azad Jammu and Kashmir': ['Muzaffarabad', 'Mirpur'], 'Islamabad Capital Territory': ['Islamabad'] }],
   ['United Arab Emirates', 'AE', '971', { Dubai: ['Dubai'], 'Abu Dhabi': ['Abu Dhabi', 'Al Ain'] }],
   ['Saudi Arabia', 'SA', '966', { Riyadh: ['Riyadh'], Makkah: ['Jeddah', 'Mecca'] }],
   ['Canada', 'CA', '1', { Ontario: ['Toronto', 'Ottawa'], 'British Columbia': ['Vancouver'] }],
@@ -222,7 +222,7 @@ const all = (keys, v = true) => Object.fromEntries(keys.map((k) => [k, v]));
   // the three demo cards from the first release are hidden from the new shop (they had USD demo prices)
   await M.NfcCard.update({ show_in_shop: false }, { where: { slug: null, name: ['Classic PVC Card', 'Matte Black Card', 'Metal Card'], price: [19, 29, 59] } });
   if (!(await M.InventoryItem.count())) for (const [name, category] of [['Blank PVC NFC card', 'blank_card'], ['Plastic card', 'blank_card'], ['NFC chip (NTAG215)', 'nfc_chip'], ['NFC review tag blank', 'tag'], ['NFC sticker 25mm', 'sticker'], ['Acrylic standee blank', 'standee'], ['Packaging box', 'packaging']]) {
-    await M.InventoryItem.findOrCreate({ where: { name }, defaults: { category, sku: `INV-${name.replace(/[^A-Za-z0-9]+/g, '-').toUpperCase().slice(0, 40)}` } });
+    await M.InventoryItem.findOrCreate({ where: { name }, defaults: { category, sku: `INV-${name.replace(/[^A-Za-z0-9]+/g, '-').toUpperCase().replace(/^-+|-+$/g, '').slice(0, 40).replace(/-+$/, '')}` } });
   }
   if (!(await M.FinanceAccount.count())) await M.FinanceAccount.bulkCreate([{ name: 'Cash in hand', type: 'cash' }, { name: 'Bank account', type: 'bank' }, { name: 'JazzCash / Easypaisa', type: 'wallet' }]);
   if (!(await M.FinanceCategory.count())) {
@@ -237,7 +237,13 @@ const all = (keys, v = true) => Object.fromEntries(keys.map((k) => [k, v]));
 
   await M.CouponCode.findOrCreate({ where: { coupon_name: 'WELCOME10' }, defaults: { type: 'percentage', discount: 10, status: true } });
   const settings = require('../services/settings');
-  if (!(await settings.get('default_currency_id'))) await settings.set({ default_currency_id: usd.id });
+  // the shop runs in Pakistani rupees: new installs start with PKR as the default currency; an existing install is switched once
+  // (QA report 18 Nov 2026, M26) and can be changed back in Settings > General at any time
+  const pkrCur = await M.Currency.findOne({ where: { currency_code: 'PKR' } });
+  const curId = await settings.get('default_currency_id');
+  if (!curId) await settings.set({ default_currency_id: (pkrCur || usd).id });
+  else if (pkrCur && !(await settings.get('default_currency_pkr_applied')) && Number(curId) === usd.id) await settings.set({ default_currency_id: pkrCur.id });
+  await M.Setting.upsert({ key: 'default_currency_pkr_applied', value: '1' });
 
   console.log(`Seed complete. Super admin: ${seed.email}`);
   await M.sequelize.close();

@@ -117,6 +117,8 @@ async function fromTransaction(txId, userId) {
 async function addPayment(inv, { amount, date, method, reference, note }) {
   const a = r2(amount);
   if (!(a > 0)) throw new HttpError(422, 'Validation failed', { amount: 'Amount must be more than zero' });
+  const due = r2(Number(inv.total) - Number(inv.paid_amount || 0));
+  if (a > due + 0.009) throw new HttpError(422, 'Validation failed', { amount: due > 0 ? `Payment is more than the balance due (${due.toLocaleString('en-US')})` : 'This invoice is already fully paid' });
   await M().InvoicePayment.create({ invoice_id: inv.id, amount: a, date: date || dayjs().format('YYYY-MM-DD'), method, reference, note });
   const paid = r2(Number(inv.paid_amount || 0) + a);
   await inv.update({ paid_amount: paid });

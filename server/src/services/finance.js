@@ -157,13 +157,33 @@ async function inventoryValue() {
 }
 
 /** Unified ledger (latest first) for the finance screen */
+/**
+ * Courier collected the cash: mark the COD orders as settled and PAID, and their invoices as paid.
+ * (No invoice payment row is added: the settlement itself is the cash movement, so nothing is counted twice.)
+ */
+async function settleCodOrders(trackingNumbers) {
+  const X = M();
+  const list = [...new Set((trackingNumbers || []).map((t) => String(t).trim()).filter(Boolean))];
+  if (!list.length) return { settled: 0, unknown: [] };
+  const found = await X.NfcOrder.findAll({ where: { tracking_number: list } });
+  const unknown = list.filter((t) => !found.some((o) => o.tracking_number === t));
+  let settled = 0;
+  for (const o of found) {
+    if (!o.is_cod) continue;
+    await o.update({ cod_settled: true, payment_status: 'paid' }); settled += 1;
+    const inv = await X.Invoice.findOne({ where: { nfc_order_id: o.id } });
+    if (inv && inv.status !== 'cancelled') await inv.update({ paid_amount: inv.total, status: 'paid' });
+  }
+  return { settled, unknown };
+}
+
 async function ledger(q = {}) {
   const { dateWhere, where } = range(q);
   const X = M();
   const [entries, txs, ords, vpays, purchases, settlements, invPays, bills] = await Promise.all([
     X.FinanceEntry.findAll({ where: { date: dateWhere }, include: [{ model: X.Partner, as: 'partner', attributes: ['name'] }, { model: X.FinanceAccount, as: 'account', attributes: ['name'] }] }),
     X.Transaction.findAll({ where: { status: 'paid', created_at: where }, include: [{ model: X.User, attributes: ['first_name', 'last_name'] }] }),
-    X.NfcOrder.findAll({ where: { ...orders.revenueWhere(), created_at: where }, attributes: ['id', 'order_number', 'name', 'amount', 'created_at', 'payment_type', 'is_cod', 'courier_charges'] }),
+    X.NfcOrder.findAll({ where: { ...orders.revenueWhere(), created_at: where }, attributes: ['id', 'order_number', 'name', 'amount', 'created_at', 'payment_type', 'is_cod', 'cod_settled', 'courier_charges'] }),
     X.VendorPayment.findAll({ where: { date: dateWhere }, include: [{ model: X.Vendor, attributes: ['name'] }, { model: X.Partner, as: 'partner', attributes: ['name'] }] }),
     X.Purchase.findAll({ where: { date: dateWhere } }),
     X.CourierSettlement.findAll({ where: { date: dateWhere } }),
@@ -173,7 +193,8 @@ async function ledger(q = {}) {
   const rows = [
     ...entries.map((e) => ({ date: e.date, kind: e.type, source: 'Manual', title: e.title, category: e.category, amount: num(e.amount), party: e.partner?.name, account: e.account?.name, attachment: e.attachment, id: `fe-${e.id}` })),
     ...txs.filter((t) => t.purpose !== 'nfc_order').map((t) => ({ date: dayjs(t.created_at).format('YYYY-MM-DD'), kind: 'income', source: 'Subscription', title: `${t.purpose === 'subscription' ? 'Plan payment' : t.purpose} (${t.type})`, category: 'Subscriptions', amount: num(t.amount), party: t.user ? `${t.user.first_name} ${t.user.last_name}` : '', id: `tx-${t.id}` })),
-    ...ords.map((o) => ({ date: dayjs(o.created_at).format('YYYY-MM-DD'), kind: 'income', source: 'Order', title: `Order ${o.order_number}`, category: o.is_cod ? 'COD sales' : 'Online sales', amount: num(o.amount), party: o.name, id: `or-${o.id}` })),
+    // cash on delivery is only money in once the courier has paid it (settled); until then it is owed to us, not received
+    ...ords.filter((o) => !o.is_cod || o.cod_settled).map((o) => ({ date: dayjs(o.created_at).format('YYYY-MM-DD'), kind: 'income', source: 'Order', title: `Order ${o.order_number}`, category: o.is_cod ? 'COD sales' : 'Online sales', amount: num(o.amount), party: o.name, id: `or-${o.id}` })),
     ...ords.filter((o) => num(o.courier_charges) > 0).map((o) => ({ date: dayjs(o.created_at).format('YYYY-MM-DD'), kind: 'expense', source: 'Courier', title: `Courier charges ${o.order_number}`, category: 'Courier', amount: num(o.courier_charges), id: `cc-${o.id}` })),
     ...vpays.map((p) => ({ date: p.date, kind: 'expense', source: 'Vendor payment', title: `Payment to ${p.vendor?.name || 'vendor'}`, category: 'Vendors', amount: num(p.amount), party: p.partner?.name, attachment: p.attachment, id: `vp-${p.id}` })),
     ...bills.map((b) => ({ date: b.date, kind: 'bill', source: 'Vendor bill', title: `Bill ${b.bill_no || ''} - ${b.vendor?.name || ''}`, category: b.category === 'other' ? 'Vendor bills' : 'Printing (in product cost)', amount: num(b.amount), attachment: b.attachment, id: `vb-${b.id}` })),
@@ -184,4 +205,4 @@ async function ledger(q = {}) {
   return rows.sort((a, b) => String(b.date).localeCompare(String(a.date)));
 }
 
-module.exports = { report, ledger, accountBalances, vendorBalances, inventoryValue, receivables, codOutstanding, range };
+module.exports = { settleCodOrders, report, ledger, accountBalances, vendorBalances, inventoryValue, receivables, codOutstanding, range };

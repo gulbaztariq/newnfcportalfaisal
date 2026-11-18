@@ -76,7 +76,7 @@ export function Field({ label, htmlFor, error, hint, required, className, childr
     <div className={className}>
       {label && <Label htmlFor={htmlFor} required={required}>{label}</Label>}
       {children}
-      {error ? <motion.p initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} className="mt-1.5 text-xs font-medium text-danger">{error}</motion.p>
+      {error ? <motion.p data-field-error initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} className="mt-1.5 text-xs font-medium text-danger">{error}</motion.p>
         : hint ? <p className="mt-1.5 text-xs text-muted-foreground">{hint}</p> : null}
     </div>
   );

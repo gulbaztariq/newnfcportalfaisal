@@ -20,6 +20,8 @@ export default function SendEmail() {
   const [busy, setBusy] = useState(false);
   const v = form.values;
   const send = async () => {
+    // check the form first: the question "send this?" only makes sense for something that can be sent
+    if (!form.validate({ subject: 'required|max:200', description: 'required', ...(v.audience === 'custom' ? { emails: 'required' } : {}) }, { subject: 'Subject', description: 'Message', emails: 'E-mail addresses' })) return;
     if (!(await confirm({ title: 'Send this e-mail?', description: 'It will be delivered to everyone in the selected audience.', confirmText: 'Send now', tone: 'primary' }))) return;
     setBusy(true);
     try { await run(api.post('/admin/send-email', v)); form.setValues({ ...v, subject: '', description: '', emails: '' }); history.reload(); } catch (e) { form.setErrors(e.errors); } finally { setBusy(false); }

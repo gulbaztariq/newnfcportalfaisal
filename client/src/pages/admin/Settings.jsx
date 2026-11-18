@@ -193,7 +193,7 @@ function Payment({ st }) {
           <Card key={g} className={cn('overflow-hidden transition', on && 'border-primary/40')}>
             <div className="flex items-center gap-4 p-5">
               <span className={`grid size-11 place-items-center rounded-2xl bg-linear-to-br ${grad} font-display text-lg font-bold text-white shadow-lg`}>{name[0]}</span>
-              <div className="flex-1"><p className="flex items-center gap-2 font-semibold">{name}{live ? <Badge tone="success">Checkout ready</Badge> : <Badge>Credentials only</Badge>}</p><p className="text-xs text-muted-foreground">Accept payments through {name}</p></div>
+              <div className="flex-1"><p className="flex items-center gap-2 font-semibold">{name}{live && fields.filter(([k]) => !/mode$/.test(k)).every(([k]) => String(st.s[k] || '').trim()) ? <Badge tone="success">Checkout ready</Badge> : live ? <Badge tone="warning">Keys needed</Badge> : <Badge>Credentials only</Badge>}</p><p className="text-xs text-muted-foreground">Accept payments through {name}</p></div>
               <SwitchRow className="border-0 p-0 hover:bg-transparent" title="" {...st.flag(`${g}_enable`)} />
             </div>
             <AnimatePresence initial={false}>

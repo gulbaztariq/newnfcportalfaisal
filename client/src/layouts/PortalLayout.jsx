@@ -193,7 +193,7 @@ export default function PortalLayout({ area }) {
             <p className="truncate text-sm font-semibold">{current?.label || 'Overview'}</p>
           </div>
           <button type="button" onClick={() => setCmd(true)} className="ml-auto flex h-9 w-full max-w-xs cursor-pointer items-center gap-2.5 rounded-xl border border-border bg-muted/60 px-3 text-sm text-muted-foreground transition hover:border-primary/40 md:ml-8">
-            <Search className="size-4" /><span className="flex-1 text-left">Search pages...</span><Kbd>Ctrl K</Kbd>
+            <Search className="size-4" /><span className="flex-1 text-left">Go to a page...</span><Kbd>Ctrl K</Kbd>
           </button>
           <div className="ml-auto flex items-center gap-1.5 md:ml-0">
             {area === 'user' && <ButtonLink as={Link} to="/user/vcards/create" size="sm" className="hidden sm:inline-flex"><Plus />New vCard</ButtonLink>}
