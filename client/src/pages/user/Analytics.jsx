@@ -290,7 +290,7 @@ function Chips({ icon: Icon, items, onClear, onClearAll }) {
   return (
     <div className="flex flex-wrap items-center gap-2">
       <span className="flex items-center gap-1 text-xs font-medium text-muted-foreground"><Icon className="size-3.5" />Filtered by</span>
-      {items.map((c) => <button key={c.key} type="button" onClick={() => onClear(c.key)} className="group inline-flex h-7 items-center gap-1.5 rounded-full border border-primary/25 bg-primary-soft pr-1.5 pl-3 text-xs font-medium text-primary transition hover:border-primary/50"><span className="text-muted-foreground">{c.label}:</span>{c.value}<span className="grid size-4 place-items-center rounded-full bg-primary/15 transition group-hover:bg-primary group-hover:text-white"><X className="size-3" /></span></button>)}
+      {items.map((c) => <button key={c.key} type="button" onClick={() => onClear(c.key)} className="group inline-flex h-7 items-center gap-1.5 rounded-full border border-primary/25 bg-primary-soft pr-1.5 pl-3 text-xs font-medium text-primary transition hover:border-primary/50"><span className="text-muted-foreground">{c.label}:</span>{c.value}<span className="grid size-4 place-items-center rounded-full bg-primary/15 transition group-hover:bg-primary group-hover:text-primary-foreground"><X className="size-3" /></span></button>)}
       <button type="button" onClick={onClearAll} className="text-xs font-medium text-muted-foreground underline-offset-2 hover:text-foreground hover:underline">Clear all</button>
     </div>
   );
@@ -518,7 +518,7 @@ export function AnalyticsDashboard({ endpoint, admin = false, company = false, i
                 <div className={cn('space-y-6 transition-opacity', busy && 'pointer-events-none opacity-60')} aria-busy={busy}>
                   {!d.hasData && (
                     <div className="flex flex-wrap items-center gap-4 rounded-2xl border border-primary/25 bg-primary-soft p-4">
-                      <span className="grid size-10 place-items-center rounded-xl bg-primary text-white"><Lightbulb className="size-5" /></span>
+                      <span className="grid size-10 place-items-center rounded-xl bg-primary text-primary-foreground"><Lightbulb className="size-5" /></span>
                       <div className="min-w-0 flex-1"><p className="font-medium">{active.length ? 'Nothing matches these filters' : 'No activity in this period yet'}</p><p className="text-sm text-muted-foreground">{active.length ? 'Remove a filter or choose a longer period to see data.' : 'Share your card link, show its QR code or tap an NFC card. Views appear here within seconds; taps on buttons and links are counted as actions.'}</p></div>
                       {active.length ? <Button variant="outline" onClick={clearAll}>Clear filters</Button> : f.card !== 'all' && cards.find((c) => String(c.id) === String(f.card)) && <Button variant="outline" as="a" href={`/${cards.find((c) => String(c.id) === String(f.card)).alias}`} target="_blank" rel="noreferrer"><ExternalLink />Open card</Button>}
                     </div>

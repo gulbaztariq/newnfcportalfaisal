@@ -78,7 +78,7 @@ export function UserOrderDetail() {
                 const h = (o.status_history || []).filter((x) => x.status === s).pop();
                 return (
                   <motion.li key={s} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.06 }} className="flex items-center gap-3 sm:flex-col sm:text-center">
-                    <span className={cn('grid size-11 shrink-0 place-items-center rounded-2xl transition', done ? 'bg-primary text-white shadow-glow' : 'bg-muted text-muted-foreground', i === idx && 'ring-4 ring-primary/20')}><I className="size-5" /></span>
+                    <span className={cn('grid size-11 shrink-0 place-items-center rounded-2xl transition', done ? 'bg-primary text-primary-foreground shadow-glow' : 'bg-muted text-muted-foreground', i === idx && 'ring-4 ring-primary/20')}><I className="size-5" /></span>
                     <div><p className={cn('text-sm font-medium', !done && 'text-muted-foreground')}>{d.labels[s]}</p>{h && <p className="text-[11px] text-muted-foreground">{fmtDate(h.at)}</p>}</div>
                   </motion.li>
                 );

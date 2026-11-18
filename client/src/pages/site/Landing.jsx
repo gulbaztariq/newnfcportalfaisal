@@ -57,12 +57,30 @@ function FloatChip({ icon: Icon, title, sub, className, delay, tone = 'bg-primar
   );
 }
 
+/**
+ * A live preview frame that only loads when it is near the screen AND the page itself has finished loading and gone idle,
+ * so the hero text, buttons and images paint first (a full vCard page inside every frame is heavy).
+ */
+function LazyFrame({ src, title, className }) {
+  const box = useRef(null);
+  const [go, setGo] = useState(false);
+  useEffect(() => {
+    let seen = false; let idle = false; let io; let t;
+    const maybe = () => { if (seen && idle) setGo(true); };
+    const ready = () => { const run = () => { idle = true; maybe(); }; if ('requestIdleCallback' in window) window.requestIdleCallback(run, { timeout: 2500 }); else t = setTimeout(run, 1500); };
+    if (document.readyState === 'complete') ready(); else window.addEventListener('load', ready, { once: true });
+    if ('IntersectionObserver' in window && box.current) { io = new IntersectionObserver(([e]) => { if (e.isIntersecting) { seen = true; maybe(); io.disconnect(); } }, { rootMargin: '300px' }); io.observe(box.current); } else { seen = true; }
+    return () => { io?.disconnect(); window.removeEventListener('load', ready); clearTimeout(t); };
+  }, []);
+  return go ? <iframe src={src} title={title} inert scrolling="no" className={className} /> : <div ref={box} aria-hidden className={cn(className, 'animate-pulse bg-muted/60')} />;
+}
+
 function Phone({ slug = 'vcard8', className }) {
   return (
     <div className={cn('relative rounded-[3rem] bg-zinc-900 p-3 shadow-[0_40px_100px_-30px_rgba(76,29,149,.6)] ring-1 ring-white/10 dark:ring-white/15', className)}>
       <div className="absolute top-5 left-1/2 z-10 h-6 w-24 -translate-x-1/2 rounded-full bg-zinc-900" />
       <div className="relative h-[620px] w-[300px] overflow-hidden rounded-[2.4rem] bg-white">
-        <iframe src={`/t/preview/${slug}`} title="Live vCard preview" loading="lazy" inert scrolling="no" className="pointer-events-none absolute top-0 left-0 h-[827px] w-[400px] origin-top-left scale-75 border-0" />
+        <LazyFrame src={`/t/preview/${slug}`} title="Live vCard preview" className="pointer-events-none absolute top-0 left-0 h-[827px] w-[400px] origin-top-left scale-75 border-0" />
       </div>
     </div>
   );
@@ -83,7 +101,7 @@ function Hero({ s, professions }) {
         <motion.div style={{ opacity: fade }}>
           <motion.a href="#how" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }}
             className="group inline-flex items-center gap-2 rounded-full border border-border bg-card/70 py-1 pr-3 pl-1 text-xs font-medium shadow-soft backdrop-blur">
-            <span className="rounded-full bg-primary px-2 py-0.5 text-[11px] font-semibold text-white">New</span>
+            <span className="rounded-full bg-primary px-2 py-0.5 text-[11px] font-semibold text-primary-foreground">New</span>
             NFC · QR · Link sharing in one card <ArrowRight className="size-3.5 transition-transform group-hover:translate-x-0.5" />
           </motion.a>
           <h1 className="mt-6 font-display text-5xl leading-[1.02] font-extrabold tracking-tight text-balance sm:text-6xl lg:text-7xl">
@@ -144,7 +162,7 @@ function Features({ features }) {
   if (!features.length) return null;
   const spans = ['md:col-span-2 md:row-span-2', '', '', 'md:col-span-2', '', ''];
   return (
-    <section id="features" className="relative py-28">
+    <section id="features" className="cv-auto relative py-28">
       <div className="mx-auto max-w-6xl px-6">
         <SectionHead eyebrow="Features" title={<>Everything a paper card <span className="text-gradient">never could</span></>} text="Share instantly, update anytime, and see exactly who's engaging with your card." />
         <Stagger className="grid auto-rows-[minmax(200px,auto)] gap-4 md:grid-cols-4">
@@ -189,7 +207,7 @@ function HowItWorks() {
     { icon: Share2, title: 'Tap, scan or share', text: 'Share with an NFC card, QR code or link. Every update is live instantly, everywhere.' },
   ];
   return (
-    <section id="how" ref={ref} className="relative overflow-hidden bg-zinc-950 py-28 text-white">
+    <section id="how" ref={ref} className="cv-auto relative overflow-hidden bg-zinc-950 py-28 text-white">
       <div className="bg-grid mask-radial absolute inset-0 opacity-20" />
       <div className="absolute -top-40 left-1/2 size-[600px] -translate-x-1/2 rounded-full bg-violet-600/30 blur-[140px]" />
       <div className="relative mx-auto max-w-6xl px-6">
@@ -222,7 +240,7 @@ function Templates({ templates }) {
   const list = templates.slice(0, 14);
   const by = (d) => scroller.current?.scrollBy({ left: d * 320, behavior: 'smooth' });
   return (
-    <section id="templates" className="py-28">
+    <section id="templates" className="cv-auto py-28">
       <div className="mx-auto max-w-6xl px-6">
         <div className="flex flex-wrap items-end justify-between gap-6">
           <SectionHead center={false} eyebrow={`${templates.length}+ templates`} title="Beautiful from the very first tap" text="Every template is live below. Pick one, then make every colour, font and section your own." />
@@ -237,7 +255,7 @@ function Templates({ templates }) {
           <motion.a key={t.id} href={`/t/preview/${t.slug}`} target="_blank" rel="noreferrer" initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: (i % 5) * 0.08, duration: 0.6 }}
             whileHover={{ y: -8 }} className="group w-[260px] shrink-0 snap-start">
             <div className="tpl-box rounded-3xl border border-border shadow-soft transition-shadow duration-500 group-hover:shadow-lift" style={{ '--tpl-scale': 0.65 }}>
-              <iframe src={`/t/preview/${t.slug}`} title={t.name} loading="lazy" inert scrolling="no" className="tpl-frame" />
+              <LazyFrame src={`/t/preview/${t.slug}`} title={t.name} className="tpl-frame" />
               <div className="absolute inset-x-3 bottom-3 flex translate-y-3 items-center justify-center gap-1.5 rounded-xl bg-zinc-900/85 py-2 text-xs font-medium text-white opacity-0 backdrop-blur transition-all duration-300 group-hover:translate-y-0 group-hover:opacity-100"><Eye className="size-3.5" />Live preview</div>
             </div>
             <p className="mt-3 font-display font-semibold">{t.name}</p>
@@ -253,7 +271,7 @@ function Templates({ templates }) {
 function Stats({ templates, plans }) {
   const items = [[templates.length, '+', 'Profession templates'], [100, '%', 'Live updates, no reprints'], [3, '', 'Ways to share: tap, scan, link'], [plans.length, '', 'Plans for every stage']];
   return (
-    <section className="mx-auto max-w-6xl px-6">
+    <section className="cv-auto mx-auto max-w-6xl px-6">
       <Reveal className="grid overflow-hidden rounded-3xl border border-border bg-card shadow-soft sm:grid-cols-2 lg:grid-cols-4">
         {items.map(([v, suf, l], i) => (
           <div key={l} className={cn('p-8 text-center', i && 'border-t border-border sm:border-t-0 sm:border-l')}>
@@ -270,7 +288,7 @@ function Stats({ templates, plans }) {
 function About({ about, appName }) {
   if (!about.length) return null;
   return (
-    <section id="about" className="py-28">
+    <section id="about" className="cv-auto py-28">
       <div className="mx-auto max-w-6xl px-6">
         <SectionHead eyebrow="Why us" title={<>Why teams choose <span className="text-gradient">{appName}</span></>} />
         <div className="grid gap-5 md:grid-cols-3">
@@ -303,7 +321,7 @@ function Pricing({ plans, registerEnabled }) {
   const shown = plans.filter((p) => p.frequency === freq);
   const per = { monthly: '/month', yearly: '/year', unlimited: ' lifetime' };
   return (
-    <section id="pricing" className="relative overflow-hidden bg-muted/40 py-28">
+    <section id="pricing" className="cv-auto relative overflow-hidden bg-muted/40 py-28">
       <div className="mx-auto max-w-6xl px-6">
         <SectionHead eyebrow="Pricing" title="Simple pricing that grows with you" text="Start free. Upgrade when you need more cards, templates and features." />
         {freqs.length > 1 && <div className="mb-12 flex justify-center"><Segmented id="price" value={freq} onChange={setFreq} options={freqs.map((f) => ({ value: f, label: f === 'unlimited' ? 'Lifetime' : f[0].toUpperCase() + f.slice(1) }))} /></div>}
@@ -354,7 +372,7 @@ function Testimonials({ testimonials }) {
     </figure>
   );
   return (
-    <section id="testimonials" className="py-28">
+    <section id="testimonials" className="cv-auto py-28">
       <SectionHead eyebrow="Testimonials" title="People love tapping into it" />
       <div className="space-y-5">
         <Marquee duration={60}>{list.map((t, i) => card(t, `a${i}`))}</Marquee>
@@ -368,7 +386,7 @@ function Testimonials({ testimonials }) {
 function Faq({ faqs }) {
   if (!faqs.length) return null;
   return (
-    <section id="faq" className="py-28">
+    <section id="faq" className="cv-auto py-28">
       <div className="mx-auto grid max-w-6xl gap-12 px-6 lg:grid-cols-[1fr_1.4fr]">
         <SectionHead center={false} eyebrow="FAQ" title="Questions? We've got answers." text="Can't find what you're looking for? Send us a message below." />
         <Reveal>
@@ -378,7 +396,7 @@ function Faq({ faqs }) {
                 <Acc.Header>
                   <Acc.Trigger className="group flex w-full cursor-pointer items-center justify-between gap-4 px-6 py-5 text-left font-medium">
                     {f.title}
-                    <span className="grid size-8 shrink-0 place-items-center rounded-full bg-muted transition duration-300 group-data-[state=open]:rotate-180 group-data-[state=open]:bg-primary group-data-[state=open]:text-white"><ChevronDown className="size-4" /></span>
+                    <span className="grid size-8 shrink-0 place-items-center rounded-full bg-muted transition duration-300 group-data-[state=open]:rotate-180 group-data-[state=open]:bg-primary group-data-[state=open]:text-primary-foreground"><ChevronDown className="size-4" /></span>
                   </Acc.Trigger>
                 </Acc.Header>
                 <Acc.Content className="anim-acc overflow-hidden"><p className="px-6 pb-5 text-sm leading-relaxed text-muted-foreground">{f.description}</p></Acc.Content>
@@ -394,7 +412,7 @@ function Faq({ faqs }) {
 /* ================================================================ cta */
 function Cta({ registerEnabled }) {
   return (
-    <section className="px-6">
+    <section className="cv-auto px-6">
       <Reveal className="relative mx-auto max-w-6xl overflow-hidden rounded-[2.5rem] bg-linear-to-br from-violet-700 via-violet-600 to-fuchsia-600 px-8 py-20 text-center text-white shadow-[0_40px_100px_-30px] shadow-violet-600">
         <div className="bg-grid absolute inset-0 opacity-20 mask-radial" />
         <div className="absolute top-1/2 left-1/2 size-72 -translate-x-1/2 -translate-y-1/2"><Ripples color="bg-white/10" /></div>
@@ -424,7 +442,7 @@ function ContactSection({ s }) {
     try { const { data } = await api.post('/public/contact', { ...f, recaptcha_token: await recaptchaToken(s, 'contact') }); toast.success(data.message); setSent(true); setF({ name: '', email: '', subject: '', message: '', website: '' }); } catch (ex) { setErrors(ex.errors || {}); toast.error(Object.values(ex.errors || {})[0] || ex.message); } finally { setBusy(false); }
   };
   return (
-    <section id="contact" className="py-28">
+    <section id="contact" className="cv-auto py-28">
       <div className="mx-auto grid max-w-6xl gap-10 px-6 lg:grid-cols-[1fr_1.3fr]">
         <div>
           <SectionHead center={false} eyebrow="Contact" title="Let's talk" text="Questions about plans, NFC cards or bulk orders for your team? We usually reply within a day." />
@@ -467,7 +485,7 @@ function ContactSection({ s }) {
 function BlogSection({ blogs, enabled }) {
   if (!enabled || !blogs?.length) return null;
   return (
-    <section id="blog" className="py-28">
+    <section id="blog" className="cv-auto py-28">
       <div className="mx-auto max-w-6xl px-6">
         <SectionHead eyebrow="Blog" title="Fresh from the blog" text="Ideas to network smarter and make every introduction count." />
         <Stagger className="grid gap-6 md:grid-cols-3">{blogs.map((b) => <StaggerItem key={b.id}><BlogCard b={b} /></StaggerItem>)}</Stagger>

@@ -294,9 +294,9 @@ function Catalogue({ st, reload }) {
       <Card>
         <CardHeader icon={Tag} title={`Categories (${st.categories.length})`} actions={<Button size="sm" variant="soft" onClick={() => openCat()}><Plus />Category</Button>} />
         <CardBody className="flex flex-wrap gap-2">
-          <button type="button" onClick={() => setFilter('')} className={cn('cursor-pointer rounded-full border px-4 py-1.5 text-sm font-medium transition', !filter ? 'border-primary bg-primary text-white' : 'border-border hover:bg-muted')}>All ({st.products.length})</button>
+          <button type="button" onClick={() => setFilter('')} className={cn('cursor-pointer rounded-full border px-4 py-1.5 text-sm font-medium transition', !filter ? 'border-primary bg-primary text-primary-foreground' : 'border-border hover:bg-muted')}>All ({st.products.length})</button>
           {st.categories.map((c) => (
-            <span key={c.id} className={cn('group inline-flex items-center gap-2 rounded-full border py-1 pr-1.5 pl-1 text-sm font-medium transition', filter === String(c.id) ? 'border-primary bg-primary text-white' : 'border-border')}>
+            <span key={c.id} className={cn('group inline-flex items-center gap-2 rounded-full border py-1 pr-1.5 pl-1 text-sm font-medium transition', filter === String(c.id) ? 'border-primary bg-primary text-primary-foreground' : 'border-border')}>
               <button type="button" className="inline-flex cursor-pointer items-center gap-2 pl-1" onClick={() => setFilter(String(c.id))}>{c.image ? <img src={c.image} alt="" className="size-6 rounded-full object-cover" /> : <Tag className="size-3.5" />}{c.name}</button>
               <button type="button" onClick={() => openCat(c)} className="grid size-6 cursor-pointer place-items-center rounded-full opacity-60 hover:opacity-100" aria-label="Edit"><Pencil className="size-3" /></button>
               <button type="button" onClick={() => delCat(c)} className="grid size-6 cursor-pointer place-items-center rounded-full opacity-60 hover:opacity-100" aria-label="Delete"><X className="size-3" /></button>
@@ -365,7 +365,7 @@ function StoreStats({ sid }) {
         <StatCard index={2} icon={Receipt} color="amber" label="Revenue (30 days)" value={d.revenue} format={(x) => Number(x).toFixed(2)} />
       </div>
       <Card><CardHeader title="Orders per day" /><CardBody><Bars data={d.byDay} name="Orders" height={260} /></CardBody></Card>
-      <Card><CardHeader title="Best sellers" /><CardBody>{!d.top.length ? <EmptyState icon={Package} title="No sales yet" /> : <div className="space-y-2">{d.top.map((t, i) => <div key={t.name} className="flex items-center gap-3 rounded-xl bg-muted/50 px-4 py-2.5"><span className="grid size-7 place-items-center rounded-lg bg-primary text-xs font-bold text-white">{i + 1}</span><span className="flex-1 font-medium">{t.name}</span><Badge tone="primary">{t.value} sold</Badge></div>)}</div>}</CardBody></Card>
+      <Card><CardHeader title="Best sellers" /><CardBody>{!d.top.length ? <EmptyState icon={Package} title="No sales yet" /> : <div className="space-y-2">{d.top.map((t, i) => <div key={t.name} className="flex items-center gap-3 rounded-xl bg-muted/50 px-4 py-2.5"><span className="grid size-7 place-items-center rounded-lg bg-primary text-xs font-bold text-primary-foreground">{i + 1}</span><span className="flex-1 font-medium">{t.name}</span><Badge tone="primary">{t.value} sold</Badge></div>)}</div>}</CardBody></Card>
     </>
   );
 }

@@ -64,7 +64,7 @@ export function Orders() {
         <>
       <div className="-mx-1 mb-4 flex gap-1.5 overflow-x-auto px-1 pb-1">
         {tabs.map(([k, l]) => (
-          <button key={k || 'all'} type="button" onClick={() => list.set({ order_status: k })} className={cn('flex shrink-0 cursor-pointer items-center gap-2 rounded-full border px-3.5 py-1.5 text-sm font-medium transition', status === k ? 'border-primary bg-primary text-white shadow-glow' : 'border-border bg-card text-muted-foreground hover:border-primary/40 hover:text-foreground')}>
+          <button key={k || 'all'} type="button" onClick={() => list.set({ order_status: k })} className={cn('flex shrink-0 cursor-pointer items-center gap-2 rounded-full border px-3.5 py-1.5 text-sm font-medium transition', status === k ? 'border-primary bg-primary text-primary-foreground shadow-glow' : 'border-border bg-card text-muted-foreground hover:border-primary/40 hover:text-foreground')}>
             {l}{k && meta.counts[k] ? <span className={cn('rounded-full px-1.5 text-[11px]', status === k ? 'bg-white/25' : 'bg-muted')}>{meta.counts[k]}</span> : null}
           </button>
         ))}
@@ -157,7 +157,7 @@ export function OrderDetail() {
                 <div key={s} className="flex min-w-24 flex-1 items-center gap-1">
                   <Tip content={hist ? `${d.labels[s]} · ${fmtDateTime(hist.at)}${hist.by ? ` · ${hist.by}` : ''}` : `Move to ${d.labels[s]}`}>
                     <button type="button" disabled={!!busy || i === idx} onClick={() => setStatus(s)} className="group flex flex-col items-center gap-1.5 text-center">
-                      <motion.span initial={false} animate={{ scale: i === idx ? 1.1 : 1 }} className={cn('grid size-11 cursor-pointer place-items-center rounded-2xl border-2 transition', done ? 'border-primary bg-primary text-white shadow-glow' : 'border-border bg-card text-muted-foreground group-hover:border-primary/50')}>
+                      <motion.span initial={false} animate={{ scale: i === idx ? 1.1 : 1 }} className={cn('grid size-11 cursor-pointer place-items-center rounded-2xl border-2 transition', done ? 'border-primary bg-primary text-primary-foreground shadow-glow' : 'border-border bg-card text-muted-foreground group-hover:border-primary/50')}>
                         <I className="size-5" />
                       </motion.span>
                       <span className={cn('text-xs font-medium', done ? 'text-foreground' : 'text-muted-foreground')}>{d.labels[s]}</span>

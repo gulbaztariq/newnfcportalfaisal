@@ -141,7 +141,7 @@ function ProductOptions({ p, o, money, onAdd, onBuy, addRef, compact }) {
       )}
       {o.cPrice > 0 && (
         <label htmlFor={`cust-${p.id}${compact ? 'q' : ''}`} className={cn('flex cursor-pointer items-center gap-3 rounded-2xl border-2 p-3.5 transition', o.custom ? 'border-primary bg-primary-soft/50' : 'border-border hover:border-primary/40')}>
-          <span className={cn('grid size-10 shrink-0 place-items-center rounded-xl transition', o.custom ? 'bg-primary text-white' : 'bg-muted text-muted-foreground')}><Palette className="size-5" /></span>
+          <span className={cn('grid size-10 shrink-0 place-items-center rounded-xl transition', o.custom ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground')}><Palette className="size-5" /></span>
           <span className="min-w-0 flex-1">
             <span className="block text-sm font-medium">Customise it <span className="text-primary">+{money(o.cPrice)}</span></span>
             <span className="block text-xs text-muted-foreground">Your logo, colours and details printed on it</span>
@@ -211,7 +211,7 @@ export function ProductCard({ p, money, onQuick }) {
         <div className="mt-auto flex items-end justify-between gap-2 pt-3">
           <PriceTag p={p} money={money} />
           <motion.button type="button" whileTap={{ scale: 0.9 }} onClick={quickAdd} aria-label={hasVariants ? `Choose options for ${p.name}` : `Add ${p.name} to cart`}
-            className="grid size-9 shrink-0 cursor-pointer place-items-center rounded-xl bg-primary text-white shadow-[0_6px_20px_-8px_var(--primary)] transition hover:brightness-110 sm:size-10">
+            className="grid size-9 shrink-0 cursor-pointer place-items-center rounded-xl bg-primary text-primary-foreground shadow-[0_6px_20px_-8px_var(--primary)] transition hover:brightness-110 sm:size-10">
             <Plus className="size-4 transition-transform duration-300 group-hover:rotate-90" />
           </motion.button>
         </div>
@@ -532,7 +532,7 @@ function Stepper({ step, maxStep, onGo }) {
         return (
           <li key={l} className="relative z-10 flex w-1/3 flex-col items-center">
             <button type="button" disabled={!can} onClick={() => onGo(i)} aria-current={cur ? 'step' : undefined} aria-label={`Step ${i + 1}: ${l}${done ? ' (done)' : ''}`}
-              className={cn('relative grid size-10 place-items-center rounded-full border-2 transition-colors duration-500', done ? 'border-primary bg-primary text-white' : cur ? 'border-primary bg-card text-primary' : 'border-border bg-card text-muted-foreground', can ? 'cursor-pointer' : 'cursor-default')}>
+              className={cn('relative grid size-10 place-items-center rounded-full border-2 transition-colors duration-500', done ? 'border-primary bg-primary text-primary-foreground' : cur ? 'border-primary bg-card text-primary' : 'border-border bg-card text-muted-foreground', can ? 'cursor-pointer' : 'cursor-default')}>
               {cur && <span className="absolute inset-0 animate-ping rounded-full bg-primary/20 [animation-duration:2s]" />}
               <AnimatePresence mode="wait" initial={false}>
                 <motion.span key={done ? 'd' : 'i'} initial={{ scale: 0, rotate: -90 }} animate={{ scale: 1, rotate: 0 }} exit={{ scale: 0 }} transition={{ type: 'spring', stiffness: 500, damping: 25 }}>
@@ -611,7 +611,7 @@ function AiProgress() {
         ))}
       </div>
       <div className="mt-5 flex items-center gap-3">
-        <motion.span animate={{ rotate: 360 }} transition={{ duration: 4, repeat: Infinity, ease: 'linear' }} className="grid size-9 shrink-0 place-items-center rounded-xl bg-primary text-white"><Sparkles className="size-4" /></motion.span>
+        <motion.span animate={{ rotate: 360 }} transition={{ duration: 4, repeat: Infinity, ease: 'linear' }} className="grid size-9 shrink-0 place-items-center rounded-xl bg-primary text-primary-foreground"><Sparkles className="size-4" /></motion.span>
         <div className="min-w-0 flex-1">
           <AnimatePresence mode="wait"><motion.p key={m} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} className="truncate text-sm font-medium">{m}...</motion.p></AnimatePresence>
           <p className="text-xs text-muted-foreground">{t}s · usually 30 to 60 seconds, please keep this page open</p>
@@ -758,7 +758,7 @@ function Success({ done, email }) {
         <p className="mt-3 text-sm text-muted-foreground">We sent a confirmation to <b className="text-foreground">{email}</b>. Keep your order number to track the delivery.</p>
         {done.account_created && (
           <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.8 }} className="mt-6 flex items-start gap-3 rounded-2xl border border-primary/25 bg-primary-soft/60 p-4 text-left">
-            <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-primary text-white"><User className="size-5" /></span>
+            <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-primary text-primary-foreground"><User className="size-5" /></span>
             <div className="text-sm"><p className="font-semibold">Your account is ready</p><p className="mt-0.5 text-muted-foreground">We created an account with a digital business card for you and e-mailed your login details. You are now signed in, so you can set up the profile your NFC product will open.</p></div>
           </motion.div>
         )}
@@ -1000,7 +1000,7 @@ function CheckoutInner() {
                           <button key={k} type="button" role="radio" aria-checked={on} onClick={() => set('design_type', k)}
                             className={cn('group relative flex cursor-pointer flex-row items-start gap-3 overflow-hidden rounded-2xl border-2 p-4 text-left transition sm:flex-col', on ? 'border-primary bg-primary-soft/50' : 'border-border hover:border-primary/40')}>
                             {k === 'ai' && <span className="absolute top-2.5 right-2.5 rounded-full bg-linear-to-r from-violet-500 to-fuchsia-500 px-2 py-0.5 text-[10px] font-bold text-white">NEW</span>}
-                            <span className={cn('grid size-11 shrink-0 place-items-center rounded-xl transition duration-500 group-hover:-rotate-6', on ? 'bg-primary text-white' : 'bg-muted text-muted-foreground')}><I className="size-5" /></span>
+                            <span className={cn('grid size-11 shrink-0 place-items-center rounded-xl transition duration-500 group-hover:-rotate-6', on ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground')}><I className="size-5" /></span>
                             <span className="min-w-0"><span className="block text-sm font-semibold">{t}</span><span className="mt-0.5 block text-xs leading-relaxed text-muted-foreground">{d}</span></span>
                           </button>
                         );
@@ -1077,7 +1077,7 @@ function CheckoutInner() {
                           return (
                             <button key={g} type="button" role="radio" aria-checked={on} onClick={() => { set('payment', g); setConflict(''); }}
                               className={cn('flex cursor-pointer items-center gap-3 rounded-2xl border-2 p-3 text-left transition', on ? 'border-primary bg-primary-soft/60' : 'border-border hover:border-primary/40')}>
-                              <span className={cn('grid size-10 shrink-0 place-items-center rounded-xl transition', on ? 'bg-primary text-white' : 'bg-muted text-muted-foreground')}><I className="size-4.5" /></span>
+                              <span className={cn('grid size-10 shrink-0 place-items-center rounded-xl transition', on ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground')}><I className="size-4.5" /></span>
                               <span className="min-w-0 flex-1"><span className="block text-sm font-medium">{l}</span><span className="block truncate text-xs text-muted-foreground">{sub}</span></span>
                               <span className={cn('grid size-5 shrink-0 place-items-center rounded-full border-2 transition', on ? 'border-primary bg-primary' : 'border-input')}>{on && <Check className="size-3 text-white" strokeWidth={3} />}</span>
                             </button>
@@ -1200,7 +1200,7 @@ function TrackInner() {
         <div className="relative mx-auto max-w-3xl px-4 text-center sm:px-6">
           <motion.span initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: 'spring', stiffness: 260, damping: 16 }} className="relative mx-auto grid size-16 place-items-center">
             <Ripples />
-            <span className="relative grid size-14 place-items-center rounded-2xl bg-primary text-white shadow-glow"><Truck className="size-7" /></span>
+            <span className="relative grid size-14 place-items-center rounded-2xl bg-primary text-primary-foreground shadow-glow"><Truck className="size-7" /></span>
           </motion.span>
           <motion.h1 initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }} className="mt-6 font-display text-4xl font-extrabold tracking-tight sm:text-5xl md:text-6xl">Track your order</motion.h1>
           <motion.p initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="mt-4 text-base text-muted-foreground sm:text-lg">From design and printing to your doorstep, follow every step.</motion.p>
@@ -1308,7 +1308,7 @@ function TrackResult({ res, auth, loading, onRefresh, onReset }) {
                     </span>
                   )}
                   <span className={cn('relative grid size-11 shrink-0 place-items-center rounded-2xl border-2 transition',
-                    n.state === 'terminal' ? 'border-danger bg-danger text-white' : n.state === 'done' ? (tone === 'success' ? 'border-success bg-success text-white' : tone === 'danger' ? 'border-danger/40 bg-danger-soft text-danger' : 'border-primary bg-primary text-white') : n.state === 'current' ? 'border-primary bg-primary-soft text-primary' : 'border-border bg-card text-muted-foreground')}>
+                    n.state === 'terminal' ? 'border-danger bg-danger text-white' : n.state === 'done' ? (tone === 'success' ? 'border-success bg-success text-white' : tone === 'danger' ? 'border-danger/40 bg-danger-soft text-danger' : 'border-primary bg-primary text-primary-foreground') : n.state === 'current' ? 'border-primary bg-primary-soft text-primary' : 'border-border bg-card text-muted-foreground')}>
                     {n.state === 'current' && <span className="absolute inset-0 animate-ping rounded-2xl bg-primary/25 [animation-duration:2s]" />}
                     {n.state === 'done' && tone !== 'danger' ? <Check className="size-5" strokeWidth={3} /> : <I className="size-5" />}
                   </span>
@@ -1340,7 +1340,7 @@ function TrackResult({ res, auth, loading, onRefresh, onReset }) {
                     <div className="mt-2 flex flex-wrap gap-2">
                       <a href={t.url} target="_blank" rel="noreferrer" className="rounded-full border border-border bg-card px-3 py-1 text-xs font-medium hover:border-primary hover:text-primary">Preview</a>
                       <a href={t.qr_url} target="_blank" rel="noreferrer" className="rounded-full border border-border bg-card px-3 py-1 text-xs font-medium hover:border-primary hover:text-primary">QR code</a>
-                      {t.manage_url && <a href={t.manage_url} target="_blank" rel="noreferrer" className="rounded-full bg-primary px-3 py-1 text-xs font-semibold text-white">Set up your tag</a>}
+                      {t.manage_url && <a href={t.manage_url} target="_blank" rel="noreferrer" className="rounded-full bg-primary px-3 py-1 text-xs font-semibold text-primary-foreground">Set up your tag</a>}
                     </div>
                   </li>
                 ))}

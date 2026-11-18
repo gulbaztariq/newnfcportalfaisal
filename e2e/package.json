@@ -1,1 +1,1 @@
-{ "name": "nfc-e2e", "private": true, "version": "1.0.0", "scripts": { "test": "playwright test" }, "devDependencies": { "@playwright/test": "1.49.1", "@axe-core/playwright": "4.10.1" } }
+{"name":"nfc-e2e","private":true,"version":"1.0.0","scripts":{"test":"playwright test"},"devDependencies":{"@axe-core/playwright":"4.10.1","@playwright/test":"1.49.1","chrome-launcher":"^1.1.2","lighthouse":"^12.3.0"}}

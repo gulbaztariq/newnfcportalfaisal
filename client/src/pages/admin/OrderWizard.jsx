@@ -61,7 +61,7 @@ function Stepper({ screens, step, done, onGo }) {
           <div key={k} className="flex flex-1 items-center gap-1 last:flex-none">
             <button type="button" onClick={() => onGo(i)} disabled={i > step && !done.slice(0, i).every(Boolean)}
               className={cn('flex cursor-pointer items-center gap-2.5 rounded-2xl px-2 py-1.5 text-left transition disabled:cursor-not-allowed', active ? 'text-foreground' : 'text-muted-foreground hover:text-foreground')}>
-              <motion.span initial={false} animate={{ scale: active ? 1.08 : 1 }} className={cn('grid size-9 shrink-0 place-items-center rounded-xl border-2 transition', active ? 'border-primary bg-primary text-white shadow-glow' : ok ? 'border-primary/40 bg-primary-soft text-primary' : 'border-border bg-card')}>
+              <motion.span initial={false} animate={{ scale: active ? 1.08 : 1 }} className={cn('grid size-9 shrink-0 place-items-center rounded-xl border-2 transition', active ? 'border-primary bg-primary text-primary-foreground shadow-glow' : ok ? 'border-primary/40 bg-primary-soft text-primary' : 'border-border bg-card')}>
                 {ok ? <Check className="size-4" /> : <I className="size-4" />}
               </motion.span>
               <span className="hidden text-sm font-medium md:block">{l}</span>
@@ -143,7 +143,7 @@ const PersonLine = ({ p, sub }) => (
 function ChoiceCard({ active, onClick, icon: Icon, title, text }) {
   return (
     <button type="button" onClick={onClick} className={cn('flex cursor-pointer items-start gap-3 rounded-2xl border-2 p-4 text-left transition', active ? 'border-primary bg-primary-soft/50' : 'border-border hover:border-primary/40')}>
-      <span className={cn('grid size-10 shrink-0 place-items-center rounded-xl', active ? 'bg-primary text-white' : 'bg-muted text-muted-foreground')}><Icon className="size-5" /></span>
+      <span className={cn('grid size-10 shrink-0 place-items-center rounded-xl', active ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground')}><Icon className="size-5" /></span>
       <span><span className="block font-semibold">{title}</span><span className="text-xs text-muted-foreground">{text}</span></span>
     </button>
   );
@@ -520,7 +520,7 @@ export default function OrderWizard() {
                     <div className="grid grid-cols-2 gap-2 xl:grid-cols-4">
                       {TYPES.map(([k, l, text, I]) => (
                         <button key={k} type="button" onClick={() => setType(k)} className={cn('flex cursor-pointer items-center gap-2.5 rounded-2xl border-2 p-2.5 text-left transition', form.customer_type === k ? 'border-primary bg-primary-soft/50' : 'border-border hover:border-primary/40')}>
-                          <span className={cn('grid size-9 shrink-0 place-items-center rounded-xl', form.customer_type === k ? 'bg-primary text-white' : 'bg-muted text-muted-foreground')}><I className="size-4" /></span>
+                          <span className={cn('grid size-9 shrink-0 place-items-center rounded-xl', form.customer_type === k ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground')}><I className="size-4" /></span>
                           <span className="min-w-0"><span className="block truncate text-sm font-semibold">{l}</span><span className="block truncate text-[11px] text-muted-foreground">{text}</span></span>
                         </button>
                       ))}

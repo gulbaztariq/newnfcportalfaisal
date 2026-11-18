@@ -23,7 +23,7 @@ function PayMethods({ methods, value, onChange }) {
         const on = value === g;
         return (
           <button key={g} type="button" onClick={() => onChange(g)} className={cn('flex cursor-pointer items-center gap-3 rounded-2xl border-2 p-3 text-left transition', on ? 'border-primary bg-primary-soft/60' : 'border-border hover:border-primary/40')}>
-            <span className={cn('grid size-9 place-items-center rounded-xl', on ? 'bg-primary text-white' : 'bg-muted text-muted-foreground')}><I className="size-4" /></span>
+            <span className={cn('grid size-9 place-items-center rounded-xl', on ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground')}><I className="size-4" /></span>
             <span className="text-sm font-medium">{l}</span>
             <span className={cn('ml-auto grid size-5 place-items-center rounded-full border-2', on ? 'border-primary bg-primary' : 'border-input')}>{on && <Check className="size-3 text-white" strokeWidth={3} />}</span>
           </button>

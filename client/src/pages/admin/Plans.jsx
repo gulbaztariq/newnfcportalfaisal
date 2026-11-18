@@ -137,7 +137,7 @@ export function PlanForm() {
                 return (
                   <div key={t.id} className={cn('group relative flex items-center rounded-xl border transition', on ? 'border-primary bg-primary-soft/60' : 'border-border hover:border-primary/40')}>
                     <button type="button" role="checkbox" aria-checked={on} onClick={() => toggleTpl(t.id)} className="flex min-w-0 flex-1 cursor-pointer items-center gap-3 rounded-xl p-3 text-left">
-                      <span className={cn('grid size-5 shrink-0 place-items-center rounded-md border transition', on ? 'border-primary bg-primary text-white' : 'border-input')}>{on && <Check className="size-3.5" strokeWidth={3} />}</span>
+                      <span className={cn('grid size-5 shrink-0 place-items-center rounded-md border transition', on ? 'border-primary bg-primary text-primary-foreground' : 'border-input')}>{on && <Check className="size-3.5" strokeWidth={3} />}</span>
                       <span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium">{t.name}</span><span className="block truncate text-xs text-muted-foreground">{t.profession}</span></span>
                     </button>
                     <a href={`/t/preview/${t.slug}`} target="_blank" rel="noreferrer" aria-label={`Preview template ${t.name || t.slug}`} className="mr-2 grid size-8 shrink-0 place-items-center rounded-lg text-muted-foreground opacity-0 transition group-hover:opacity-100 focus-visible:opacity-100 hover:text-primary"><Eye className="size-4" /></a>
