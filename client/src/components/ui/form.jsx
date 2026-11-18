@@ -9,11 +9,11 @@ import { check } from '@/lib/validate';
 
 /* ----------------------------------------------------------------- select */
 const EMPTY = '__none__';
-export function Select({ value, onChange, options, placeholder = 'Select...', className, invalid, allowEmpty, id }) {
+export function Select({ value, onChange, options, placeholder = 'Select...', className, invalid, allowEmpty, id, 'aria-label': ariaLabel }) {
   const v = value === null || value === undefined || value === '' ? (allowEmpty ? EMPTY : undefined) : String(value);
   return (
     <S.Root value={v} onValueChange={(x) => onChange(x === EMPTY ? '' : x)}>
-      <S.Trigger id={id} aria-invalid={invalid || undefined} className={cn('flex h-10 w-full items-center justify-between gap-2 rounded-xl border border-input bg-card px-3.5 text-left text-sm outline-none transition focus:border-primary focus:ring-4 focus:ring-primary/15 aria-[invalid=true]:border-danger data-[placeholder]:text-muted-foreground/70 cursor-pointer', className)}>
+      <S.Trigger id={id} aria-label={ariaLabel} aria-invalid={invalid || undefined} className={cn('flex h-10 w-full items-center justify-between gap-2 rounded-xl border border-input bg-card px-3.5 text-left text-sm outline-none transition focus:border-primary focus:ring-4 focus:ring-primary/15 aria-[invalid=true]:border-danger data-[placeholder]:text-muted-foreground cursor-pointer', className)}>
         <span className="truncate"><S.Value placeholder={placeholder} /></span>
         <S.Icon><ChevronDown className="size-4 opacity-60" /></S.Icon>
       </S.Trigger>
@@ -73,7 +73,7 @@ export function Checkbox({ checked, onChange, id, label, className }) {
 /* ---------------------------------------------------- segmented control */
 export function Segmented({ value, onChange, options, id = 'seg', className, size = 'md' }) {
   return (
-    <div className={cn('inline-flex rounded-xl bg-muted p-1', className)}>
+    <div className={cn('inline-flex max-w-full overflow-x-auto rounded-xl bg-muted p-1', className)}>
       {options.map((o) => {
         const active = o.value === value;
         return (
@@ -125,8 +125,8 @@ export function ColorInput({ value, onChange, label }) {
     <div>
       {label && <p className="mb-1.5 text-[13px] font-medium">{label}</p>}
       <div className="flex h-10 items-center gap-2 rounded-xl border border-input bg-card pr-3 pl-1.5 focus-within:border-primary focus-within:ring-4 focus-within:ring-primary/15">
-        <input type="color" value={/^#[0-9a-f]{6}$/i.test(value || '') ? value : '#000000'} onChange={(e) => onChange(e.target.value)} className="size-7 shrink-0 cursor-pointer rounded-lg bg-transparent" />
-        <input value={value || ''} maxLength={7} onChange={(e) => onChange(e.target.value)} className="w-full bg-transparent text-sm uppercase outline-none" />
+        <input type="color" aria-label={label ? `${label} (colour picker)` : 'Colour picker'} value={/^#[0-9a-f]{6}$/i.test(value || '') ? value : '#000000'} onChange={(e) => onChange(e.target.value)} className="size-7 shrink-0 cursor-pointer rounded-lg bg-transparent" />
+        <input aria-label={label ? `${label} (hex code)` : 'Hex colour code'} value={value || ''} maxLength={7} onChange={(e) => onChange(e.target.value)} className="w-full bg-transparent text-sm uppercase outline-none" />
       </div>
     </div>
   );

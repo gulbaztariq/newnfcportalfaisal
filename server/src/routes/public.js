@@ -380,7 +380,7 @@ async function vcardPage(req, res, v) {
   res.set('Cache-Control', 'no-cache');
   if (v.custom_code_enabled && v.custom_code && (await customCodeAllowed(v))) {
     // own design: shown in a sandboxed frame (opaque origin: its scripts can never touch this site's cookies or APIs)
-    res.set('Content-Security-Policy', `default-src 'none'; frame-src 'self'; style-src 'unsafe-inline'; img-src 'self' data:; frame-ancestors 'self' ${clientUrl}`);
+    res.set('Content-Security-Policy', `default-src 'none'; frame-src 'self'; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; frame-ancestors 'self' ${clientUrl}`);
     return res.send(`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(v.name)}</title><meta name="description" content="${esc(v.description || v.occupation || '')}"><link rel="icon" href="${esc(s.favicon || '/brand/favicon.svg')}"><style>html,body{margin:0;height:100%}iframe{border:0;width:100%;height:100%;display:block}</style></head><body><iframe src="/c/${esc(v.url_alias)}" title="${esc(v.name)}" sandbox="allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-modals allow-downloads" allow="clipboard-write; web-share"></iframe></body></html>`);
   }
   const payMethods = await usersettings.methods(v.user_id).catch(() => []);

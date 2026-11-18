@@ -14,7 +14,7 @@ export function Preview({ src, title, scale = 0.62, className }) {
   return (
     <div className={cn('tpl-box', className)} style={{ '--tpl-scale': scale }}>
       {!loaded && <div className="skeleton absolute inset-0 rounded-none" />}
-      <iframe src={src} title={title} loading="lazy" tabIndex={-1} scrolling="no" onLoad={() => setLoaded(true)} className={cn('tpl-frame transition-opacity duration-500', loaded ? 'opacity-100' : 'opacity-0')} />
+      <iframe src={src} title={title} loading="lazy" inert scrolling="no" onLoad={() => setLoaded(true)} className={cn('tpl-frame transition-opacity duration-500', loaded ? 'opacity-100' : 'opacity-0')} />
     </div>
   );
 }

@@ -281,7 +281,7 @@ export function Login() {
   if (challenge) return <Shell title={emailMode && challenge.method === 'email' ? 'Check your e-mail' : 'Two-step verification'} subtitle={emailMode && challenge.method === 'email' ? 'Enter the code we just sent to sign in. No password needed.' : 'One more step to keep your account safe.'}><TwoFactorStep challenge={challenge.id} method={challenge.method} hint={challenge.hint} onBack={() => setChallenge(null)} /></Shell>;
   return (
     <Shell title="Welcome back" subtitle={emailMode ? 'Enter your e-mail and we will send you a sign-in code.' : 'Sign in to manage your digital business cards.'}
-      footer={<>{settings.register_enable !== '0' && <>Don&apos;t have an account? <Link to="/register" className="font-medium text-primary hover:underline">Create one free</Link></>}{emailMode && <span className="mt-2 block text-xs text-muted-foreground">No password to remember: we e-mail you a one-time code each time you sign in. Added by your team? Just use the e-mail they registered.</span>}</>}>
+      footer={<>{settings.register_enable !== '0' && <>Don&apos;t have an account? <Link to="/register" className="inline-flex min-h-8 items-center font-medium text-primary hover:underline">Create one free</Link></>}{emailMode && <span className="mt-2 block text-xs text-muted-foreground">No password to remember: we e-mail you a one-time code each time you sign in. Added by your team? Just use the e-mail they registered.</span>}</>}>
       <Alert tone="success">{ok}</Alert>
       <Alert>{err.message !== 'Validation failed' && err.message && <>{err.message}{unverified && f.email && <button type="button" onClick={resend} className="ml-1 cursor-pointer font-semibold underline">Resend link</button>}</>}</Alert>
       <form onSubmit={submit} noValidate className="space-y-5">
@@ -331,7 +331,7 @@ export function Register() {
   );
   const strength = [/.{8,}/, /[A-Z]/, /[0-9]/, /[^A-Za-z0-9]/].filter((r) => r.test(f.password)).length;
   return (
-    <Shell title="Create your account" subtitle="Your first digital card is ready in under a minute." footer={<>Already have an account? <Link to="/login" className="font-medium text-primary hover:underline">Sign in</Link></>}>
+    <Shell title="Create your account" subtitle="Your first digital card is ready in under a minute." footer={<>Already have an account? <Link to="/login" className="inline-flex min-h-8 items-center font-medium text-primary hover:underline">Sign in</Link></>}>
       <Alert>{err.message !== 'Validation failed' && err.message}</Alert>
       <form onSubmit={submit} noValidate className="space-y-4">
         <div className="grid grid-cols-2 gap-3">
@@ -369,7 +369,7 @@ export function ForgotPassword() {
     try { const { data } = await api.post('/auth/forgot-password', { email }); setMsg({ ok: data.message }); } catch (ex) { setMsg({ err: Object.values(ex.errors)[0] || ex.message }); } finally { setBusy(false); }
   };
   return (
-    <Shell title="Forgot password?" subtitle="Enter your e-mail and we'll send you a secure reset link." footer={<Link to="/login" className="font-medium text-primary hover:underline">Back to sign in</Link>}>
+    <Shell title="Forgot password?" subtitle="Enter your e-mail and we'll send you a secure reset link." footer={<Link to="/login" className="inline-flex min-h-8 items-center font-medium text-primary hover:underline">Back to sign in</Link>}>
       <Alert tone="success">{msg.ok && <span className="flex items-center gap-2"><CheckCircle2 className="size-4" />{msg.ok}</span>}</Alert>
       <Alert>{msg.err}</Alert>
       <form onSubmit={submit} noValidate className="space-y-5">
@@ -392,7 +392,7 @@ export function ResetPassword() {
     try { const { data } = await api.post('/auth/reset-password', { ...f, token: params.get('token'), email: params.get('email') }); setMsg({ ok: invite ? 'Your password is set. You can sign in now.' : data.message, errors: {}, done: true }); } catch (ex) { setMsg({ err: ex.message === 'Validation failed' ? '' : ex.message, errors: ex.errors }); }
   };
   return (
-    <Shell title={invite ? 'Welcome! Create your password' : 'Set a new password'} subtitle={invite ? `Your account is ready${params.get('email') ? ` for ${params.get('email')}` : ''}. Choose a password to finish. You will sign in with your e-mail and this password.` : "Choose a strong password you don't use elsewhere."} footer={<Link to="/login" className="font-medium text-primary hover:underline">Back to sign in</Link>}>
+    <Shell title={invite ? 'Welcome! Create your password' : 'Set a new password'} subtitle={invite ? `Your account is ready${params.get('email') ? ` for ${params.get('email')}` : ''}. Choose a password to finish. You will sign in with your e-mail and this password.` : "Choose a strong password you don't use elsewhere."} footer={<Link to="/login" className="inline-flex min-h-8 items-center font-medium text-primary hover:underline">Back to sign in</Link>}>
       <Alert tone="success">{msg.ok}</Alert><Alert>{msg.err}</Alert>
       <form onSubmit={submit} noValidate className="space-y-5">
         <Field label="New password" htmlFor="n1" error={msg.errors.password}><PasswordInput id="n1" value={f.password} onChange={(v) => setF({ ...f, password: v })} autoComplete="new-password" /></Field>
@@ -407,12 +407,14 @@ export function VerifyEmail() {
   const [params] = useSearchParams();
   const [state, setState] = useState({ busy: true });
   useEffect(() => {
+    // a link without its token or e-mail cannot be verified: say so without calling the server
+    if (!params.get('token') || !params.get('email')) { setState({ err: 'This verification link is incomplete. Open the link from your e-mail again.' }); return; }
     api.post('/auth/verify-email', { email: params.get('email'), token: params.get('token') })
       .then(({ data }) => setState({ ok: data.message }))
       .catch((ex) => setState({ err: ex.message === 'Validation failed' ? 'This verification link is incomplete.' : ex.message }));
   }, []); // eslint-disable-line
   return (
-    <Shell title="E-mail verification" subtitle={params.get('email') || ''} footer={<Link to="/login" className="font-medium text-primary hover:underline">Go to sign in</Link>}>
+    <Shell title="E-mail verification" subtitle={params.get('email') || ''} footer={<Link to="/login" className="inline-flex min-h-8 items-center font-medium text-primary hover:underline">Go to sign in</Link>}>
       {state.busy ? <div className="skeleton h-24 rounded-3xl" /> : (
         <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="rounded-3xl border border-border p-6 text-center">
           <span className={`mx-auto grid size-14 place-items-center rounded-2xl ${state.ok ? 'bg-success-soft text-success' : 'bg-danger-soft text-danger'}`}>{state.ok ? <CheckCircle2 className="size-7" /> : <MailCheck className="size-7" />}</span>

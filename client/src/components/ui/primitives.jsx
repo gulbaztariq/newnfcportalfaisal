@@ -118,7 +118,7 @@ export const StatusBadge = ({ value, children }) => (
 
 /* ------------------------------------------------------------------- card */
 export function Card({ className, children, hover, ...props }) {
-  return <div className={cn('rounded-2xl border border-border bg-card text-card-foreground shadow-soft', hover && 'transition-all duration-300 hover:-translate-y-0.5 hover:shadow-lift', className)} {...props}>{children}</div>;
+  return <div className={cn('min-w-0 rounded-2xl border border-border bg-card text-card-foreground shadow-soft', hover && 'transition-all duration-300 hover:-translate-y-0.5 hover:shadow-lift', className)} {...props}>{children}</div>;
 }
 export function CardHeader({ title, description, actions, className, icon: Icon }) {
   return (

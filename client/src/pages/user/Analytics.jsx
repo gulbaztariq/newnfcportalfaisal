@@ -32,7 +32,7 @@ function Spark({ data, k, color = 'var(--primary)' }) {
   return (
     <div className="h-10 w-full" aria-hidden="true">
       <ResponsiveContainer width="100%" height="100%">
-        <AreaChart data={data} margin={{ top: 4, right: 0, left: 0, bottom: 0 }}>
+        <AreaChart accessibilityLayer={false} tabIndex={-1} data={data} margin={{ top: 4, right: 0, left: 0, bottom: 0 }}>
           <defs><linearGradient id={`sp-${k}`} x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={color} stopOpacity={0.35} /><stop offset="100%" stopColor={color} stopOpacity={0} /></linearGradient></defs>
           <Area type="monotone" dataKey={k} stroke={color} strokeWidth={2} fill={`url(#sp-${k})`} isAnimationActive={false} />
         </AreaChart>
@@ -97,7 +97,7 @@ function DonutLegend({ rows, center, centerLabel, onPick }) {
     <div className="flex flex-col items-center gap-5">
       <div className="relative size-40 shrink-0">
         <ResponsiveContainer width="100%" height="100%">
-          <PieChart><Pie data={rows} dataKey="value" nameKey="name" innerRadius={52} outerRadius={74} paddingAngle={2} stroke="none" animationDuration={900}>{rows.map((r, i) => <Cell key={r.name} fill={CHART_COLORS[i % CHART_COLORS.length]} />)}</Pie><Tooltip formatter={(v, n) => [nf.format(v), n]} contentStyle={{ borderRadius: 12, border: '1px solid var(--border)', background: 'var(--card)', fontSize: 12 }} /></PieChart>
+          <PieChart accessibilityLayer={false}><Pie data={rows} dataKey="value" nameKey="name" innerRadius={52} outerRadius={74} paddingAngle={2} stroke="none" animationDuration={900}>{rows.map((r, i) => <Cell key={r.name} fill={CHART_COLORS[i % CHART_COLORS.length]} />)}</Pie><Tooltip formatter={(v, n) => [nf.format(v), n]} contentStyle={{ borderRadius: 12, border: '1px solid var(--border)', background: 'var(--card)', fontSize: 12 }} /></PieChart>
         </ResponsiveContainer>
         <div className="pointer-events-none absolute inset-0 grid place-items-center text-center"><div><p className="font-display text-xl font-bold">{compact.format(center ?? total)}</p><p className="text-[11px] text-muted-foreground">{centerLabel}</p></div></div>
       </div>
@@ -114,7 +114,7 @@ function DonutLegend({ rows, center, centerLabel, onPick }) {
 function Heatmap({ grid }) {
   const max = Math.max(1, ...grid.flat());
   return (
-    <div className="overflow-x-auto pb-1">
+    <div role="group" aria-label="Metrics" tabIndex={0} className="overflow-x-auto pb-1">
       <div className="min-w-[620px]" role="img" aria-label="Views by weekday and hour of the day">
         <div className="ml-10 grid grid-cols-24 gap-[3px] text-[10px] text-muted-foreground" style={{ gridTemplateColumns: 'repeat(24, minmax(0, 1fr))' }}>
           {Array.from({ length: 24 }, (_, h) => <span key={h} className="text-center">{h % 3 === 0 ? hourLabel(h) : ''}</span>)}
@@ -215,7 +215,7 @@ function TrafficChart({ series, metrics, compare }) {
   const tick = series.length > 45 ? Math.ceil(series.length / 12) - 1 : series.length > 14 ? 3 : 0;
   return (
     <ResponsiveContainer width="100%" height={340}>
-      <ComposedChart data={series} margin={{ top: 10, right: 8, left: -12, bottom: 0 }}>
+      <ComposedChart accessibilityLayer={false} data={series} margin={{ top: 10, right: 8, left: -12, bottom: 0 }}>
         <defs>{sel.map((m) => <linearGradient key={m.key} id={`tr-${m.key}`} x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={m.color} stopOpacity={sel.length > 1 ? 0.2 : 0.32} /><stop offset="100%" stopColor={m.color} stopOpacity={0} /></linearGradient>)}</defs>
         <CartesianGrid strokeDasharray="4 4" vertical={false} />
         <XAxis dataKey="label" tickLine={false} axisLine={false} tickMargin={10} interval={tick} />
@@ -462,16 +462,16 @@ export function AnalyticsDashboard({ endpoint, admin = false, company = false, i
   const toolbar = (
     <Card className="p-4">
       <div className="flex flex-wrap items-end gap-3">
-        <div className="w-full sm:w-44"><p className="mb-1 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">Period</p><Select value={f.preset} onChange={(x) => set({ preset: x })} options={PRESETS} /></div>
+        <div className="w-full sm:w-44"><p className="mb-1 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">Period</p><Select aria-label="Period" value={f.preset} onChange={(x) => set({ preset: x })} options={PRESETS} /></div>
         {f.preset === 'custom' && (
           <div className="flex items-end gap-2">
             <div><p className="mb-1 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">From</p><Input type="date" max={f.custom.to || iso(new Date())} value={f.custom.from} onChange={(e) => set({ custom: { ...f.custom, from: e.target.value } })} aria-label="From date" /></div>
             <div><p className="mb-1 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">To</p><Input type="date" min={f.custom.from} max={iso(new Date())} value={f.custom.to} onChange={(e) => set({ custom: { ...f.custom, to: e.target.value } })} aria-label="To date" /></div>
           </div>
         )}
-        <div className="w-full sm:w-52"><p className="mb-1 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">Compare with</p><Select value={f.compare} onChange={(x) => set({ compare: x })} options={COMPARE} /></div>
-        {company && people.length > 1 && <div className="w-full sm:w-52"><p className="mb-1 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">Person</p><Select value={String(f.member)} onChange={(x) => set({ member: x || 'all', card: 'all', cardName: '' })} options={[{ value: 'all', label: 'Everyone' }, ...people.map((x) => ({ value: String(x.id), label: x.name }))]} /></div>}
-        {!admin && cards.length > 1 && <div className="w-full sm:w-52"><p className="mb-1 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">Card</p><Select value={String(f.card)} onChange={(x) => set({ card: x || 'all', cardName: '' })} options={[{ value: 'all', label: 'All cards' }, ...cards.map((c) => ({ value: String(c.id), label: c.name }))]} /></div>}
+        <div className="w-full sm:w-52"><p className="mb-1 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">Compare with</p><Select aria-label="Compare with" value={f.compare} onChange={(x) => set({ compare: x })} options={COMPARE} /></div>
+        {company && people.length > 1 && <div className="w-full sm:w-52"><p className="mb-1 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">Person</p><Select aria-label="Person" value={String(f.member)} onChange={(x) => set({ member: x || 'all', card: 'all', cardName: '' })} options={[{ value: 'all', label: 'Everyone' }, ...people.map((x) => ({ value: String(x.id), label: x.name }))]} /></div>}
+        {!admin && cards.length > 1 && <div className="w-full sm:w-52"><p className="mb-1 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">Card</p><Select aria-label="Card" value={String(f.card)} onChange={(x) => set({ card: x || 'all', cardName: '' })} options={[{ value: 'all', label: 'All cards' }, ...cards.map((c) => ({ value: String(c.id), label: c.name }))]} /></div>}
         <div className="ml-auto flex items-center gap-2">
           <Tip content="Refresh"><Button variant="outline" size="icon" onClick={() => setTick((n) => n + 1)} aria-label="Refresh" disabled={busy}><RefreshCw className={cn(busy && 'animate-spin')} /></Button></Tip>
           <Menu>
@@ -490,7 +490,7 @@ export function AnalyticsDashboard({ endpoint, admin = false, company = false, i
       <div className="mt-3 flex flex-wrap items-end gap-3 border-t border-border pt-3">
         <span className="mb-2.5 hidden items-center gap-1.5 text-xs font-medium text-muted-foreground sm:flex"><SlidersHorizontal className="size-3.5" />Filters</span>
         {FILTERS.map((x) => (
-          <div key={x.key} className="w-[calc(50%-0.375rem)] sm:w-36"><p className="mb-1 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">{x.label}</p><Select value={f[x.key]} onChange={(v) => set({ [x.key]: v || 'all' })} options={[{ ...ALL, label: `All` }, ...x.options]} /></div>
+          <div key={x.key} className="w-[calc(50%-0.375rem)] sm:w-36"><p className="mb-1 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">{x.label}</p><Select aria-label={x.label} value={f[x.key]} onChange={(v) => set({ [x.key]: v || 'all' })} options={[{ ...ALL, label: `All` }, ...x.options]} /></div>
         ))}
       </div>
       {!validRange && <p className="mt-3 text-sm text-danger">Pick a start date that is on or before the end date.</p>}

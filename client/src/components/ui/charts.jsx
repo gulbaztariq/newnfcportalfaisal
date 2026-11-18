@@ -20,7 +20,7 @@ function ChartTip({ active, payload, label, format }) {
 export function AreaTrend({ data, dataKey = 'value', name = 'Value', height = 300, format }) {
   return (
     <ResponsiveContainer width="100%" height={height}>
-      <AreaChart data={data} margin={{ top: 10, right: 8, left: -12, bottom: 0 }}>
+      <AreaChart accessibilityLayer={false} data={data} margin={{ top: 10, right: 8, left: -12, bottom: 0 }}>
         <defs>
           <linearGradient id={`g-${dataKey}`} x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="var(--primary)" stopOpacity={0.35} />
@@ -40,7 +40,7 @@ export function AreaTrend({ data, dataKey = 'value', name = 'Value', height = 30
 export function Bars({ data, dataKey = 'value', name = 'Value', height = 300 }) {
   return (
     <ResponsiveContainer width="100%" height={height}>
-      <BarChart data={data} margin={{ top: 10, right: 8, left: -20, bottom: 0 }}>
+      <BarChart accessibilityLayer={false} data={data} margin={{ top: 10, right: 8, left: -20, bottom: 0 }}>
         <defs>
           <linearGradient id="bar-g" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="var(--primary)" />
@@ -63,7 +63,7 @@ export function Donut({ data, height = 240, center }) {
     <div className="relative">
       <div className="relative">
         <ResponsiveContainer width="100%" height={height}>
-          <PieChart>
+          <PieChart accessibilityLayer={false}>
             <Tooltip content={<ChartTip />} />
             <Pie data={data} dataKey="value" nameKey="name" innerRadius="68%" outerRadius="92%" paddingAngle={3} cornerRadius={6} stroke="none" animationDuration={1100}>
               {data.map((d, i) => <Cell key={d.name} fill={CHART_COLORS[i % CHART_COLORS.length]} />)}

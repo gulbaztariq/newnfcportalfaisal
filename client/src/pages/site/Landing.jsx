@@ -62,7 +62,7 @@ function Phone({ slug = 'vcard8', className }) {
     <div className={cn('relative rounded-[3rem] bg-zinc-900 p-3 shadow-[0_40px_100px_-30px_rgba(76,29,149,.6)] ring-1 ring-white/10 dark:ring-white/15', className)}>
       <div className="absolute top-5 left-1/2 z-10 h-6 w-24 -translate-x-1/2 rounded-full bg-zinc-900" />
       <div className="relative h-[620px] w-[300px] overflow-hidden rounded-[2.4rem] bg-white">
-        <iframe src={`/t/preview/${slug}`} title="Live vCard preview" loading="lazy" tabIndex={-1} scrolling="no" className="pointer-events-none absolute top-0 left-0 h-[827px] w-[400px] origin-top-left scale-75 border-0" />
+        <iframe src={`/t/preview/${slug}`} title="Live vCard preview" loading="lazy" inert scrolling="no" className="pointer-events-none absolute top-0 left-0 h-[827px] w-[400px] origin-top-left scale-75 border-0" />
       </div>
     </div>
   );
@@ -237,7 +237,7 @@ function Templates({ templates }) {
           <motion.a key={t.id} href={`/t/preview/${t.slug}`} target="_blank" rel="noreferrer" initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: (i % 5) * 0.08, duration: 0.6 }}
             whileHover={{ y: -8 }} className="group w-[260px] shrink-0 snap-start">
             <div className="tpl-box rounded-3xl border border-border shadow-soft transition-shadow duration-500 group-hover:shadow-lift" style={{ '--tpl-scale': 0.65 }}>
-              <iframe src={`/t/preview/${t.slug}`} title={t.name} loading="lazy" tabIndex={-1} scrolling="no" className="tpl-frame" />
+              <iframe src={`/t/preview/${t.slug}`} title={t.name} loading="lazy" inert scrolling="no" className="tpl-frame" />
               <div className="absolute inset-x-3 bottom-3 flex translate-y-3 items-center justify-center gap-1.5 rounded-xl bg-zinc-900/85 py-2 text-xs font-medium text-white opacity-0 backdrop-blur transition-all duration-300 group-hover:translate-y-0 group-hover:opacity-100"><Eye className="size-3.5" />Live preview</div>
             </div>
             <p className="mt-3 font-display font-semibold">{t.name}</p>

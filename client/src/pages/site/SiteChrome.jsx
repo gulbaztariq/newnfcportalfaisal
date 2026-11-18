@@ -35,7 +35,7 @@ export function Navbar({ settings, home = true }) {
         className={cn('mx-auto flex h-14 max-w-6xl items-center gap-2 rounded-2xl sm:gap-4 px-3 pl-4 transition-all duration-500', scrolled ? 'glass border border-border shadow-lift' : 'border border-transparent')}>
         <Link to="/" className="min-w-0 shrink"><Logo name={settings.app_name || 'NFC Profile'} mark="size-8 shrink-0" className="max-w-full min-w-0" textClass="truncate" /></Link>
         <div className="mx-auto hidden items-center gap-1 lg:flex">
-          {NAV.map(([id, l]) => <a key={id} href={href(id)} className="rounded-xl px-3.5 py-2 text-sm font-medium text-muted-foreground transition hover:bg-muted hover:text-foreground">{l}</a>)}
+          {NAV.map(([id, l]) => <a key={id} href={href(id)} className="rounded-xl px-3.5 py-2 text-sm font-medium text-foreground/80 transition hover:bg-muted hover:text-foreground">{l}</a>)}
           {shop && <Link to="/shop" className="rounded-xl px-3.5 py-2 text-sm font-medium text-muted-foreground transition hover:bg-muted hover:text-foreground">Shop</Link>}
         </div>
         <div className="ml-auto flex shrink-0 items-center gap-1 sm:gap-2 lg:ml-0">
@@ -98,19 +98,19 @@ export function Footer({ settings }) {
         </div>
         <div className="md:col-span-2">
           <p className="text-sm font-semibold">Product</p>
-          <ul className="mt-4 space-y-2.5 text-sm text-muted-foreground">{NAV.slice(0, 4).map(([id, l]) => <li key={id}><a href={`/#${id}`} className="transition hover:text-foreground">{l}</a></li>)}</ul>
+          <ul className="mt-3 space-y-0.5 text-sm text-muted-foreground">{NAV.slice(0, 4).map(([id, l]) => <li key={id}><a href={`/#${id}`} className="inline-flex min-h-8 items-center transition hover:text-foreground">{l}</a></li>)}</ul>
         </div>
         <div className="md:col-span-2">
           <p className="text-sm font-semibold">Company</p>
-          <ul className="mt-4 space-y-2.5 text-sm text-muted-foreground">
-            <li><a href="/#contact" className="hover:text-foreground">Contact</a></li>
-            {settings.front_blog_enable !== '0' && <li><Link to="/blog" className="hover:text-foreground">Blog</Link></li>}
-            {settings.business_directory_enable !== '0' && <li><Link to="/directory" className="hover:text-foreground">Directory</Link></li>}
-            {settings.shop_enable !== '0' && <li><Link to="/shop" className="hover:text-foreground">Shop</Link></li>}
-            {settings.shop_enable !== '0' && <li><Link to="/track" className="hover:text-foreground">Track order</Link></li>}
-            <li><Link to="/terms-conditions" className="hover:text-foreground">Terms</Link></li>
-            <li><Link to="/privacy-policy" className="hover:text-foreground">Privacy</Link></li>
-            <li><Link to="/login" className="hover:text-foreground">Sign in</Link></li>
+          <ul className="mt-3 space-y-0.5 text-sm text-muted-foreground">
+            <li><a href="/#contact" className="inline-flex min-h-8 items-center hover:text-foreground">Contact</a></li>
+            {settings.front_blog_enable !== '0' && <li><Link to="/blog" className="inline-flex min-h-8 items-center hover:text-foreground">Blog</Link></li>}
+            {settings.business_directory_enable !== '0' && <li><Link to="/directory" className="inline-flex min-h-8 items-center hover:text-foreground">Directory</Link></li>}
+            {settings.shop_enable !== '0' && <li><Link to="/shop" className="inline-flex min-h-8 items-center hover:text-foreground">Shop</Link></li>}
+            {settings.shop_enable !== '0' && <li><Link to="/track" className="inline-flex min-h-8 items-center hover:text-foreground">Track order</Link></li>}
+            <li><Link to="/terms-conditions" className="inline-flex min-h-8 items-center hover:text-foreground">Terms</Link></li>
+            <li><Link to="/privacy-policy" className="inline-flex min-h-8 items-center hover:text-foreground">Privacy</Link></li>
+            <li><Link to="/login" className="inline-flex min-h-8 items-center hover:text-foreground">Sign in</Link></li>
           </ul>
         </div>
         <div className="md:col-span-3">
@@ -128,7 +128,7 @@ export function Footer({ settings }) {
         </div>
       </div>
       <div className="border-t border-border py-6 text-center text-xs text-muted-foreground">© {new Date().getFullYear()} {settings.app_name || 'NFC Profile'}. All rights reserved.</div>
-      <p aria-hidden className="pointer-events-none -mb-8 text-center font-display text-[18vw] leading-none font-extrabold tracking-tighter text-foreground/[0.035] select-none">{settings.app_name || 'NFC Profile'}</p>
+      <div aria-hidden data-watermark={settings.app_name || 'NFC Profile'} className="pointer-events-none -mb-8 text-center font-display text-[18vw] leading-none font-extrabold tracking-tighter text-foreground/[0.035] select-none after:content-[attr(data-watermark)]" />
     </footer>
   );
 }

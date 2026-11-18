@@ -24,7 +24,7 @@ export default function WelcomeGuide({ userId }) {
       <button type="button" onClick={() => { setI(0); setOpen(true); }} className="inline-flex h-11 cursor-pointer items-center gap-2 rounded-xl border border-white/20 px-4 text-sm font-medium text-white/85 transition hover:bg-white/10"><Compass className="size-4" />Welcome guide</button>
       <Dialog open={open} onOpenChange={(o) => (o ? setOpen(true) : close())} size="md" icon={s.icon} title={s.title}
         footer={<>
-          <span className="mr-auto flex items-center gap-1.5" aria-label={`Step ${i + 1} of ${STEPS.length}`}>{STEPS.map((_, n) => <span key={n} className={`h-1.5 rounded-full transition-all ${n === i ? 'w-6 bg-primary' : 'w-1.5 bg-border'}`} />)}</span>
+          <span role="img" className="mr-auto flex items-center gap-1.5" aria-label={`Step ${i + 1} of ${STEPS.length}`}>{STEPS.map((_, n) => <span key={n} className={`h-1.5 rounded-full transition-all ${n === i ? 'w-6 bg-primary' : 'w-1.5 bg-border'}`} />)}</span>
           {i > 0 && <Button variant="outline" onClick={() => setI(i - 1)}><ArrowLeft />Back</Button>}
           {last ? <Button onClick={close}>Finish</Button> : <Button onClick={() => setI(i + 1)}>Next<ArrowRight /></Button>}
         </>}>

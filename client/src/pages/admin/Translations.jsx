@@ -29,7 +29,7 @@ export function Translations() {
       <Card>
         <CardBody className="grid gap-4">
           <div className="flex flex-wrap items-center gap-3">
-            <div className="w-56"><Select value={lang} onChange={setLang} options={(d?.languages || [{ code: 'en', name: 'English' }]).map((l) => ({ value: l.code, label: `${l.name} (${l.code})` }))} /></div>
+            <div className="w-56"><Select aria-label="Language" value={lang} onChange={setLang} options={(d?.languages || [{ code: 'en', name: 'English' }]).map((l) => ({ value: l.code, label: `${l.name} (${l.code})` }))} /></div>
             <div className="min-w-56 flex-1"><SearchInput value={q} onChange={setQ} placeholder="Search a text..." /></div>
             {current && !current.builtin && <Badge tone="warning">New language: untranslated texts show in English</Badge>}
             <span className="text-sm text-muted-foreground">{Object.keys(values).length} changed</span>

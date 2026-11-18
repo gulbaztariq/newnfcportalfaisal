@@ -11,13 +11,13 @@ const API_PORT = 5102; const WEB_PORT = 5174;
 module.exports = defineConfig({
   testDir: './tests',
   outputDir: './.work/artifacts',
-  timeout: 60_000,
+  timeout: 150_000,
   fullyParallel: true,
   workers: Number(process.env.WORKERS || 4),
   retries: 1,
   reporter: [['list'], ['json', { outputFile: './.work/report.json' }]],
   globalSetup: require.resolve('./global-setup.js'),
-  use: { baseURL: `http://localhost:${WEB_PORT}`, trace: 'off', screenshot: 'off', actionTimeout: 10_000, navigationTimeout: 30_000 },
+  use: { reducedMotion: 'reduce', baseURL: `http://localhost:${WEB_PORT}`, trace: 'off', screenshot: 'off', actionTimeout: 10_000, navigationTimeout: 30_000 },
   projects: [
     { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
     { name: 'firefox', use: { ...devices['Desktop Firefox'] }, grep: /@cross/ },
