@@ -187,13 +187,14 @@ const quoteJson = (q) => ({ ...q, lines: q.lines.map(({ product, ...l }) => ({ .
 
 r.get('/orders-meta', wrap(async (_req, res) => {
   const s = await settings.all();
-  const [sources, products, plans] = await Promise.all([
+  const [sources, products, plans, accounts] = await Promise.all([
     M.OrderSource.findAll({ where: { status: true }, attributes: ['id', 'name', 'url', 'last_synced_at', 'platform'], order: [['name', 'ASC']] }),
     M.NfcCard.findAll({ where: { status: true }, attributes: ['id', 'name', 'category', 'source_price', 'sku', 'images', 'price', 'variants', 'customization_price', 'plan_id', 'front_image', 'product_kind', 'order_source_id', 'discount_type', 'discount_value', 'sample_price', 'wholesale_tiers', 'no_wholesale_tiers', 'tags_per_unit'], include: [{ model: M.Plan, as: 'plan', attributes: ['id', 'name', 'price', 'frequency'] }], order: [['sort', 'ASC'], ['id', 'ASC']] }),
     M.Plan.findAll({ where: { status: true }, attributes: ['id', 'name'] }),
+    M.FinanceAccount.findAll({ where: { status: true }, attributes: ['id', 'name', 'type'], order: [['id', 'ASC']] }),
   ]);
   res.json({
-    sources, products, plans, dummy_domain: await orders.dummyDomain(), currency: s.shop_currency_icon || 'Rs',
+    sources, products, plans, accounts, dummy_domain: await orders.dummyDomain(), currency: s.shop_currency_icon || 'Rs',
     order_types: Object.entries(orders.ORDER_TYPES).map(([key, t]) => ({ key, ...t })), wholesale_tiers: orders.parseTiers(s.wholesale_tiers), sample_markup_percent: Number(s.sample_markup_percent || 0), sample_max_qty: Number(s.sample_max_qty || 5), sample_credit_enable: s.sample_credit_enable !== '0',
     delivery_charges: Number(s.delivery_charges || 0), cod_charges: Number(s.cod_charges || 0), tax_name: s.nfc_tax_name || 'Tax', tax_rate: Number(s.nfc_tax_rate || 0),
   });
@@ -299,7 +300,11 @@ r.post('/orders', wrap(async (req, res) => {
     if (Number(target.price) <= Number(cur.plan_amount || 0)) fail(422, 'Validation failed', { items: 'That plan costs the same or less than the current one, so it is not an upgrade.' });
   }
   const isCod = !collection && !orders.NO_SHIP_TYPES.includes(b.order_type) && toBool(b.is_cod);
+  const payAccount = b.payment_account_id ? await M.FinanceAccount.findByPk(b.payment_account_id) : null;
+  if (b.payment_account_id && !payAccount) fail(422, 'Validation failed', { payment_account_id: 'Choose a payment method from the list' });
+  if (b.payment_status === 'paid' && !payAccount) fail(422, 'Validation failed', { payment_account_id: 'Choose the payment method the money was received in' });
   const o = await orders.create({
+    payment_account_id: payAccount?.id || null,
     ...pick(b, ['name', 'phone', 'address', 'city', 'courier_city_id', 'company_name', 'designation', 'customer_note', 'admin_note']),
     email, user_id: user?.id || null, vcard_id: vcard?.id || null, guest_customer_id: guest?.id || null, organisation_id: orgOwner?.id || null,
     fulfilment: collection ? 'collection' : orders.NO_SHIP_TYPES.includes(b.order_type) ? 'digital' : 'delivery', is_cod: isCod,
