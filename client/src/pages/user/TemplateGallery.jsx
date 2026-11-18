@@ -52,7 +52,7 @@ export default function TemplateGallery({ templates, value, onChange }) {
       <div className="mb-5 flex gap-2 overflow-x-auto pb-1" role="tablist" aria-label="Categories">
         {['', ...cats].map((c) => (
           <button key={c || 'all'} type="button" role="tab" aria-selected={cat === c} onClick={() => setCat(c)}
-            className={cn('shrink-0 cursor-pointer rounded-full border px-3.5 py-1.5 text-[13px] font-medium transition', cat === c ? 'border-primary bg-primary text-white shadow-glow' : 'border-border bg-card text-muted-foreground hover:border-primary/40 hover:text-foreground')}>
+            className={cn('shrink-0 cursor-pointer rounded-full border px-3.5 py-1.5 text-[13px] font-medium transition', cat === c ? 'border-primary bg-primary text-primary-foreground shadow-glow' : 'border-border bg-card text-muted-foreground hover:border-primary/40 hover:text-foreground')}>
             {c || 'All'}<span className="ml-1.5 opacity-70">{templates.filter((t) => !c || t.category === c).length}</span>
           </button>
         ))}
@@ -78,7 +78,7 @@ export default function TemplateGallery({ templates, value, onChange }) {
                 <div className="absolute top-3 right-3 flex gap-1.5">
                   <button type="button" onClick={() => toggleFav(t.slug)} aria-pressed={favs.includes(t.slug)} aria-label={favs.includes(t.slug) ? 'Remove from favourites' : 'Add to favourites'}
                     className={cn('grid size-8 cursor-pointer place-items-center rounded-full shadow-lg backdrop-blur transition', favs.includes(t.slug) ? 'bg-rose-500 text-white' : 'bg-white/90 text-zinc-700 hover:text-rose-500')}><Heart className="size-4" fill={favs.includes(t.slug) ? 'currentColor' : 'none'} /></button>
-                  <AnimatePresence>{on && <motion.span initial={{ scale: 0 }} animate={{ scale: 1 }} exit={{ scale: 0 }} className="grid size-8 place-items-center rounded-full bg-primary text-white shadow-lg" title="Applied"><Check className="size-4" strokeWidth={3} /></motion.span>}</AnimatePresence>
+                  <AnimatePresence>{on && <motion.span initial={{ scale: 0 }} animate={{ scale: 1 }} exit={{ scale: 0 }} className="grid size-8 place-items-center rounded-full bg-primary text-primary-foreground shadow-lg" title="Applied"><Check className="size-4" strokeWidth={3} /></motion.span>}</AnimatePresence>
                 </div>
                 <div className="flex items-center gap-3 p-3.5">
                   <div className="min-w-0 flex-1"><p className="truncate font-display text-sm font-semibold">{t.name}</p><p className="truncate text-xs text-muted-foreground">{t.category}{t.collection !== 'signature' && t.profession ? ` · ${t.profession}` : ''}</p></div>

@@ -13,6 +13,6 @@ export default defineConfig({
   // static files in public/ are served by the API server; the bundle goes to /build
   build: {
     outDir: 'dist', emptyOutDir: true, assetsDir: 'build', copyPublicDir: false, chunkSizeWarningLimit: 900,
-    rollupOptions: { output: { manualChunks: (id) => (id.includes('recharts') || id.includes('d3-') ? 'charts' : id.includes('@tiptap') || id.includes('prosemirror') ? 'editor' : undefined) } },
+    // no manualChunks: they made the landing page download the chart and editor libraries up front. Rollup now splits them out on its own and loads them only on the pages that use them.
   },
 });

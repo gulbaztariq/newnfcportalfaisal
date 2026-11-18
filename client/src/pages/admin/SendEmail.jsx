@@ -40,7 +40,7 @@ export default function SendEmail() {
                   const on = v.audience === k;
                   return (
                     <button key={k} type="button" onClick={() => form.set('audience', k)} className={cn('relative flex cursor-pointer items-center gap-3 rounded-2xl border p-3.5 text-left transition', on ? 'border-primary bg-primary-soft/60' : 'border-border hover:border-primary/40')}>
-                      <span className={cn('grid size-10 place-items-center rounded-xl transition', on ? 'bg-primary text-white' : 'bg-muted text-muted-foreground')}><I className="size-4.5" /></span>
+                      <span className={cn('grid size-10 place-items-center rounded-xl transition', on ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground')}><I className="size-4.5" /></span>
                       <span><span className="block text-sm font-medium">{l}</span><span className="block text-xs text-muted-foreground">{d}</span></span>
                       {on && <motion.span layoutId="aud" className="absolute inset-0 rounded-2xl ring-2 ring-primary" />}
                     </button>

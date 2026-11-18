@@ -217,7 +217,7 @@ export default function VcardEditor() {
                     <div className="grid gap-3 sm:grid-cols-2">
                       {SOCIAL.map(([k, I, l]) => (
                         <div key={k} className={cn('flex items-center gap-3 rounded-2xl border p-2 pl-3 transition focus-within:border-primary', v.social_links[k] ? 'border-primary/30 bg-primary-soft/40' : 'border-border')}>
-                          <span className={cn('grid size-9 shrink-0 place-items-center rounded-xl', v.social_links[k] ? 'bg-primary text-white' : 'bg-muted text-muted-foreground')}><I className="size-4" /></span>
+                          <span className={cn('grid size-9 shrink-0 place-items-center rounded-xl', v.social_links[k] ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground')}><I className="size-4" /></span>
                           <div className="min-w-0 flex-1"><p className="text-xs text-muted-foreground">{l}</p><input value={v.social_links[k] || ''} onChange={(e) => setIn('social_links', k, e.target.value)} placeholder="https://" className="w-full bg-transparent text-sm outline-none" /></div>
                         </div>
                       ))}
@@ -373,7 +373,7 @@ export default function VcardEditor() {
       </div>
 
       {/* phones and tablets: preview in a bottom sheet */}
-      <button type="button" onClick={() => setMobilePv(true)} className={cn('fixed right-4 z-30 flex cursor-pointer items-center gap-2 rounded-full bg-primary px-4 py-3 text-sm font-medium text-white shadow-glow xl:hidden', dirty ? 'bottom-24' : 'bottom-5')}><Smartphone className="size-4" />Preview</button>
+      <button type="button" onClick={() => setMobilePv(true)} className={cn('fixed right-4 z-30 flex cursor-pointer items-center gap-2 rounded-full bg-primary px-4 py-3 text-sm font-medium text-primary-foreground shadow-glow xl:hidden', dirty ? 'bottom-24' : 'bottom-5')}><Smartphone className="size-4" />Preview</button>
       <AnimatePresence>
         {mobilePv && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 flex items-end bg-zinc-950/60 backdrop-blur-sm xl:hidden" onClick={() => setMobilePv(false)}>

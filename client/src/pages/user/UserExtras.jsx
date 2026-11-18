@@ -132,7 +132,7 @@ function ApptCalendar() {
           const items = iso ? rows.filter((r) => r.date === iso) : [];
           return (
             <div key={i} className={cn('min-h-28 border-r border-b border-border p-1.5 [&:nth-child(7n)]:border-r-0', !day && 'bg-muted/30')}>
-              {day && <span className={cn('mb-1 inline-grid size-6 place-items-center rounded-full text-xs font-semibold', iso === today ? 'bg-primary text-white' : 'text-muted-foreground')}>{day}</span>}
+              {day && <span className={cn('mb-1 inline-grid size-6 place-items-center rounded-full text-xs font-semibold', iso === today ? 'bg-primary text-primary-foreground' : 'text-muted-foreground')}>{day}</span>}
               <div className="space-y-1">
                 {items.slice(0, 3).map((a) => <div key={a.id} title={`${a.name} · ${a.vcard?.name}`} className={cn('truncate rounded-md px-1.5 py-0.5 text-[11px] font-medium', a.status === 'confirmed' || a.status === 'completed' ? 'bg-success-soft text-success' : 'bg-warning-soft text-warning')}>{a.from_time} {a.name}</div>)}
                 {items.length > 3 && <p className="px-1 text-[11px] text-muted-foreground">+{items.length - 3} more</p>}

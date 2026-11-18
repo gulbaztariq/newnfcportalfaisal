@@ -332,7 +332,7 @@ function OrganisationJourney({ ownerId, rev }) {
     <Card className="lg:col-span-3">
       <CardHeader icon={Route} title="Journey" description="Everything that happened with this organisation, newest first: who ordered, who was given access, locks, announcements..."
         actions={<div className="flex flex-wrap gap-1">{[['all', 'All'], ['orders', 'Orders'], ['people', 'Users & access'], ['company', 'Company']].map(([k, l]) => (
-          <button key={k} type="button" onClick={() => setGroup(k)} className={cn('cursor-pointer rounded-full border px-3 py-1 text-xs font-medium transition', group === k ? 'border-primary bg-primary text-white' : 'border-border text-muted-foreground hover:text-foreground')}>{l}</button>
+          <button key={k} type="button" onClick={() => setGroup(k)} className={cn('cursor-pointer rounded-full border px-3 py-1 text-xs font-medium transition', group === k ? 'border-primary bg-primary text-primary-foreground' : 'border-border text-muted-foreground hover:text-foreground')}>{l}</button>
         ))}</div>} />
       <CardBody>
         {!items ? <div className="space-y-3"><Skeleton className="h-12" /><Skeleton className="h-12" /></div> : !shown.length ? <EmptyState icon={Route} title="Nothing here yet" /> : (

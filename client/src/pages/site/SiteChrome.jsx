@@ -58,7 +58,7 @@ export function Navbar({ settings, home = true }) {
             {shop && (
               <>
                 <Link to="/shop" onClick={() => setOpen(false)} className="flex items-center gap-2 rounded-xl px-4 py-3 text-sm font-medium hover:bg-muted"><ShoppingBag className="size-4 text-primary" />Shop</Link>
-                {cart && <button type="button" onClick={() => { setOpen(false); cart.setOpen(true); }} className="flex w-full cursor-pointer items-center gap-2 rounded-xl px-4 py-3 text-left text-sm font-medium hover:bg-muted">Cart{cart.count > 0 && <span className="rounded-full bg-primary px-2 py-0.5 text-[11px] font-bold text-white">{cart.count}</span>}</button>}
+                {cart && <button type="button" onClick={() => { setOpen(false); cart.setOpen(true); }} className="flex w-full cursor-pointer items-center gap-2 rounded-xl px-4 py-3 text-left text-sm font-medium hover:bg-muted">Cart{cart.count > 0 && <span className="rounded-full bg-primary px-2 py-0.5 text-[11px] font-bold text-primary-foreground">{cart.count}</span>}</button>}
                 <Link to="/track" onClick={() => setOpen(false)} className="flex items-center gap-2 rounded-xl px-4 py-3 text-sm font-medium hover:bg-muted"><Truck className="size-4 text-primary" />Track order</Link>
               </>
             )}
@@ -80,14 +80,14 @@ export function Footer({ settings }) {
   };
   const socials = [[settings.facebook_url, Facebook], [settings.twitter_url, Twitter], [settings.instagram_url, Instagram], [settings.linkedin_url, Linkedin]].filter(([u]) => u);
   return (
-    <footer className="relative overflow-hidden border-t border-border bg-card">
+    <footer className="cv-auto relative overflow-hidden border-t border-border bg-card">
       <div className="mx-auto grid max-w-6xl gap-12 px-6 py-16 md:grid-cols-12">
         <div className="md:col-span-5">
           <Logo name={settings.app_name || 'NFC Profile'} />
           <p className="mt-4 max-w-sm text-sm leading-relaxed text-muted-foreground">{settings.home_sub_text}</p>
           <form onSubmit={subscribe} className="mt-6 flex max-w-sm gap-2 rounded-2xl border border-border bg-background p-1.5 focus-within:border-primary">
             <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Your e-mail for updates" className="min-w-0 flex-1 bg-transparent px-3 text-sm outline-none" />
-            <button disabled={busy} className="grid size-9 cursor-pointer place-items-center rounded-xl bg-primary text-white transition hover:brightness-110 disabled:opacity-50" aria-label="Subscribe"><Send className="size-4" /></button>
+            <button disabled={busy} className="grid size-9 cursor-pointer place-items-center rounded-xl bg-primary text-primary-foreground transition hover:brightness-110 disabled:opacity-50" aria-label="Subscribe"><Send className="size-4" /></button>
           </form>
           {(settings.mobile_app_play_store_url || settings.mobile_app_app_store_url) && (
             <div className="mt-5 flex flex-wrap gap-2">

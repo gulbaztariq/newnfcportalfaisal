@@ -118,7 +118,7 @@ export function CartButton({ className }) {
       <AnimatePresence>
         {cart.count > 0 && (
           <motion.span key={cart.count} initial={{ scale: 0, y: 4 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0 }} transition={{ type: 'spring', stiffness: 500, damping: 18 }}
-            className="absolute -top-1 -right-1 grid h-[18px] min-w-[18px] place-items-center rounded-full bg-primary px-1 text-[10px] font-bold text-white ring-2 ring-background">
+            className="absolute -top-1 -right-1 grid h-[18px] min-w-[18px] place-items-center rounded-full bg-primary px-1 text-[10px] font-bold text-primary-foreground ring-2 ring-background">
             {cart.count > 99 ? '99+' : cart.count}
           </motion.span>
         )}

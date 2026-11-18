@@ -32,7 +32,7 @@ function Tile({ x }) {
         {x.location && <p className="mt-2 flex items-center gap-1.5 text-sm text-muted-foreground"><MapPin className="size-3.5 shrink-0" /><span className="truncate">{x.location}</span></p>}
         <div className="mt-auto flex items-center justify-between gap-2 pt-4">
           <span className="text-xs text-muted-foreground">{fmtDate(x.date)}</span>
-          <span className="inline-flex items-center gap-1 rounded-full bg-primary-soft px-3 py-1.5 text-xs font-semibold text-primary transition group-hover:bg-primary group-hover:text-white">{x.type === 'store' ? 'Visit store' : 'View card'}<ArrowUpRight className="size-3.5" /></span>
+          <span className="inline-flex items-center gap-1 rounded-full bg-primary-soft px-3 py-1.5 text-xs font-semibold text-primary transition group-hover:bg-primary group-hover:text-primary-foreground">{x.type === 'store' ? 'Visit store' : 'View card'}<ArrowUpRight className="size-3.5" /></span>
         </div>
       </div>
     </a>

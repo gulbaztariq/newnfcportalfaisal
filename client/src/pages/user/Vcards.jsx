@@ -125,7 +125,7 @@ export function VcardCreate() {
       <div className="mb-8 flex items-center gap-3">
         {steps.map((s, i) => (
           <div key={s} className="flex items-center gap-3">
-            <span className={cn('grid size-8 place-items-center rounded-full text-sm font-semibold transition', i <= step ? 'bg-primary text-white' : 'bg-muted text-muted-foreground')}>{i < step ? <Check className="size-4" /> : i + 1}</span>
+            <span className={cn('grid size-8 place-items-center rounded-full text-sm font-semibold transition', i <= step ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground')}>{i < step ? <Check className="size-4" /> : i + 1}</span>
             <span className={cn('text-sm font-medium', i <= step ? 'text-foreground' : 'text-muted-foreground')}>{s}</span>
             {i < steps.length - 1 && <span className="relative h-0.5 w-16 overflow-hidden rounded bg-muted"><motion.span animate={{ width: step > i ? '100%' : '0%' }} className="absolute inset-y-0 left-0 bg-primary" /></span>}
           </div>
