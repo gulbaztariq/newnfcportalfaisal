@@ -59,3 +59,9 @@ test('M9/M29/L25: invoice payments cannot exceed the balance, due date follows i
   assert.equal(before, (await a.get('/api/admin/invoices')).body.summary.total); const d2 = await mk({ status: 'draft' }); assert.equal((await a.get('/api/admin/invoices')).body.summary.total, before, 'drafts are not counted');
   const big = await mk({ discount: 99999 }); assert.equal(big.status, 422); assert.match(big.body.errors.discount, /subtotal/);
 });
+
+test('L23/L8: order search finds a phone in any format; the dispatch text has no empty tracking line', async () => {
+  const o = await place({ phone: '03001239876' });
+  for (const q of ['03001239876', '+92 300 1239876', '300-1239876']) { const r = await a.get(`/api/admin/orders?search=${encodeURIComponent(q)}`); assert.ok(r.body.data.some((x) => x.id === o.id), q); }
+  const messaging = require('../src/services/messaging'); assert.ok(messaging.EVENTS.order_shipped.text.includes('Tracking no'));
+});

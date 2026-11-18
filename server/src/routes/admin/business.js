@@ -132,7 +132,12 @@ const listOrders = wrap(async (req, res) => {
   if (req.query.courier === 'unbooked') where.tracking_number = null;
   if (req.query.from) where.created_at = { [Op.gte]: dayjs(req.query.from).startOf('day').toDate(), ...(req.query.to ? { [Op.lte]: dayjs(req.query.to).endOf('day').toDate() } : {}) };
   const q = (req.query.search || '').trim();
-  if (q) where[Op.or] = ['order_number', 'name', 'email', 'phone', 'company_name', 'tracking_number', 'city'].map((f) => ({ [f]: { [Op.like]: `%${q}%` } }));
+  if (q) {
+    where[Op.or] = ['order_number', 'name', 'email', 'phone', 'company_name', 'tracking_number', 'city'].map((f) => ({ [f]: { [Op.like]: `%${q.replace(/[%_]/g, '')}%` } }));
+    // a phone typed as +92 300 1234567 finds 03001234567 and the other way round: compare the last 10 digits with the spaces and dashes removed
+    const digits = q.replace(/\D/g, '');
+    if (digits.length >= 7) where[Op.or].push(M.sequelize.where(M.sequelize.fn('REPLACE', M.sequelize.fn('REPLACE', M.sequelize.fn('REPLACE', M.sequelize.col('nfc_order.phone'), ' ', ''), '-', ''), '+', ''), { [Op.like]: `%${digits.slice(-10)}%` }));
+  }
   const { rows, count } = await M.NfcOrder.findAndCountAll({ where, order: [['id', 'DESC']], limit: p.limit, offset: p.offset, include: ORDER_INCLUDE(), distinct: true });
   const counts = await M.NfcOrder.count({ group: ['order_status'] });
   res.json({ ...paged(rows, count, p), counts: Object.fromEntries(counts.map((c) => [c.order_status, c.count])), labels: orders.LABELS, steps: orders.STEPS });
@@ -457,7 +462,7 @@ r.post('/order-sources/:id/import', wrap(async (req, res) => {
   const out = await productsync.importPasted(src, req.body.text);
   if (!out.total) fail(422, 'Validation failed', { text: 'Write one product per line, like: Blue NFC card, 1500' });
   const skip = out.skipped?.length ? `. ${out.skipped.length} line${out.skipped.length > 1 ? 's' : ''} skipped (no price found): ${out.skipped.slice(0, 3).map((l) => `"${l}"`).join(', ')}${out.skipped.length > 3 ? ' ...' : ''}` : '';
-  res.json({ data: out, message: `${out.total} products saved (${out.created} new, ${out.updated} updated)${skip}` });
+  res.json({ data: out, message: `${out.total} products saved from your list (${out.created} new, ${out.updated} updated)${skip}` });
 }));
 const PRICE_COLS = ['id', 'name', 'sku', 'front_image', 'images', 'price', 'source_price', 'price_locked', 'discount_type', 'discount_value', 'sample_price', 'wholesale_tiers', 'no_wholesale_tiers', 'product_kind', 'status', 'source_url', 'variants', 'synced_at'];
 r.get('/order-sources/:id/products', wrap(async (req, res) => {

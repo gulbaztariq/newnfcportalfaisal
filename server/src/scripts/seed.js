@@ -17,7 +17,7 @@ const COUNTRIES = [
   ['United States', 'US', '1', { California: ['Los Angeles', 'San Francisco', 'San Diego'], 'New York': ['New York City', 'Buffalo'], Texas: ['Houston', 'Austin', 'Dallas'] }],
   ['United Kingdom', 'GB', '44', { England: ['London', 'Manchester', 'Birmingham'], Scotland: ['Edinburgh', 'Glasgow'] }],
   ['India', 'IN', '91', { Maharashtra: ['Mumbai', 'Pune'], Gujarat: ['Ahmedabad', 'Surat'], Karnataka: ['Bengaluru'] }],
-  ['Pakistan', 'PK', '92', { Punjab: ['Lahore', 'Faisalabad', 'Rawalpindi'], Sindh: ['Karachi', 'Hyderabad'], 'Islamabad Capital Territory': ['Islamabad'] }],
+  ['Pakistan', 'PK', '92', { Punjab: ['Lahore', 'Faisalabad', 'Rawalpindi', 'Multan', 'Gujranwala', 'Sialkot'], Sindh: ['Karachi', 'Hyderabad', 'Sukkur'], 'Khyber Pakhtunkhwa': ['Peshawar', 'Mardan', 'Abbottabad', 'Swat'], Balochistan: ['Quetta', 'Gwadar', 'Turbat'], 'Gilgit-Baltistan': ['Gilgit', 'Skardu'], 'Azad Jammu and Kashmir': ['Muzaffarabad', 'Mirpur'], 'Islamabad Capital Territory': ['Islamabad'] }],
   ['United Arab Emirates', 'AE', '971', { Dubai: ['Dubai'], 'Abu Dhabi': ['Abu Dhabi', 'Al Ain'] }],
   ['Saudi Arabia', 'SA', '966', { Riyadh: ['Riyadh'], Makkah: ['Jeddah', 'Mecca'] }],
   ['Canada', 'CA', '1', { Ontario: ['Toronto', 'Ottawa'], 'British Columbia': ['Vancouver'] }],

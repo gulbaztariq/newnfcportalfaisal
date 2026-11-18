@@ -102,7 +102,9 @@ export function Vcards() {
           { key: 'tpl', label: 'Template', render: (v) => <Badge tone="outline">{v.template?.name}</Badge> },
           { key: 'views', label: 'Views', render: (v) => <span className="font-semibold">{v.views.toLocaleString()}</span> },
           { key: 'verified', label: 'Verified', render: (v) => <Switch size="sm" checked={v.is_verified} onChange={(x) => patch(v, { is_verified: x }, x ? 'Verified badge added' : 'Verified badge removed')} /> },
-          { key: 'status', label: 'Active', render: (v) => <Switch size="sm" checked={v.status} onChange={(x) => patch(v, { status: x })} /> },
+          { key: 'status', label: 'Active', render: (v) => (
+            <div className="flex items-center gap-2"><Switch size="sm" checked={v.status} onChange={(x) => patch(v, { status: x })} />
+              {v.status && v.availability === 'owner_inactive' && <Badge tone="warning">Owner inactive</Badge>}{v.status && v.availability === 'plan_expired' && <Badge tone="warning">Plan expired</Badge>}</div>) },
           { key: 'created', label: 'Created', render: (v) => <span className="text-muted-foreground">{fmtDate(v.created_at)}</span> },
           {
             key: '_a', label: '', className: 'text-right', render: (v) => (

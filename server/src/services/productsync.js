@@ -166,7 +166,8 @@ async function syncSource(source) {
       }); created++;
     }
   }
-  await source.update({ platform: found.platform, last_synced_at: new Date(), sync_message: `${found.products.length} products (${created} new, ${updated} updated)` });
+  const inList = await NfcCard.count({ where: { order_source_id: source.id } }); // one count everywhere: what is in the list now
+  await source.update({ platform: found.platform, last_synced_at: new Date(), sync_message: `${inList} products in the list (${created} new, ${updated} updated this time)` });
   return { platform: found.platform, total: found.products.length, created, updated };
 }
 
@@ -187,7 +188,8 @@ async function importPasted(source, text) {
     while (await NfcCard.findOne({ where: { slug: { [Op.eq]: slug } } })) slug = `${slugify(name)}-s${source.id}-${++i}`;
     await NfcCard.create({ name, price, source_price: price, status: true, show_in_shop: false, slug, order_source_id: source.id, external_id: ext, synced_at: new Date() }); created++;
   }
-  await source.update({ platform: source.platform || 'manual', last_synced_at: new Date(), sync_message: `${created + updated} products from your list (${created} new, ${updated} updated)` });
+  const inList = await NfcCard.count({ where: { order_source_id: source.id } });
+  await source.update({ platform: source.platform || 'manual', last_synced_at: new Date(), sync_message: `${inList} products in the list (${created} new, ${updated} updated this time)` });
   return { total: created + updated, created, updated, skipped };
 }
 

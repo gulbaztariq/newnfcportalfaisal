@@ -7,7 +7,7 @@ api.interceptors.response.use(
   (err) => {
     const status = err.response?.status;
     if (status === 401 && !String(err.config?.url).includes('/auth/')) window.location.href = '/login';
-    err.message = err.response?.data?.message || err.message;
+    err.message = err.response?.data?.message || (status === 403 ? 'This request was blocked. If you typed special characters, remove them and try again.' : status === 429 ? 'Too many requests. Please wait a moment and try again.' : status >= 500 ? 'Something went wrong on the server. Please try again.' : err.message);
     err.errors = err.response?.data?.errors || {};
     return Promise.reject(err);
   },

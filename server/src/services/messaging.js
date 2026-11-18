@@ -124,7 +124,9 @@ async function orderEvent(event, order, extra = {}) {
     track_url: order.access_token ? `${appUrl}/track/${order.order_number}?t=${order.access_token}` : `${appUrl}/track`,
     ...extra,
   };
-  const text = fill(s[`msg_tpl_${event}`] || EVENTS[event].text, vals);
+  // no tracking number yet: drop the "Tracking no: -" sentence instead of sending an empty one
+  const raw = s[`msg_tpl_${event}`] || EVENTS[event].text;
+  const text = fill(order.tracking_number ? raw : raw.replace(/\s*Tracking no:\s*\{\{\s*tracking\s*\}\}\.?/gi, '').replace(/,?\s*tracking\s*\{\{\s*tracking\s*\}\}/gi, ''), vals).replace(/\s{2,}/g, ' ').trim();
   const on = (key, def) => (s[key] === undefined || s[key] === '' ? def : s[key] === '1');
   const jobs = [];
   if (event.startsWith('admin_')) {

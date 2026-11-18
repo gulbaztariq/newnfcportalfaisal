@@ -356,7 +356,7 @@ r.get('/sent-emails', wrap(async (req, res) => {
   res.json(paged(rows, count, p));
 }));
 r.post('/send-email', wrap(async (req, res) => {
-  validate(req.body, { subject: 'required|max:255', description: 'required', audience: 'required|in:all_users,subscribers,enquiries,custom' });
+  validate(req.body, { subject: 'required|max:255', description: 'required', audience: 'required|in:all_users,subscribers,enquiries,custom' }, { description: 'Message' });
   let recipients = [];
   if (req.body.audience === 'all_users') recipients = (await M.User.findAll({ where: { role: 'user', is_active: true }, attributes: ['email'] })).map((u) => u.email);
   if (req.body.audience === 'subscribers') recipients = (await M.EmailSubscription.findAll({ attributes: ['email'] })).map((u) => u.email);

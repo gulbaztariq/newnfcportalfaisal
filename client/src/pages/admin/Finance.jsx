@@ -476,7 +476,7 @@ export function CourierSettlements() {
     <>
       <PageHeader eyebrow="Finance" title="Courier COD settlements" description="Record the cash-on-delivery payments Leopards transfers to you. Adding tracking numbers marks those orders as settled and the net amount is added to the chosen account.">
         <Button variant="outline" onClick={sync} loading={syncing}><RefreshCw />Sync from Leopards</Button>
-        <Button onClick={() => table.current?.open(null, { date: ymd() })}><Plus />New settlement</Button>
+        <Button onClick={() => (picked.length ? prefill() : table.current?.open(null, { date: ymd() }))}><Plus />{picked.length ? `New settlement from ${picked.length} ticked` : 'New settlement'}</Button>
       </PageHeader>
 
       <div className="mb-6 grid gap-3 sm:grid-cols-3">
@@ -521,11 +521,11 @@ export function CourierSettlements() {
             fields={[
               { name: 'date', label: 'Date received', type: 'date', required: true, half: true },
               { name: 'reference', label: 'Reference', half: true, placeholder: 'Leopards payment / cheque no.' },
-              { name: 'cod_amount', label: 'COD amount', type: 'money', half: true },
+              { name: 'cod_amount', label: 'COD amount', type: 'money', half: true, required: true },
               { name: 'charges', label: 'Courier charges deducted', type: 'money', half: true },
               { name: 'net_amount', label: 'Net received', type: 'money', half: true, placeholder: 'Auto', hint: (v) => `Leave empty to use COD - charges = ${pkr(num(v.cod_amount) - num(v.charges))}` },
               { name: 'account_id', label: 'Deposited to account', type: 'select', half: true, placeholder: 'No account' },
-              { name: 'tracking_numbers', label: 'Tracking numbers', type: 'textarea', rows: 4, placeholder: 'One per line (or separated by commas)', hint: 'Orders with these tracking numbers are marked as COD settled.', fromRow: (r) => (Array.isArray(r.tracking_numbers) ? r.tracking_numbers.join('\n') : r.tracking_numbers || '') },
+              { name: 'tracking_numbers', label: 'Tracking numbers', type: 'textarea', rows: 4, placeholder: 'One per line (or separated by commas)', hint: 'Orders with these tracking numbers are marked as COD settled and paid. The COD amount and charges fill in from the shipments you tick in the list above.', fromRow: (r) => (Array.isArray(r.tracking_numbers) ? r.tracking_numbers.join('\n') : r.tracking_numbers || '') },
               { name: 'note', label: 'Note', type: 'textarea', rows: 2 },
               { name: 'attachment', label: 'Payment receipt', type: 'file', placeholder: 'Upload payment advice / screenshot' },
             ]} />

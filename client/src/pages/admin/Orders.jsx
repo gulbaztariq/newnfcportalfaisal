@@ -168,7 +168,7 @@ export function OrderDetail() {
               );
             })}
           </div>
-          {terminal && <p className="mt-2 rounded-xl bg-danger-soft px-3 py-2 text-sm text-danger">This order is {d.labels[o.order_status].toLowerCase()}.{o.stock_consumed ? '' : ' Stock was returned to inventory.'}</p>}
+          {terminal && <p className="mt-2 rounded-xl bg-danger-soft px-3 py-2 text-sm text-danger">This order is {d.labels[o.order_status].toLowerCase()}.{(d.movements || []).some((m) => m.type === 'return') ? ' The stock it used was returned to inventory.' : ' No stock had been taken for it, so nothing was returned.'}</p>}
           <div className="mt-4 flex flex-wrap items-end gap-2 border-t border-border pt-4">
             <Field label="Note for this step (optional)" className="min-w-56 flex-1"><Input value={note} onChange={(e) => setNote(e.target.value)} placeholder="e.g. Sent for printing at vendor" /></Field>
             {!o.stock_consumed && (
@@ -269,7 +269,7 @@ export function OrderDetail() {
               <CardBody className="text-sm text-muted-foreground">Move the order to <b className="text-foreground">Delivered</b> when it is collected{o.payment_type === 'collection' ? '; the payment is then marked as paid' : ''}.</CardBody>
             </Card>
           )}
-          {o.fulfilment !== 'collection' && <Card>
+          {o.fulfilment !== 'collection' && !(terminal && !o.tracking_number) && <Card>
             <CardHeader icon={Truck} title="Courier" description={o.courier === 'leopards' ? 'Leopards Courier' : 'Book with Leopards or enter a tracking number'} />
             <CardBody className="space-y-4">
               {o.tracking_number ? (
@@ -313,7 +313,7 @@ export function OrderDetail() {
             <CardBody className="space-y-3">
               <div className="flex items-center justify-between text-sm"><span className="text-muted-foreground">Method</span><span className="font-medium">{paymentLabel(o)}</span></div>
               <div className="flex items-center justify-between text-sm"><span className="text-muted-foreground">Status</span><Select className="w-36" value={o.payment_status} onChange={(v) => patch({ payment_status: v }, 'Payment updated')} options={['pending', 'paid', 'rejected'].map((v) => ({ value: v, label: label(v) }))} /></div>
-              {o.is_cod && <SwitchRow title="COD settled by courier" description="Leopards has paid this amount to you" checked={o.cod_settled} onChange={(v) => patch({ cod_settled: v }, 'Updated')} />}
+              {o.is_cod && !terminal && <SwitchRow title="COD settled by courier" description="Leopards has paid this amount to you" checked={o.cod_settled} onChange={(v) => patch({ cod_settled: v }, 'Updated')} />}
             </CardBody>
           </Card>
 
@@ -368,15 +368,27 @@ export function Products() {
   const [q, setQ] = useState('');
   const [editing, setEditing] = useState(null);
   const [costing, setCosting] = useState(null);
-  const load = () => api.get('/admin/nfc-cards', { params: { all: 1 } }).then(({ data }) => setRows(data.data));
-  useEffect(() => { load(); }, []);
+  const [page, setPage] = useState(1);
+  const [source, setSource] = useState('');
+  const [visibility, setVisibility] = useState('');
+  const [meta, setMeta] = useState(null);
+  const [totals, setTotals] = useState({ all: 0, shop: 0, synced: 0 });
+  // the catalogue is paged and filtered on the server: a few hundred synced products must not load as one long page
+  const load = () => api.get('/admin/nfc-cards', { params: { page, per_page: 24, search: q.replace(/['";`\\<>]|--/g, ' ').trim() || undefined, source: source || undefined, visibility: visibility || undefined } }).then(({ data }) => {
+    if (!data.data.length && data.meta.last_page < page) { setPage(data.meta.last_page); return; }
+    setRows(data.data); setMeta(data.meta); setTotals(data.totals || totals);
+  }).catch(() => setRows([]));
+  useEffect(() => { load(); }, [page, q, source, visibility]); // eslint-disable-line
+  useEffect(() => { setPage(1); }, [q, source, visibility]);
   const toggle = async (p, k, v) => { setRows((r) => r.map((x) => (x.id === p.id ? { ...x, [k]: v } : x))); await run(api.put(`/admin/nfc-cards/${p.id}`, { ...p, variants: JSON.stringify(p.variants || []), [k]: v, front_image: undefined, back_image: undefined })).catch(load); };
   const remove = async (p) => { if (await confirm({ title: `Delete ${p.name}?` })) { await run(api.delete(`/admin/nfc-cards/${p.id}`)).catch(() => {}); load(); } };
-  const shown = (rows || []).filter((p) => !q || `${p.name} ${p.category} ${p.sku}`.toLowerCase().includes(q.toLowerCase()));
+  const shown = rows || [];
   return (
     <>
       <PageHeader title="Products" description="NFC cards, standees, tags, keyrings and more - shown in the website shop and in user NFC orders.">
-        <SearchInput value={q} onChange={setQ} placeholder="Search products..." />
+        <SearchInput value={q} onChange={setQ} placeholder="Search name, SKU or category..." />
+        <FilterSelect value={source} onChange={setSource} placeholder={`All products (${totals.all})`} options={[{ value: 'shop', label: `Shop products (${totals.shop})` }, { value: 'synced', label: `Synced from order sources (${totals.synced})` }]} />
+        <FilterSelect value={visibility} onChange={setVisibility} placeholder="Shown and hidden" options={[{ value: 'shown', label: 'Shown in shop' }, { value: 'hidden', label: 'Hidden in shop' }]} />
         <ButtonLink href="/shop" target="_blank" rel="noreferrer" variant="outline"><ExternalLink />View shop</ButtonLink>
         <Button onClick={() => setEditing(blankProduct)}><Plus />Add product</Button>
       </PageHeader>
@@ -392,7 +404,7 @@ export function Products() {
                 </div>
                 <div className="flex flex-1 flex-col p-4">
                   <p className="font-display font-semibold leading-snug">{p.name}</p>
-                  <p className="text-xs text-muted-foreground">{p.size_label || '-'}{p.sku ? ` · ${p.sku}` : ''}</p>
+                  {[p.size_label, p.sku, p.order_source?.name].filter(Boolean).length > 0 && <p className="text-xs text-muted-foreground">{[p.size_label, p.sku, p.order_source?.name].filter(Boolean).join(' · ')}</p>}
                   <div className="mt-2 flex items-baseline gap-2"><span className="text-lg font-bold">{rs(p.price)}</span>{Number(p.compare_price) > Number(p.price) && <span className="text-sm text-muted-foreground line-through">{rs(p.compare_price)}</span>}</div>
                   {Number(p.customization_price) > 0 && <p className="text-xs text-primary">Customisation +{rs(p.customization_price)}</p>}
                   {p.variants?.length > 0 && <p className="text-xs text-muted-foreground">Options: {p.variants.map((v) => v.name).join(', ')}</p>}
@@ -408,6 +420,12 @@ export function Products() {
               </Card>
             </motion.div>
           ))}
+        </div>
+      )}
+      {meta && meta.last_page > 1 && (
+        <div className="mt-6 flex items-center justify-between gap-3 text-sm">
+          <span className="text-muted-foreground">Showing {(meta.page - 1) * meta.per_page + 1}-{Math.min(meta.page * meta.per_page, meta.total)} of {meta.total}</span>
+          <div className="flex items-center gap-2"><Button size="sm" variant="outline" disabled={meta.page <= 1} onClick={() => setPage(meta.page - 1)}>Previous</Button><span className="tabular-nums">Page {meta.page} of {meta.last_page}</span><Button size="sm" variant="outline" disabled={meta.page >= meta.last_page} onClick={() => setPage(meta.page + 1)}>Next</Button></div>
         </div>
       )}
       {editing && <ProductForm product={editing} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); load(); }} />}

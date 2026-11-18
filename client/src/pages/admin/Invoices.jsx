@@ -142,7 +142,7 @@ export function Invoices() {
       </PageHeader>
       <div className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {s ? <>
-          <StatCard index={0} icon={Receipt} color="violet" label="Total invoiced" value={s.total} format={f} hint="Excluding cancelled" />
+          <StatCard index={0} icon={Receipt} color="violet" label="Total invoiced" value={s.total} format={f} hint="Excluding drafts and cancelled" />
           <StatCard index={1} icon={CheckCircle2} color="emerald" label="Paid" value={s.paid} format={f} hint="Payments received" />
           <StatCard index={2} icon={Clock} color="amber" label="Outstanding" value={s.outstanding} format={f} hint="Sent but not fully paid" />
           <StatCard index={3} icon={AlertTriangle} color="rose" label="Overdue" value={s.overdue} format={f} hint="Past the due date" />
@@ -217,8 +217,20 @@ export function InvoiceEditor() {
 
   const save = async (status) => {
     const list = items.filter((it) => String(it.description).trim() || num(it.unit_price));
-    if (!v.customer_name.trim()) { form.setErrors({ customer_name: 'Enter the customer name' }); return; }
-    if (!list.length) { form.setErrors({ items: 'Add at least one line item' }); return; }
+    // every problem is shown at once (not one per click), with the same wording the server uses
+    const e = {};
+    if (!v.customer_name.trim()) e.customer_name = 'Customer name is required';
+    if (v.customer_email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.customer_email)) e.customer_email = 'Enter a valid e-mail address, like name@example.com';
+    if (!list.length) e.items = 'Add at least one line item';
+    else if (list.some((it) => !String(it.description).trim())) e.items = 'Every line needs a description';
+    else if (list.some((it) => num(it.quantity || 1) <= 0)) e.items = 'Quantity must be more than 0 on every line';
+    else if (list.some((it) => num(it.unit_price) < 0)) e.items = 'A price cannot be negative';
+    if (num(v.discount) < 0) e.discount = 'Discount must be 0 or more';
+    else if (num(v.discount) > t.subtotal + 0.001) e.discount = `Discount cannot be more than the subtotal (${t.subtotal})`;
+    if (num(v.tax_rate) < 0 || num(v.tax_rate) > 100) e.tax_rate = 'Tax rate must be between 0 and 100';
+    if (num(v.delivery_charges) < 0) e.delivery_charges = 'Delivery charges must be 0 or more';
+    if (v.issue_date && v.due_date && v.due_date < v.issue_date) e.due_date = 'Due date cannot be before the issue date';
+    if (Object.keys(e).length) { form.setErrors(e); return; }
     setSaving(status);
     const body = { ...v, items: list.map((it) => ({ description: it.description, quantity: num(it.quantity) || 1, unit_price: num(it.unit_price) })), status };
     for (const k of ['discount', 'tax_rate', 'delivery_charges']) body[k] = num(body[k]);
@@ -256,8 +268,8 @@ export function InvoiceEditor() {
             <Card>
               <CardHeader icon={CalendarDays} title="Dates & currency" />
               <CardBody className="grid gap-4 sm:grid-cols-4">
-                <Field label="Issue date" className="sm:col-span-1"><Input {...form.input('issue_date')} type="date" /></Field>
-                <Field label="Due date" hint={!id && !v.due_date ? 'Empty = default payment terms' : undefined}><Input {...form.input('due_date')} type="date" min={v.issue_date || undefined} /></Field>
+                <Field label="Issue date" className="sm:col-span-1" error={form.errors.issue_date}><Input {...form.input('issue_date')} type="date" /></Field>
+                <Field label="Due date" error={form.errors.due_date} hint={!id && !v.due_date ? 'Empty = default payment terms' : undefined}><Input {...form.input('due_date')} type="date" min={v.issue_date || undefined} /></Field>
                 <Field label="Currency code"><Input {...form.input('currency_code')} maxLength={10} /></Field>
                 <Field label="Symbol"><Input {...form.input('currency_icon')} maxLength={10} /></Field>
               </CardBody>
@@ -285,10 +297,10 @@ export function InvoiceEditor() {
                   </table>
                 </div>
                 <div className="grid gap-4 border-t border-border p-5 sm:grid-cols-4">
-                  <Field label="Discount"><Input {...form.input('discount')} type="number" min="0" step="0.01" prefix={cur} placeholder="0" /></Field>
+                  <Field label="Discount" error={form.errors.discount}><Input {...form.input('discount')} type="number" min="0" step="0.01" prefix={cur} placeholder="0" /></Field>
                   <Field label="Tax name"><Input {...form.input('tax_name')} placeholder="e.g. GST" /></Field>
-                  <Field label="Tax rate %"><Input {...form.input('tax_rate')} type="number" min="0" max="100" step="0.01" placeholder="0" /></Field>
-                  <Field label="Delivery"><Input {...form.input('delivery_charges')} type="number" min="0" step="0.01" prefix={cur} placeholder="0" /></Field>
+                  <Field label="Tax rate %" error={form.errors.tax_rate}><Input {...form.input('tax_rate')} type="number" min="0" max="100" step="0.01" placeholder="0" /></Field>
+                  <Field label="Delivery" error={form.errors.delivery_charges}><Input {...form.input('delivery_charges')} type="number" min="0" step="0.01" prefix={cur} placeholder="0" /></Field>
                 </div>
               </CardBody>
             </Card>

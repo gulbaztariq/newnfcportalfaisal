@@ -4,7 +4,7 @@ import { motion } from 'motion/react';
 import { Plus, Pencil, Trash2, Star, Package, Check, ArrowLeft, Users, IdCard, Clock, HardDrive, Eye, Download, Store, Receipt } from 'lucide-react';
 import api from '@/lib/api';
 import { cn } from '@/lib/cn';
-import { money, label } from '@/lib/format';
+import { money, label, formatDays } from '@/lib/format';
 import { PageHeader, Card, CardHeader, CardBody, Button, ButtonLink, Field, Input, Select, Switch, Badge, Segmented, Skeleton, EmptyState, Tip, useForm, run, confirm } from '@/components/ui';
 
 import { FEATURE_LABELS } from '@/lib/features';
@@ -38,7 +38,7 @@ export default function Plans() {
                     <Switch size="sm" checked={p.status} disabled={p.is_default} onChange={(v) => status(p, v)} />
                   </div>
                   <p className="mt-5 font-display text-4xl font-extrabold tracking-tight">{money(p.price, p.currency)}</p>
-                  {(Number(p.tax_rate) > 0 || p.custom_duration_days) && <p className="mt-1 text-xs text-muted-foreground">{[Number(p.tax_rate) > 0 && `+ ${p.tax_name || 'tax'} ${Number(p.tax_rate)}%`, p.custom_duration_days && `${p.custom_duration_days} days`].filter(Boolean).join(' · ')}</p>}
+                  {(Number(p.tax_rate) > 0 || p.custom_duration_days) && <p className="mt-1 text-xs text-muted-foreground">{[Number(p.tax_rate) > 0 && `+ ${p.tax_name || 'tax'} ${Number(p.tax_rate)}%`, p.custom_duration_days && `valid ${formatDays(p.custom_duration_days)}`].filter(Boolean).join(' · ')}</p>}
                   <div className="mt-5 grid grid-cols-2 gap-2 text-xs">
                     {[[IdCard, `${p.no_of_vcards} vCards`], [Clock, `${p.trial_days || 0}d trial`], [HardDrive, `${p.storage_limit} MB`], [Users, `${p.subscribers} active`]].map(([I, t]) => (
                       <span key={t} className="flex items-center gap-1.5 rounded-xl bg-muted px-2.5 py-2 text-muted-foreground"><I className="size-3.5" />{t}</span>
