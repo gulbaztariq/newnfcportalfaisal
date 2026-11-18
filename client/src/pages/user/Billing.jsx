@@ -92,7 +92,7 @@ export function UserPlans() {
                   <li className="flex gap-2.5"><Check className="size-4.5 text-success" /><b>{p.no_of_vcards}</b> vCards</li>
                   <li className="flex gap-2.5"><Check className="size-4.5 text-success" /><b>{p.templates.length}</b> templates</li>
                   {Object.entries(FEATURE_LABELS).slice(0, 12).map(([k, l]) => (
-                    <li key={k} className={cn('flex gap-2.5', !p.features[k] && 'text-muted-foreground/60')}>{p.features[k] ? <Check className="size-4.5 text-success" /> : <X className="size-4.5" />}{l}</li>
+                    <li key={k} className={cn('flex gap-2.5', !p.features[k] && 'text-muted-foreground line-through')}>{p.features[k] ? <Check className="size-4.5 text-success" /> : <X className="size-4.5" />}{l}</li>
                   ))}
                 </ul>
                 <Button className="mt-7 w-full" size="lg" variant={isCur ? 'outline' : 'primary'} onClick={() => choose(p)}>{isCur ? 'Renew plan' : 'Choose plan'}</Button>

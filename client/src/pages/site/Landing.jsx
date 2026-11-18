@@ -322,7 +322,7 @@ function Pricing({ plans, registerEnabled }) {
                     <li className="flex gap-3"><Check className="size-5 shrink-0 text-success" /><span><b>{p.no_of_vcards}</b> digital card{p.no_of_vcards > 1 ? 's' : ''}</span></li>
                     <li className="flex gap-3"><Check className="size-5 shrink-0 text-success" /><span><b>{p.templates_count}</b> premium templates</span></li>
                     {Object.entries(FEATURE_LABELS).slice(0, 9).map(([k, l]) => (
-                      <li key={k} className={cn('flex gap-3', !p.features?.[k] && 'text-muted-foreground/60')}>
+                      <li key={k} className={cn('flex gap-3', !p.features?.[k] && 'text-muted-foreground line-through')}>
                         {p.features?.[k] ? <Check className="size-5 shrink-0 text-success" /> : <X className="size-5 shrink-0" />}{l}
                       </li>
                     ))}
