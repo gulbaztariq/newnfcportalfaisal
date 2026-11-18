@@ -26,7 +26,7 @@ export function VcardAnalytics() {
   useEffect(() => { setD(null); api.get(`/user/vcards/${id}/analytics`, { params: { days } }).then(({ data }) => setD(data)); }, [id, days]);
   return (
     <>
-      <Link to={`/user/vcards/${id}/edit`} className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" />Back to editor</Link>
+      <Link to={`/user/vcards/${id}/edit`} className="mb-4 inline-flex min-h-6 items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" />Back to editor</Link>
       <PageHeader title="Card analytics" description="Who is opening your card and how they found it.">
         <Segmented id="ad" value={days} onChange={setDays} options={[{ value: '7', label: '7 days' }, { value: '30', label: '30 days' }, { value: '90', label: '90 days' }, { value: '365', label: 'Year' }]} />
       </PageHeader>

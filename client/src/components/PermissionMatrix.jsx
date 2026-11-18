@@ -28,8 +28,8 @@ export default function PermissionMatrix({ modules, value, onChange, defaults })
         {Object.entries(modules).map(([m, l]) => (
           <div key={m} className="contents">
             <span className={cn('py-1.5', set.has(`${m}.view`) ? 'text-foreground' : 'text-muted-foreground')}>{l}</span>
-            <Switch size="sm" checked={set.has(`${m}.view`)} onChange={(v) => toggle(`${m}.view`, v)} />
-            <Switch size="sm" checked={set.has(`${m}.manage`)} onChange={(v) => toggle(`${m}.manage`, v)} />
+            <Switch size="sm" label={`${m}: can view`} checked={set.has(`${m}.view`)} onChange={(v) => toggle(`${m}.view`, v)} />
+            <Switch size="sm" label={`${m}: can manage`} checked={set.has(`${m}.manage`)} onChange={(v) => toggle(`${m}.manage`, v)} />
           </div>
         ))}
       </div>

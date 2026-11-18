@@ -310,7 +310,7 @@ function CardsTable({ rows, admin, onFocus, focusId }) {
   const maxViews = Math.max(1, ...rows.map((r) => r.views));
   const th = (key, label, first) => (
     <th className={cn('py-2.5 font-medium', first ? 'px-5 text-left' : 'px-3 text-right')} aria-sort={sort.key === key ? (sort.dir > 0 ? 'ascending' : 'descending') : 'none'}>
-      <button type="button" onClick={() => setSort((s) => ({ key, dir: s.key === key ? -s.dir : -1 }))} className={cn('inline-flex items-center gap-1 hover:text-foreground', sort.key === key && 'text-foreground')}>{label}{sort.key === key ? (sort.dir > 0 ? <ArrowUp className="size-3" /> : <ArrowDown className="size-3" />) : <ArrowUpDown className="size-3 opacity-40" />}</button>
+      <button type="button" onClick={() => setSort((s) => ({ key, dir: s.key === key ? -s.dir : -1 }))} className={cn('inline-flex min-h-6 items-center gap-1 hover:text-foreground', sort.key === key && 'text-foreground')}>{label}{sort.key === key ? (sort.dir > 0 ? <ArrowUp className="size-3" /> : <ArrowDown className="size-3" />) : <ArrowUpDown className="size-3 opacity-40" />}</button>
     </th>
   );
   return (
@@ -380,7 +380,7 @@ function TeamTable({ rows, onFocus, focusId, onExport }) {
   const maxViews = Math.max(1, ...rows.map((r) => r.views));
   const th = (key, label, first) => (
     <th className={cn('py-2.5 font-medium', first ? 'px-5 text-left' : 'px-3 text-right')} aria-sort={sort.key === key ? (sort.dir > 0 ? 'ascending' : 'descending') : 'none'}>
-      <button type="button" onClick={() => setSort((s) => ({ key, dir: s.key === key ? -s.dir : -1 }))} className={cn('inline-flex items-center gap-1 hover:text-foreground', sort.key === key && 'text-foreground')}>{label}{sort.key === key ? (sort.dir > 0 ? <ArrowUp className="size-3" /> : <ArrowDown className="size-3" />) : <ArrowUpDown className="size-3 opacity-40" />}</button>
+      <button type="button" onClick={() => setSort((s) => ({ key, dir: s.key === key ? -s.dir : -1 }))} className={cn('inline-flex min-h-6 items-center gap-1 hover:text-foreground', sort.key === key && 'text-foreground')}>{label}{sort.key === key ? (sort.dir > 0 ? <ArrowUp className="size-3" /> : <ArrowDown className="size-3" />) : <ArrowUpDown className="size-3 opacity-40" />}</button>
     </th>
   );
   const tone = { active: 'success', locked: 'warning', blocked: 'danger' };

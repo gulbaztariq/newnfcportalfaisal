@@ -82,7 +82,7 @@ export function PlanForm() {
   const allOn = Object.keys(FEATURE_LABELS).every((k) => v.features[k]);
   return (
     <>
-      <Link to="/admin/plans" className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" />All plans</Link>
+      <Link to="/admin/plans" className="mb-4 inline-flex min-h-6 items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" />All plans</Link>
       <PageHeader title={id ? `Edit ${v.name || 'plan'}` : 'New plan'} description="Set pricing, limits, features and the templates included.">
         <Button variant="outline" onClick={() => navigate('/admin/plans')}>Cancel</Button>
         <Button onClick={save} loading={saving}>Save plan</Button>
@@ -138,7 +138,7 @@ export function PlanForm() {
                   <button type="button" key={t.id} onClick={() => toggleTpl(t.id)} className={cn('group flex cursor-pointer items-center gap-3 rounded-xl border p-3 text-left transition', on ? 'border-primary bg-primary-soft/60' : 'border-border hover:border-primary/40')}>
                     <span className={cn('grid size-5 shrink-0 place-items-center rounded-md border transition', on ? 'border-primary bg-primary text-white' : 'border-input')}>{on && <Check className="size-3.5" strokeWidth={3} />}</span>
                     <span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium">{t.name}</span><span className="block truncate text-xs text-muted-foreground">{t.profession}</span></span>
-                    <a href={`/t/preview/${t.slug}`} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} className="text-muted-foreground opacity-0 transition group-hover:opacity-100 hover:text-primary"><Eye className="size-4" /></a>
+                    <a href={`/t/preview/${t.slug}`} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} aria-label={`Preview template ${t.name || t.slug}`} className="grid size-6 place-items-center text-muted-foreground opacity-0 transition group-hover:opacity-100 focus-visible:opacity-100 hover:text-primary"><Eye className="size-4" /></a>
                   </button>
                 );
               })}

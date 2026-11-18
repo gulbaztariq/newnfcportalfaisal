@@ -164,7 +164,7 @@ export function VendorDetail() {
 
   return (
     <>
-      <Link to="/admin/vendors" className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" />All vendors</Link>
+      <Link to="/admin/vendors" className="mb-4 inline-flex min-h-6 items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" />All vendors</Link>
       <PageHeader eyebrow={<span className="inline-flex items-center gap-2">Vendor <TypeBadge type={v.type} /></span>} title={v.name} description={v.notes || 'Bills, payments, rates and the stock this vendor holds for you.'}>
         <Button variant="outline" onClick={() => setEditOpen(true)}><Pencil />Edit</Button>
         <Button variant="outline" onClick={() => go('bills', bills)}><FileText />Add bill</Button>
