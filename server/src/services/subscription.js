@@ -50,9 +50,14 @@ async function current(userId) {
 }
 
 /** Gives the default plan (with trial) to a freshly registered user. */
+async function defaultPlan() {
+  // the plan marked as default; if none is marked, the cheapest active plan, so a new user is never left without one
+  return (await Plan.findOne({ where: { is_default: true, status: true } })) || (await Plan.findOne({ where: { status: true }, order: [['price', 'ASC'], ['id', 'ASC']] }));
+}
 async function assignDefaultPlan(userId) {
-  const plan = await Plan.findOne({ where: { is_default: true } });
+  const plan = await defaultPlan();
   if (plan) await activate(userId, plan, { trial: true });
+  return plan;
 }
 
 /** true when the owner's plan has expired (their public vCards go offline) */
@@ -94,4 +99,4 @@ async function consumeCoupon(meta) {
   if (c && c.coupon_limit) await c.update({ coupon_limit_left: Math.max(0, (c.coupon_limit_left ?? c.coupon_limit) - 1) });
 }
 
-module.exports = { upgradeCredit, renew, activate, current, assignDefaultPlan, canCreateVcard, applyCoupon, consumeCoupon, endDate, isExpired };
+module.exports = { defaultPlan, upgradeCredit, renew, activate, current, assignDefaultPlan, canCreateVcard, applyCoupon, consumeCoupon, endDate, isExpired };

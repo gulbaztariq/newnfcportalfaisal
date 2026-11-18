@@ -15,6 +15,7 @@ const mail = require('../../services/mail');
 const docs = require('../../services/documents');
 const extras = require('../../services/extras');
 const { FEATURE_LABELS } = require('../../utils/labels');
+const availability = require('../../services/availability');
 
 const r = express.Router();
 r.use(isAdmin, adminPermissions);
@@ -31,8 +32,8 @@ r.get('/dashboard', wrap(async (_req, res) => {
   const [activeUsers, inactiveUsers, activeVcards, inactiveVcards, income] = await Promise.all([
     M.User.count({ where: { role: 'user', is_active: true } }),
     M.User.count({ where: { role: 'user', is_active: false } }),
-    M.Vcard.count({ where: { status: true } }),
-    M.Vcard.count({ where: { status: false } }),
+    availability.countLive(),
+    availability.countNotLive(),
     M.Transaction.sum('amount', { where: { status: 'paid' } }),
   ]);
 
@@ -55,7 +56,7 @@ r.get('/dashboard', wrap(async (_req, res) => {
   const monthStart = dayjs().startOf('month').toDate();
   const [openOrders, todayOrders, monthOrders, codPending, unpaid, low] = await Promise.all([
     M.NfcOrder.count({ where: { order_status: ['pending', 'confirmed', 'designing', 'printing', 'ready', 'processing'] } }),
-    M.NfcOrder.count({ where: { created_at: { [Op.gte]: dayjs().startOf('day').toDate() } } }),
+    M.NfcOrder.count({ where: { created_at: { [Op.gte]: dayjs().startOf('day').toDate() }, order_status: { [Op.notIn]: ['cancelled', 'returned'] } } }),
     M.NfcOrder.findAll({ where: { created_at: { [Op.gte]: monthStart }, order_status: { [Op.notIn]: ['cancelled', 'returned'] } }, attributes: ['amount'], raw: true }),
     M.NfcOrder.sum('amount', { where: { is_cod: true, cod_settled: false, order_status: ['shipped', 'delivered'] } }),
     M.Invoice.findAll({ where: { status: ['sent', 'partial', 'overdue'] }, attributes: ['total', 'paid_amount'], raw: true }),
@@ -123,9 +124,10 @@ r.get('/vcards', wrap(async (req, res) => {
   const { rows, count } = await M.Vcard.findAndCountAll({
     where, order: [['id', 'DESC']], limit: p.limit, offset: p.offset,
     attributes: ['id', 'name', 'url_alias', 'occupation', 'profile_image', 'status', 'is_verified', 'views', 'created_at', 'template_id', 'user_id'],
-    include: [{ model: M.User, attributes: ['id', 'first_name', 'last_name', 'email'] }, { model: M.Template, attributes: ['id', 'name'] }],
+    include: [{ model: M.User, attributes: ['id', 'first_name', 'last_name', 'email', 'is_active', 'org_status'] }, { model: M.Template, attributes: ['id', 'name'] }],
   });
-  res.json(paged(rows, count, p));
+  const avail = await availability.forCards(rows);
+  res.json(paged(rows.map((v) => ({ ...v.toJSON(), availability: avail[v.id] })), count, p));
 }));
 r.patch('/vcards/:id', wrap(async (req, res) => {
   const v = await M.Vcard.findByPk(req.params.id);

@@ -194,6 +194,14 @@ r.post('/orders', wrap(async (req, res) => {
   // phone and address are optional for staff orders
   validate(b, { name: 'required|max:120', phone: 'phone', address: 'max:1000', city: 'max:120', email: `${type === 'new' ? 'required|' : ''}email|max:191`, company_name: 'max:150', discount_value: 'numeric', delivery_charges: 'numeric|minv:0' });
   if (b.discount_type === 'percent' && Number(b.discount_value) > 100) fail(422, 'Validation failed', { discount_value: 'A percentage cannot be more than 100' });
+  // a parcel that goes by courier needs somewhere to go and someone to call (office collection and digital orders do not)
+  if (!collection && !orders.NO_SHIP_TYPES.includes(b.order_type || 'nfc_profile')) {
+    const miss = {};
+    if (!String(b.phone || '').trim()) miss.phone = 'Phone number is required for courier delivery';
+    if (!String(b.address || '').trim()) miss.address = 'Delivery address is required for courier delivery';
+    if (!String(b.city || '').trim()) miss.city = 'City is required for courier delivery';
+    if (Object.keys(miss).length) fail(422, Object.values(miss)[0], miss);
+  }
   const source = b.order_source_id ? await M.OrderSource.findByPk(b.order_source_id) : null;
   if (b.order_source_id && !source) fail(422, 'Validation failed', { order_source_id: 'Unknown order source' });
   if (b.order_type && !orders.ORDER_TYPES[b.order_type]) fail(422, 'Validation failed', { order_type: 'Unknown order type' });
@@ -474,7 +482,7 @@ r.patch('/orders/:id', wrap(async (req, res) => {
   if (req.body.courier_charges !== undefined) data.courier_charges = r2(req.body.courier_charges);
   if (req.body.payment_status !== undefined) { validate(req.body, { payment_status: 'in:pending,paid,rejected' }); data.payment_status = req.body.payment_status; }
   if (req.body.is_cod !== undefined) data.is_cod = toBool(req.body.is_cod);
-  if (req.body.cod_settled !== undefined) data.cod_settled = toBool(req.body.cod_settled);
+  if (req.body.cod_settled !== undefined) { data.cod_settled = toBool(req.body.cod_settled); if (data.cod_settled && o.is_cod) { data.payment_status = 'paid'; await finance.settleCodOrders([o.tracking_number]).catch(() => {}); } }
   if (req.body.nfc_written !== undefined) data.nfc_written = toBool(req.body.nfc_written);
   if (Object.keys(data).length) await o.update(data);
   if (data.payment_status === 'paid') await orders.applyRenewal(o);
@@ -564,7 +572,7 @@ r.post('/courier/payments-sync', wrap(async (_req, res) => {
   for (const p of pays) {
     if (!/paid|settled|cheque|transferred/i.test(p.status)) continue;
     const o = list.find((x) => x.tracking_number === p.track_number);
-    if (o) { await o.update({ cod_settled: true, ...(p.charges && !Number(o.courier_charges) ? { courier_charges: p.charges } : {}) }); settled += 1; }
+    if (o) { await o.update({ cod_settled: true, payment_status: 'paid', ...(p.charges && !Number(o.courier_charges) ? { courier_charges: p.charges } : {}) }); await finance.settleCodOrders([o.tracking_number]).catch(() => {}); settled += 1; }
   }
   res.json({ data: pays, message: `${settled} COD shipment(s) marked as settled` });
 }));
@@ -660,7 +668,7 @@ r.get('/invoices', wrap(async (req, res) => {
   const { rows, count } = await M.Invoice.findAndCountAll({ where, order: [['id', 'DESC']], limit: p.limit, offset: p.offset, include: [{ model: M.NfcOrder, attributes: ['id', 'order_number'] }] });
   const sums = await M.Invoice.findAll({ attributes: ['status', 'total', 'paid_amount'], raw: true });
   const s = { total: 0, paid: 0, outstanding: 0, overdue: 0 };
-  for (const i of sums) { if (i.status === 'cancelled') continue; s.total += Number(i.total); s.paid += Number(i.paid_amount); if (i.status !== 'draft') s.outstanding += Number(i.total) - Number(i.paid_amount); if (i.status === 'overdue') s.overdue += Number(i.total) - Number(i.paid_amount); }
+  for (const i of sums) { if (i.status === 'cancelled' || i.status === 'draft') continue; s.total += Number(i.total); s.paid += Number(i.paid_amount); if (i.status !== 'draft') s.outstanding += Number(i.total) - Number(i.paid_amount); if (i.status === 'overdue') s.overdue += Number(i.total) - Number(i.paid_amount); }
   res.json({ ...paged(rows, count, p), summary: Object.fromEntries(Object.entries(s).map(([k, v]) => [k, r2(v)])) });
 }));
 r.get('/invoices/:id', wrap(async (req, res) => {
@@ -682,6 +690,8 @@ const invoiceBody = (b) => {
     if (Number.isNaN(Number(it.price ?? it.unit_price ?? 0)) || Number(it.price ?? it.unit_price ?? 0) < 0) fail(422, 'Validation failed', { items: `Line ${n}: price must be zero or more` });
   });
   for (const k of ['issue_date', 'due_date']) if (d[k] === '') d[k] = null;
+  if (d.issue_date && d.due_date && d.due_date < d.issue_date) fail(422, 'Validation failed', { due_date: 'Due date cannot be before the issue date' });
+  if (Number(d.discount) > d.items.reduce((a, it) => a + Number(it.quantity || 1) * Number(it.price ?? it.unit_price ?? 0), 0) + 0.001) fail(422, 'Validation failed', { discount: 'Discount cannot be more than the invoice subtotal' });
   return d;
 };
 r.post('/invoices', wrap(async (req, res) => {
@@ -701,6 +711,8 @@ r.delete('/invoices/:id', wrap(async (req, res) => { await M.Invoice.destroy({ w
 r.post('/invoices/:id/payments', wrap(async (req, res) => {
   const inv = await M.Invoice.findByPk(req.params.id);
   if (!inv) fail(404, 'Not found');
+  if (inv.status === 'draft') fail(422, 'Send the invoice first: a draft cannot take a payment', { amount: 'A draft invoice cannot take a payment. Send it first.' });
+  if (inv.status === 'cancelled') fail(422, 'A cancelled invoice cannot take a payment', { amount: 'A cancelled invoice cannot take a payment' });
   await invoices.addPayment(inv, req.body);
   res.json({ data: inv, message: 'Payment recorded' });
 }));
@@ -762,13 +774,18 @@ r.use('/finance/entries', crud(M.FinanceEntry, {
 }));
 r.use('/finance/settlements', crud(M.CourierSettlement, {
   fields: ['courier', 'date', 'reference', 'cod_amount', 'charges', 'net_amount', 'tracking_numbers', 'note', 'account_id'], files: ['attachment'], folder: 'finance', types: DOC_TYPES,
-  rules: { date: 'required|date', cod_amount: 'numeric|minv:0', charges: 'numeric|minv:0' }, order: [['date', 'DESC']],
+  rules: { date: 'required|date', cod_amount: 'required|numeric|minv:0.01', charges: 'numeric|minv:0' }, order: [['date', 'DESC']],
   include: [{ model: M.FinanceAccount, as: 'account', attributes: ['id', 'name'] }],
-  beforeSave: async (data) => {
+  beforeSave: async (data, req, row) => {
+    const cod = Number(data.cod_amount ?? row?.cod_amount ?? 0); const ch = Number(data.charges ?? row?.charges ?? 0);
+    if (ch > cod) fail(422, 'Courier charges cannot be more than the COD collected', { charges: `Charges cannot be more than the COD amount (${r2(cod)})` });
     const list = Array.isArray(data.tracking_numbers) ? data.tracking_numbers : String(data.tracking_numbers || '').split(/[\s,;]+/).filter(Boolean);
     data.tracking_numbers = list;
     data.net_amount = r2(data.net_amount !== undefined && data.net_amount !== null && data.net_amount !== '' ? data.net_amount : Number(data.cod_amount || 0) - Number(data.charges || 0));
-    if (list.length) await M.NfcOrder.update({ cod_settled: true }, { where: { tracking_number: list } });
+    if (list.length) {
+      const out = await finance.settleCodOrders(list);
+      if (out.unknown.length && !out.settled) fail(422, 'No order has these tracking numbers', { tracking_numbers: `No order found for: ${out.unknown.join(', ')}` });
+    }
     return data;
   },
 }));
@@ -792,9 +809,10 @@ r.get('/inventory/items', wrap(async (req, res) => {
 }));
 r.use('/inventory/items', crud(M.InventoryItem, {
   fields: ['name', 'sku', 'category', 'unit', 'purchase_price', 'sale_price', 'reorder_level', 'description', 'status'], booleans: ['status'],
-  rules: { name: 'required|max:150', purchase_price: 'numeric|minv:0', sale_price: 'numeric|minv:0' },
+  rules: { name: 'required|max:150', purchase_price: 'numeric|minv:0', sale_price: 'numeric|minv:0', reorder_level: 'numeric|minv:0', opening_stock: 'numeric|minv:0' },
   beforeSave: async (data, req, row) => {
-    if (data.sku) { if (await M.InventoryItem.findOne({ where: { sku: data.sku, id: { [Op.ne]: row?.id || 0 } } })) fail(422, 'Validation failed', { sku: 'SKU already used' }); } else if (!row) data.sku = `INV-${Date.now().toString(36).toUpperCase()}`;
+    if (data.sku) data.sku = String(data.sku).trim().toUpperCase();
+    if (data.sku) { if (await M.InventoryItem.findOne({ where: { sku: data.sku, id: { [Op.ne]: row?.id || 0 } } })) fail(422, 'Validation failed', { sku: 'SKU already used' }); } else if (!row) data.sku = await inventory.nextSku();
     return data;
   },
   afterSave: async (row, req) => {
@@ -816,7 +834,12 @@ r.post('/inventory/adjust', wrap(async (req, res) => {
   const item = await M.InventoryItem.findByPk(req.body.inventory_item_id);
   if (!item) fail(404, 'Item not found');
   let q = Number(req.body.quantity);
+  if (!Number.isFinite(q) || q === 0) fail(422, 'Validation failed', { quantity: 'Quantity must not be 0' });
+  if (Math.abs(q) > 1000000) fail(422, 'Validation failed', { quantity: 'Quantity is too large' });
   if (req.body.type === 'damage') q = -Math.abs(q);
+  // same rule as a transfer: stock can never go below 0 at a location
+  const have = await inventory.qtyAt(item.id, req.body.vendor_id || null);
+  if (have + q < 0) fail(422, `Stock cannot go below 0. Only ${Math.max(0, have)} on hand at this location`, { quantity: `Only ${Math.max(0, have)} on hand at this location` });
   await M.StockMovement.create({ inventory_item_id: item.id, vendor_id: req.body.vendor_id || null, type: req.body.type, quantity: q, unit_cost: item.purchase_price, date: req.body.date || today(), note: req.body.note, reference: req.body.reference || 'Manual', created_by: req.user.id });
   res.json({ message: 'Stock updated' });
 }));
@@ -836,7 +859,12 @@ r.get('/purchases', wrap(async (req, res) => {
   res.json(paged(rows, count, p));
 }));
 r.post('/purchases', purchaseUpload, wrap(async (req, res) => {
-  validate(req.body, { date: 'required|date' });
+  validate(req.body, { date: 'required|date', exchange_rate: 'numeric|minv:0.0001|maxv:1000000', shipping_cost: 'numeric|minv:0', customs_duty: 'numeric|minv:0', clearing_charges: 'numeric|minv:0', other_charges: 'numeric|minv:0', paid_amount: 'numeric|minv:0' },
+    { exchange_rate: 'Exchange rate', shipping_cost: 'Shipping / freight', customs_duty: 'Customs duty', clearing_charges: 'Clearing charges', other_charges: 'Other charges', paid_amount: 'Paid amount' });
+  for (const [i, l] of jsonList(req.body.items).entries()) {
+    if (!(Number(l.quantity) > 0)) fail(422, 'Validation failed', { items: `Line ${i + 1}: quantity must be more than 0` });
+    if (!(Number(l.unit_price || 0) >= 0)) fail(422, 'Validation failed', { items: `Line ${i + 1}: unit price cannot be negative` });
+  }
   const data = {
     ...pick(req.body, ['supplier_name', 'invoice_no', 'date', 'origin_country', 'currency', 'note']),
     is_import: toBool(req.body.is_import), exchange_rate: Number(req.body.exchange_rate || 1) || 1,
@@ -884,8 +912,15 @@ r.get('/vendors', wrap(async (req, res) => {
 }));
 r.use('/vendors', crud(M.Vendor, {
   fields: ['name', 'type', 'contact_person', 'phone', 'email', 'address', 'rates', 'opening_balance', 'notes', 'status'], booleans: ['status'],
-  rules: { name: 'required|max:150', email: 'email|max:191' },
-  beforeSave: (data) => { if (data.rates !== undefined) data.rates = jsonList(data.rates).filter((x) => x && x.label).map((x) => ({ label: String(x.label).slice(0, 120), rate: r2(x.rate), unit: String(x.unit || 'pc').slice(0, 20) })); return data; },
+  rules: { name: 'required|max:150', email: 'email|max:191', phone: 'phone', opening_balance: 'numeric|minv:0' },
+  beforeSave: (data) => {
+    if (data.rates !== undefined) {
+      const rates = jsonList(data.rates).filter((x) => x && x.label);
+      if (rates.some((x) => !(Number(x.rate) >= 0))) fail(422, 'Validation failed', { rates: 'A rate cannot be negative' });
+      data.rates = rates.map((x) => ({ label: String(x.label).slice(0, 120), rate: r2(x.rate), unit: String(x.unit || 'pc').slice(0, 20) }));
+    }
+    return data;
+  },
 }));
 r.use('/vendor-bills', crud(M.VendorBill, {
   fields: ['vendor_id', 'bill_no', 'date', 'due_date', 'amount', 'category', 'description', 'items'], files: ['attachment'], folder: 'vendors', types: DOC_TYPES,
@@ -895,8 +930,20 @@ r.use('/vendor-bills', crud(M.VendorBill, {
 }));
 r.use('/vendor-payments', crud(M.VendorPayment, {
   fields: ['vendor_id', 'vendor_bill_id', 'amount', 'date', 'method', 'reference', 'note', 'account_id', 'partner_id'], files: ['attachment'], folder: 'vendors', types: DOC_TYPES,
-  rules: { vendor_id: 'required', date: 'required|date', amount: 'required|numeric|minv:0.01' }, filters: ['vendor_id', 'partner_id'], order: [['date', 'DESC']],
+  rules: { vendor_id: 'required', date: 'required|date', amount: 'required|numeric|minv:0.01', account_id: 'required' }, filters: ['vendor_id', 'partner_id'], order: [['date', 'DESC']],
   include: [{ model: M.Vendor, attributes: ['id', 'name'] }, { model: M.Partner, as: 'partner', attributes: ['id', 'name'] }, { model: M.FinanceAccount, as: 'account', attributes: ['id', 'name'] }],
+  beforeSave: async (data, req, row) => {
+    const vendorId = data.vendor_id || row?.vendor_id;
+    if (data.account_id && !(await M.FinanceAccount.findByPk(data.account_id))) fail(422, 'Validation failed', { account_id: 'Choose an account from the list' });
+    // never pay a vendor more than is owed (bills + opening balance - payments already made)
+    const v = await M.Vendor.findByPk(vendorId);
+    if (!v) fail(422, 'Validation failed', { vendor_id: 'Choose a vendor from the list' });
+    const [billed, paid] = await Promise.all([M.VendorBill.sum('amount', { where: { vendor_id: v.id } }), M.VendorPayment.sum('amount', { where: { vendor_id: v.id, ...(row ? { id: { [Op.ne]: row.id } } : {}) } })]);
+    const owed = r2(Number(v.opening_balance || 0) + Number(billed || 0) - Number(paid || 0));
+    const amount = Number(data.amount ?? row?.amount);
+    if (amount > owed + 0.004) fail(422, owed > 0 ? `This is more than you owe ${v.name} (Rs ${owed.toLocaleString('en-US')}). Enter the amount owed or less.` : `You owe ${v.name} nothing. Add a bill first, then record the payment.`, { amount: owed > 0 ? `You owe only Rs ${owed.toLocaleString('en-US')}` : 'No bills to pay for this vendor' });
+    return data;
+  },
 }));
 
 /* ============================================================== announcements */

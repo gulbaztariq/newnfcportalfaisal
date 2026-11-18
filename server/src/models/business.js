@@ -76,6 +76,10 @@ module.exports = function defineBusiness(sequelize, json, M) {
   ShortLink.belongsTo(Vcard, { foreignKey: 'vcard_id' }); Vcard.hasMany(ShortLink, { foreignKey: 'vcard_id' });
   ShortLink.belongsTo(WhatsappStore, { foreignKey: 'store_id' });
   ShortLink.belongsTo(NfcOrder, { foreignKey: 'nfc_order_id' });
+  // a link that pointed at a vCard which no longer exists becomes "unassigned" (it stops redirecting, but a printed QR can be re-used)
+  const orphan = () => ShortLink.update({ target_type: 'unassigned' }, { where: { target_type: 'vcard', vcard_id: null } }).catch(() => {});
+  Vcard.addHook('afterDestroy', orphan);
+  Vcard.addHook('afterBulkDestroy', orphan);
   const ShortLinkClick = sequelize.define('short_link_click', {
     device: T.STRING(20), browser: T.STRING(40), os: T.STRING(40), referrer: T.STRING(255), country: T.STRING(8), ip_hash: T.STRING(64),
   }, { updatedAt: false });

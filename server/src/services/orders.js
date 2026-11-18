@@ -163,12 +163,17 @@ async function setStatus(order, status, { actor, note, vendorId } = {}) {
   if (!ALL_STATUSES.includes(status)) throw new HttpError(422, 'Unknown status');
   if (order.order_status === status) return order;
   const prev = order.order_status;
+  // a courier delivery cannot be sent or delivered without a courier and a tracking number (office collection and digital orders have none)
+  if (['shipped', 'delivered'].includes(status) && order.fulfilment === 'delivery' && (!String(order.courier || '').trim() || !String(order.tracking_number || '').trim())) {
+    throw new HttpError(422, 'Add the courier and the tracking number first, then dispatch the order');
+  }
   if (status === 'shipped' && !order.stock_consumed) await inventory.consumeForOrder(order, vendorId ?? order.stock_vendor_id, actor?.id);
   if ((status === 'cancelled' || status === 'returned') && order.stock_consumed) await inventory.restoreForOrder(order, actor?.id);
   const history = [...(order.status_history || []), { status, at: new Date(), by: actor ? `${actor.first_name} ${actor.last_name}`.trim() : 'system', note: note || undefined }];
   const data = { order_status: status, status_history: history };
   if (status === 'shipped') data.dispatched_at = new Date();
-  if (status === 'delivered') { data.delivered_at = new Date(); if (order.is_cod || order.payment_type === 'collection') data.payment_status = 'paid'; }
+  // office collection is paid at the counter. Cash on delivery is NOT paid yet: the courier still owes it until a COD settlement is recorded
+  if (status === 'delivered') { data.delivered_at = new Date(); if (!order.is_cod && order.payment_type === 'collection') data.payment_status = 'paid'; }
   await order.update(data);
   // e-mail for portal orders (existing template) + WhatsApp/SMS step messages
   if (order.email && !(await isDummyEmail(order.email))) mail.sendTemplate('nfc_status', order.email, { order: order.order_number, status: LABELS[status] }).catch(() => {});

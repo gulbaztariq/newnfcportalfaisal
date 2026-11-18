@@ -222,7 +222,7 @@ const all = (keys, v = true) => Object.fromEntries(keys.map((k) => [k, v]));
   // the three demo cards from the first release are hidden from the new shop (they had USD demo prices)
   await M.NfcCard.update({ show_in_shop: false }, { where: { slug: null, name: ['Classic PVC Card', 'Matte Black Card', 'Metal Card'], price: [19, 29, 59] } });
   if (!(await M.InventoryItem.count())) for (const [name, category] of [['Blank PVC NFC card', 'blank_card'], ['Plastic card', 'blank_card'], ['NFC chip (NTAG215)', 'nfc_chip'], ['NFC review tag blank', 'tag'], ['NFC sticker 25mm', 'sticker'], ['Acrylic standee blank', 'standee'], ['Packaging box', 'packaging']]) {
-    await M.InventoryItem.findOrCreate({ where: { name }, defaults: { category, sku: `INV-${name.replace(/[^A-Za-z0-9]+/g, '-').toUpperCase().slice(0, 40)}` } });
+    await M.InventoryItem.findOrCreate({ where: { name }, defaults: { category, sku: `INV-${name.replace(/[^A-Za-z0-9]+/g, '-').toUpperCase().replace(/^-+|-+$/g, '').slice(0, 40).replace(/-+$/, '')}` } });
   }
   if (!(await M.FinanceAccount.count())) await M.FinanceAccount.bulkCreate([{ name: 'Cash in hand', type: 'cash' }, { name: 'Bank account', type: 'bank' }, { name: 'JazzCash / Easypaisa', type: 'wallet' }]);
   if (!(await M.FinanceCategory.count())) {
