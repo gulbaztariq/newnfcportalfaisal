@@ -268,10 +268,11 @@ export default function OrderWizard() {
   const [form, setValues] = useState({
     customer_type: 'guest', customer: null, organisation: null, contact_id: '', guest: null,
     name: '', phone: '', email: '', dummy: false, company_name: '', city: '', address: '', order_source_id: '',
-    fulfilment: 'delivery', payment: 'cod', delivery_charges: '', discount_type: 'fixed', discount_value: '', admin_note: '',
+    fulfilment: 'delivery', payment: 'cod', payment_account_id: '', delivery_charges: '', discount_type: 'fixed', discount_value: '', admin_note: '',
     order_type: 'nfc_profile', social_variant: '', sample_order: null, plan_credit: '',
   });
   const [showAll, setShowAll] = useState(false);
+  const [addingMethod, setAddingMethod] = useState(false); const [newMethod, setNewMethod] = useState('');
   const [refresh, setRefresh] = useState({ loading: false, results: [], at: null });
   const refreshedKey = useRef('');
   const [subInfo, setSubInfo] = useState(undefined); // current plan of the customer being renewed
@@ -397,7 +398,7 @@ export default function OrderWizard() {
     () => { const e = {}; if (form.order_type === 'social' && !form.social_variant) e.social_variant = 'Choose static, dynamic or all-in-one'; return e; },
     () => { const e = {}; if (form.phone && !/^\+?[\d\s().-]{7,20}$/.test(String(form.phone).trim())) e.phone = 'Phone number is not valid. Use digits only, like 03001234567'; if (TAG_TYPES.includes(form.order_type) && String(form.phone).replace(/\D/g, '').length < 7) e.phone = 'The tag owner\'s phone number is needed: messages are sent there'; if (PLAN_CHANGE.includes(form.order_type) && !['existing', 'organisation'].includes(form.customer_type)) e.name = 'A renewal or upgrade is for an existing customer or organisation'; if (form.customer_type === 'existing' && !form.customer) e.user_id = 'Search and choose the customer'; if (form.customer_type === 'organisation' && !form.organisation) e.organisation_id = 'Search and choose the organisation'; if (!form.name.trim()) e.name = 'Enter the customer name'; if (form.customer_type === 'new' && !form.email) e.email = 'An account needs an e-mail. Tick "Dummy e-mail" if the customer has none.'; if (form.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) e.email = 'Enter a valid e-mail address'; return e; },
     () => { const e = {}; if (!valid.length) e.products = 'Add at least one product'; else if (valid.some((l) => products[l.product_id]?.variants?.length && !l.variant)) e.products = 'Choose an option for every product'; else if (valid.some((l) => l.unit_price !== '' && Number(l.unit_price) < 0)) e.products = 'Prices cannot be negative'; else if (form.order_type === 'sample' && valid.some((l) => Number(l.quantity) > sampleMax)) e.products = `Samples are limited to ${sampleMax} pieces per product`; return e; },
-    () => { const e = {}; if (form.discount_type === 'percent' && Number(form.discount_value) > 100) e.discount_value = 'Maximum 100%'; if (Number(form.discount_value) < 0) e.discount_value = 'Cannot be negative'; if (form.fulfilment !== 'collection' && !['digital', 'renewal', 'upgrade'].includes(form.order_type)) { if (!String(form.phone || '').trim()) e.phone = 'Phone number is required for courier delivery'; else if (!/^\+?[\d\s().-]{7,20}$/.test(String(form.phone).trim())) e.phone = 'Phone number is not valid'; if (!String(form.address || '').trim()) e.address = 'Delivery address is required for courier delivery'; if (!String(form.city || '').trim()) e.city = 'City is required for courier delivery'; } return e; },
+    () => { const e = {}; if (form.payment === 'paid' && !form.payment_account_id) e.payment_account_id = 'Choose the payment method the money was received in'; if (form.discount_type === 'percent' && Number(form.discount_value) > 100) e.discount_value = 'Maximum 100%'; if (Number(form.discount_value) < 0) e.discount_value = 'Cannot be negative'; if (form.fulfilment !== 'collection' && !['digital', 'renewal', 'upgrade'].includes(form.order_type)) { if (!String(form.phone || '').trim()) e.phone = 'Phone number is required for courier delivery'; else if (!/^\+?[\d\s().-]{7,20}$/.test(String(form.phone).trim())) e.phone = 'Phone number is not valid'; if (!String(form.address || '').trim()) e.address = 'Delivery address is required for courier delivery'; if (!String(form.city || '').trim()) e.city = 'City is required for courier delivery'; } return e; },
     () => ({}),
   ];
   const checks = Object.fromEntries(['type', 'customer', 'products', 'delivery', 'review'].map((k, i) => [k, checkList[i]]));
@@ -412,11 +413,11 @@ export default function OrderWizard() {
         ...payload(), name: form.name, phone: form.phone, email: form.email, company_name: form.company_name, city: form.city, address: form.fulfilment === 'collection' && !form.address ? '' : form.address,
         order_source_id: form.order_source_id || undefined, admin_note: form.admin_note, customer_type: form.customer_type,
         user_id: form.customer?.id, organisation_id: form.organisation?.id, contact_id: form.contact_id || undefined, guest_customer_id: form.guest?.id,
-        payment_status: form.payment === 'paid' ? 'paid' : 'pending',
+        payment_status: form.payment === 'paid' ? 'paid' : 'pending', payment_account_id: form.payment_account_id || undefined,
       };
       const d = await run(api.post('/admin/orders', body));
       setResult(d);
-    } catch (e) { setErrors(e.errors || {}); if (e.errors && Object.keys(e.errors).some((k) => ['name', 'email', 'phone', 'address', 'user_id', 'organisation_id', 'contact_id'].includes(k))) goTo('customer'); } finally { setBusy(false); }
+    } catch (e) { setErrors(e.errors || {}); if (e.errors && Object.keys(e.errors).some((k) => ['name', 'email', 'phone', 'address', 'user_id', 'organisation_id', 'contact_id'].includes(k))) goTo('customer'); else if (e.errors?.payment_account_id) goTo('delivery'); } finally { setBusy(false); }
   };
   const restart = () => { setResult(null); setStep(0); setLines([newLine()]); setQuote(null); setReorderOf(null); setValues((f) => ({ ...f, customer: null, organisation: null, contact_id: '', guest: null, name: '', phone: '', email: '', dummy: false, company_name: '', city: '', address: '', delivery_charges: '', discount_value: '', admin_note: '' })); };
 
@@ -621,6 +622,25 @@ export default function OrderWizard() {
                         <Field label="Delivery charges" hint={`Empty = default (${money(cur, quote?.delivery_default ?? meta.delivery_charges)})`}><Input type="number" min="0" value={form.delivery_charges} onChange={(e) => set('delivery_charges', e.target.value)} placeholder={String(quote?.delivery_default ?? meta.delivery_charges)} /></Field>
                       )}
                     </div>
+                    <Field label="Payment method" error={errors.payment_account_id} hint={form.payment === 'paid' ? 'Where the money was received' : 'Where the money will go when it is paid (optional for now)'}>
+                      <Select id="pay-account" value={addingMethod ? '__new' : form.payment_account_id} allowEmpty placeholder="Choose a payment method" invalid={!!errors.payment_account_id}
+                        onChange={(v) => { if (v === '__new') { setAddingMethod(true); set('payment_account_id', ''); } else { setAddingMethod(false); set('payment_account_id', v); } }}
+                        options={[...(meta.accounts || []).map((a) => ({ value: a.id, label: a.name })), { value: '__new', label: '+ Add new method' }]} />
+                      {addingMethod && (
+                        <div className="mt-2 flex gap-2">
+                          <Input value={newMethod} onChange={(e) => setNewMethod(e.target.value)} placeholder="e.g. Meezan Bank Account" />
+                          <Button type="button" disabled={!newMethod.trim()} onClick={async () => {
+                            try {
+                              const { data } = await api.post('/admin/finance/accounts', { name: newMethod.trim(), type: 'bank' });
+                              const a = data.data || data;
+                              setMeta((m) => ({ ...m, accounts: [...(m.accounts || []), { id: a.id, name: a.name, type: a.type }] }));
+                              set('payment_account_id', String(a.id)); setAddingMethod(false); setNewMethod(''); toast.success('Payment method added');
+                            } catch (e) { toast.error(e.errors?.name || e.message); }
+                          }}>Add</Button>
+                          <Button type="button" variant="ghost" onClick={() => { setAddingMethod(false); setNewMethod(''); }}>Cancel</Button>
+                        </div>
+                      )}
+                    </Field>
                     <div className="rounded-2xl border border-border p-4">
                       <p className="mb-3 flex items-center gap-2 text-sm font-semibold"><BadgePercent className="size-4 text-primary" />Discount</p>
                       <div className="flex flex-wrap items-start gap-3">
@@ -644,6 +664,7 @@ export default function OrderWizard() {
                     <ReviewBlock title="Delivery & payment" icon={Banknote} onEdit={() => goTo('delivery')} rows={[
                       ['Fulfilment', noShip(form.order_type) ? 'No shipping' : form.fulfilment === 'collection' ? 'Office collection' : 'Courier delivery'],
                       ['Payment', { cod: 'Cash on delivery', paid: 'Paid', pending: 'Unpaid', collection: 'Pay at collection' }[form.payment]],
+                      ['Payment method', (meta.accounts || []).find((a) => String(a.id) === String(form.payment_account_id))?.name || '-'],
                       ['Sample credit', quote?.sample_credit > 0 ? money(cur, quote.sample_credit) : 'None'],
                       ...(form.order_type === 'upgrade' ? [['Credit for unused time', quote?.plan_credit > 0 ? money(cur, quote.plan_credit) : 'None']] : []),
                       ['Discount', quote?.discount > 0 ? `${money(cur, quote.discount)}${quote.discount_type === 'percent' ? ` (${quote.discount_value}%)` : ''}` : 'None'],

@@ -65,3 +65,15 @@ test('L23/L8: order search finds a phone in any format; the dispatch text has no
   for (const q of ['03001239876', '+92 300 1239876', '300-1239876']) { const r = await a.get(`/api/admin/orders?search=${encodeURIComponent(q)}`); assert.ok(r.body.data.some((x) => x.id === o.id), q); }
   const messaging = require('../src/services/messaging'); assert.ok(messaging.EVENTS.order_shipped.text.includes('Tracking no'));
 });
+
+test('a paid order needs a payment method; the account is stored on the order (courier and collection)', async () => {
+  const acc = await M.FinanceAccount.create({ name: 'Company Faysal Bank Account', type: 'bank' });
+  const p = await product(); const base = { name: 'W', phone: '03001234567', address: 'x', city: 'y', customer_type: 'guest', order_type: 'nfc_profile', payment_status: 'paid', items: [{ product_id: p.id, quantity: 1 }] };
+  for (const extra of [{ is_cod: false }, { fulfilment: 'collection', is_cod: false }]) {
+    const no = await a.post('/api/admin/orders', { ...base, ...extra }); assert.equal(no.status, 422); assert.match(no.body.errors.payment_account_id, /payment method/);
+    assert.equal((await a.post('/api/admin/orders', { ...base, ...extra, payment_account_id: 999999 })).status, 422);
+    const ok = await a.post('/api/admin/orders', { ...base, ...extra, payment_account_id: acc.id }); assert.equal(ok.status, 201);
+    assert.equal((await M.NfcOrder.findByPk(ok.body.data.id)).payment_account_id, acc.id);
+  }
+  const meta = await a.get('/api/admin/orders-meta'); assert.ok(meta.body.accounts.some((x) => x.id === acc.id));
+});

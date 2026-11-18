@@ -502,6 +502,7 @@ const NfcOrder = sequelize.define('nfc_order', {
   courier_status: T.STRING(120), courier_status_at: T.DATE, courier_history: json('courier_history', []),
   courier_charges: { type: T.DECIMAL(12, 2), defaultValue: 0 },
   cod_settled: { type: T.BOOLEAN, defaultValue: false },
+  payment_account_id: T.INTEGER, // the finance account (cash, bank, wallet) the money goes into
   // inventory + workflow
   stock_vendor_id: T.INTEGER, stock_consumed: { type: T.BOOLEAN, defaultValue: false },
   cost_amount: { type: T.DECIMAL(12, 2), defaultValue: 0 },
