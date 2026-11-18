@@ -38,10 +38,10 @@ function Item({ value, label }) {
 }
 
 /* ----------------------------------------------------------------- switch */
-export function Switch({ checked, onChange, id, disabled, size = 'md' }) {
-  const s = size === 'sm' ? { root: 'h-5 w-9', thumb: 'size-4 data-[state=checked]:translate-x-4' } : { root: 'h-6 w-11', thumb: 'size-5 data-[state=checked]:translate-x-5' };
+export function Switch({ checked, onChange, id, disabled, size = 'md', label }) {
+  const s = size === 'sm' ? { root: 'h-6 w-10', thumb: 'size-5 data-[state=checked]:translate-x-4' } : { root: 'h-6 w-11', thumb: 'size-5 data-[state=checked]:translate-x-5' };
   return (
-    <Sw.Root id={id} checked={!!checked} disabled={disabled} onCheckedChange={onChange} className={cn('relative inline-flex shrink-0 cursor-pointer items-center rounded-full bg-input p-0.5 transition-colors duration-300 data-[state=checked]:bg-primary disabled:cursor-not-allowed disabled:opacity-50', s.root)}>
+    <Sw.Root id={id} aria-label={label || (id ? undefined : 'Toggle')} checked={!!checked} disabled={disabled} onCheckedChange={onChange} className={cn('relative inline-flex shrink-0 cursor-pointer items-center rounded-full bg-input p-0.5 transition-colors duration-300 data-[state=checked]:bg-primary disabled:cursor-not-allowed disabled:opacity-50', s.root)}>
       <Sw.Thumb className={cn('block rounded-full bg-white shadow-md transition-transform duration-300 ease-[cubic-bezier(.34,1.56,.64,1)]', s.thumb)} />
     </Sw.Root>
   );

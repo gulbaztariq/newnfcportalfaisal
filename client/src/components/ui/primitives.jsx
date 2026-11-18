@@ -1,4 +1,4 @@
-import { forwardRef } from 'react';
+import { Children, cloneElement, forwardRef, isValidElement, useId } from 'react';
 import { motion } from 'motion/react';
 import { Loader2 } from 'lucide-react';
 import { cn } from '@/lib/cn';
@@ -72,10 +72,15 @@ export function Label({ className, children, required, ...props }) {
 
 /** Label + control + hint + error */
 export function Field({ label, htmlFor, error, hint, required, className, children }) {
+  // every label is tied to its control (clicking the label focuses it, screen readers announce it)
+  const auto = useId();
+  const only = Children.count(children) === 1 && isValidElement(children) && typeof children.type !== 'symbol' ? children : null;
+  const id = htmlFor || only?.props?.id || auto;
+  const control = label && only && !only.props.id && !htmlFor ? cloneElement(only, { id }) : children;
   return (
     <div className={className}>
-      {label && <Label htmlFor={htmlFor} required={required}>{label}</Label>}
-      {children}
+      {label && <Label htmlFor={id} required={required}>{label}</Label>}
+      {control}
       {error ? <motion.p data-field-error initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} className="mt-1.5 text-xs font-medium text-danger">{error}</motion.p>
         : hint ? <p className="mt-1.5 text-xs text-muted-foreground">{hint}</p> : null}
     </div>
@@ -121,7 +126,7 @@ export function CardHeader({ title, description, actions, className, icon: Icon 
       <div className="flex min-w-0 items-center gap-3">
         {Icon && <span className="grid size-9 place-items-center rounded-xl bg-primary-soft text-primary"><Icon className="size-4.5" /></span>}
         <div className="min-w-0">
-          <h3 className="font-display text-[15px] font-semibold tracking-tight">{title}</h3>
+          <h2 className="font-display text-[15px] font-semibold tracking-tight">{title}</h2>
           {description && <p className="mt-0.5 text-[13px] text-muted-foreground">{description}</p>}
         </div>
       </div>

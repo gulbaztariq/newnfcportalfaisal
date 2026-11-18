@@ -96,7 +96,7 @@ export function UserPlans() {
                   ))}
                 </ul>
                 <Button className="mt-7 w-full" size="lg" variant={isCur ? 'outline' : 'primary'} onClick={() => choose(p)}>{isCur ? 'Renew plan' : 'Choose plan'}</Button>
-                <a href={`/api/user/plans/${p.id}/pdf`} className="mt-3 inline-flex items-center justify-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-primary"><Download className="size-3.5" />Download plan PDF</a>
+                <a href={`/api/user/plans/${p.id}/pdf`} className="mt-3 inline-flex min-h-8 items-center justify-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-primary"><Download className="size-3.5" />Download plan PDF</a>
               </Card>
             );
           })}

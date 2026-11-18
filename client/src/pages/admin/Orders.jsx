@@ -134,7 +134,7 @@ export function OrderDetail() {
   const items = o.items?.length ? o.items : [{ id: 0, name: o.nfc_card?.name || 'NFC card', quantity: o.quantity, unit_price: o.unit_price, total: o.amount }];
   return (
     <>
-      <Link to="/admin/orders" className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" />All orders</Link>
+      <Link to="/admin/orders" className="mb-4 inline-flex min-h-6 items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" />All orders</Link>
       <PageHeader eyebrow={`${SOURCE[o.source]?.[0] || 'Portal'} order${o.order_source ? ` · ${o.order_source.name}` : ''}${o.order_type && o.order_type !== 'nfc_profile' ? ` · ${ORDER_TYPE_LABEL[o.order_type]}` : ''}${Number(o.sample_credit) > 0 ? ` · sample credit ${Number(o.sample_credit)}` : ''}${Number(o.plan_credit) > 0 ? ` · plan credit ${Number(o.plan_credit)}` : ''} · ${fmtDateTime(o.created_at)} · by ${createdBy(o)}`} title={o.order_number} description={`${o.name} · ${rs(o.amount)} · ${paymentLabel(o)}${o.fulfilment === 'collection' ? ' · Office collection' : ''}`}>
         {!['digital', 'renewal', 'upgrade'].includes(o.order_type) && <Tip content="Same customer and products at wholesale prices"><ButtonLink as={Link} to={`/admin/orders/new?bulk=${o.id}`} variant="outline"><Boxes />Create bulk order</ButtonLink></Tip>}
         <Tip content="Same items and prices, straight to review"><ButtonLink as={Link} to={`/admin/orders/new?reorder=${o.id}`} variant="outline"><Repeat />Reorder</ButtonLink></Tip>

@@ -120,7 +120,7 @@ export function VcardCreate() {
   const canNext = form.values.name && form.values.url_alias && alias === true;
   return (
     <>
-      <Link to="/user/vcards" className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" />My vCards</Link>
+      <Link to="/user/vcards" className="mb-4 inline-flex min-h-6 items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" />My vCards</Link>
       <PageHeader title="Create a new vCard" description="Two quick steps. You can change everything later." />
       <div className="mb-8 flex items-center gap-3">
         {steps.map((s, i) => (

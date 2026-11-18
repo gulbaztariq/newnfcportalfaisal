@@ -66,7 +66,7 @@ export function GuestDetail() {
   const reorder = (o, edit) => navigate(`/admin/orders/new?reorder=${o.id}${edit ? '&edit=1' : ''}`);
   return (
     <>
-      <Link to="/admin/orders?view=guests" className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" />All guests</Link>
+      <Link to="/admin/orders?view=guests" className="mb-4 inline-flex min-h-6 items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" />All guests</Link>
       <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
         <Card className="relative mb-6 overflow-hidden">
           <div className="absolute inset-0 bg-linear-to-br from-sky-500/10 via-violet-500/5 to-transparent" />

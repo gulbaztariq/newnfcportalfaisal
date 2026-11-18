@@ -170,7 +170,7 @@ export default function Users({ role = 'user' }) {
           <Field label="Last name" htmlFor="f-last_name" error={form.errors.last_name}><Input {...form.input('last_name')} /></Field>
           <Field label="E-mail" htmlFor="f-email" required error={form.errors.email}><Input {...form.input('email')} type="email" /></Field>
           <Field label="Phone" htmlFor="f-contact">
-            <div className="flex gap-2"><Input className="w-20" placeholder="+1" value={form.values.region_code || ''} onChange={(e) => form.set('region_code', e.target.value.replace(/\D/g, ''))} /><Input {...form.input('contact')} className="flex-1" /></div>
+            <div className="flex gap-2"><Input aria-label="Country code" className="w-20" placeholder="+1" value={form.values.region_code || ''} onChange={(e) => form.set('region_code', e.target.value.replace(/\D/g, ''))} /><Input aria-label="Phone number" {...form.input('contact')} className="flex-1" /></div>
           </Field>
           <Field label="Password" htmlFor="f-password" error={form.errors.password} hint={editing ? 'Leave empty to keep the current password' : 'Leave empty (recommended): they get an e-mail link to choose their own password'}><Input {...form.input('password')} type="password" autoComplete="new-password" /></Field>
           <Field label="Confirm password" htmlFor="f-password_confirmation" error={form.errors.password_confirmation}><Input {...form.input('password_confirmation')} type="password" autoComplete="new-password" /></Field>
@@ -211,7 +211,7 @@ export function UserDetail() {
   const days = sub ? Math.max(0, Math.ceil((new Date(sub.ends_at) - Date.now()) / 864e5)) : 0;
   return (
     <>
-      <Link to="/admin/users" className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" />All users</Link>
+      <Link to="/admin/users" className="mb-4 inline-flex min-h-6 items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" />All users</Link>
       <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
         <Card className="overflow-hidden">
           <div className="relative h-36 bg-linear-to-br from-violet-600 via-fuchsia-600 to-orange-400"><div className="bg-grid absolute inset-0 opacity-25" /></div>

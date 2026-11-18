@@ -192,13 +192,13 @@ export default function PortalLayout({ area }) {
             <p className="text-xs text-muted-foreground">{current?.group || (area === 'admin' ? 'Admin' : 'Portal')}</p>
             <p className="truncate text-sm font-semibold">{current?.label || 'Overview'}</p>
           </div>
-          <button type="button" onClick={() => setCmd(true)} className="ml-auto flex h-9 w-full max-w-xs cursor-pointer items-center gap-2.5 rounded-xl border border-border bg-muted/60 px-3 text-sm text-muted-foreground transition hover:border-primary/40 md:ml-8">
-            <Search className="size-4" /><span className="flex-1 text-left">Go to a page...</span><Kbd>Ctrl K</Kbd>
+          <button type="button" aria-label="Search pages" onClick={() => setCmd(true)} className="ml-auto flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center gap-2.5 rounded-xl border border-border bg-muted/60 text-sm sm:w-full sm:max-w-xs sm:justify-start sm:px-3 text-muted-foreground transition hover:border-primary/40 md:ml-8">
+            <Search className="size-4 shrink-0" /><span className="hidden min-w-0 flex-1 truncate whitespace-nowrap text-left sm:block">Go to a page...</span><span className="hidden shrink-0 sm:inline-flex"><Kbd>Ctrl K</Kbd></span>
           </button>
           <div className="ml-auto flex items-center gap-1.5 md:ml-0">
             {area === 'user' && <ButtonLink as={Link} to="/user/vcards/create" size="sm" className="hidden sm:inline-flex"><Plus />New vCard</ButtonLink>}
             <AnnouncementBell />
-            <Tip content="View website"><a href={`${settings.app_url || ''}/`} target="_blank" rel="noreferrer" className="grid size-9 place-items-center rounded-xl text-muted-foreground transition hover:bg-muted hover:text-foreground"><Globe className="size-[18px]" /></a></Tip>
+            <Tip content="View website"><a aria-label="View website" href={`${settings.app_url || ''}/`} target="_blank" rel="noreferrer" className="grid size-9 place-items-center rounded-xl text-muted-foreground transition hover:bg-muted hover:text-foreground"><Globe className="size-[18px]" /></a></Tip>
             <Tip content={dark ? 'Light mode' : 'Dark mode'}>
               <button type="button" onClick={toggle} className="relative grid size-9 cursor-pointer place-items-center overflow-hidden rounded-xl text-muted-foreground transition hover:bg-muted hover:text-foreground" aria-label="Toggle theme">
                 <AnimatePresence mode="wait" initial={false}>

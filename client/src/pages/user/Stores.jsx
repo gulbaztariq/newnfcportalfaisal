@@ -165,7 +165,7 @@ export function StoreEditor() {
   const setIn = (k, key, val) => form.set(k, { ...v[k], [key]: val });
   return (
     <>
-      <Link to="/user/stores" className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" />All stores</Link>
+      <Link to="/user/stores" className="mb-4 inline-flex min-h-6 items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" />All stores</Link>
       <PageHeader title={st.name} description={<a href={link} target="_blank" rel="noreferrer" className="text-primary hover:underline">{link.replace(/^https?:\/\//, '')}</a>}>
         <ButtonLink href={link} target="_blank" rel="noreferrer" variant="outline"><Eye />Preview</ButtonLink>
         {tab !== 'catalogue' && tab !== 'stats' && <Button onClick={save} loading={saving}><Save />Save</Button>}
@@ -382,7 +382,7 @@ export function StoreOrders() {
   const tone = { pending: 'pending', confirmed: 'processing', dispatched: 'shipped', delivered: 'delivered', cancelled: 'cancelled' };
   return (
     <>
-      <Link to="/user/stores" className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" />Stores</Link>
+      <Link to="/user/stores" className="mb-4 inline-flex min-h-6 items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" />Stores</Link>
       <PageHeader title="Store orders" description="Orders placed from your WhatsApp stores. Cancelling puts the stock back." />
       <TableCard title="All orders" list={list} toolbar={<>
         <FilterSelect value={list.params.store_id} onChange={(v) => list.set({ store_id: v })} placeholder="All stores" options={stores.map((s) => ({ value: s.id, label: s.name }))} />

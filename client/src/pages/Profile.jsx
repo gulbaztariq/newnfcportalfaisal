@@ -53,7 +53,7 @@ export default function Profile() {
                 {[['first_name', 'First name'], ['last_name', 'Last name'], ['email', 'E-mail', 'email']].map(([k, l, type]) => (
                   <Field key={k} label={orgLock(k, l)} error={form.errors[k]}><Input {...form.input(k)} type={type || 'text'} disabled={locks.has(k)} /></Field>
                 ))}
-                <Field label={orgLock('phone', 'Phone')}><fieldset disabled={locks.has('phone')} className="flex gap-2"><Input className="w-20" placeholder="+1" value={form.values.region_code} onChange={(e) => form.set('region_code', e.target.value.replace(/\D/g, ''))} /><Input {...form.input('contact')} className="flex-1" /></fieldset></Field>
+                <Field label={orgLock('phone', 'Phone')}><fieldset disabled={locks.has('phone')} className="flex gap-2"><Input aria-label="Country code" className="w-20" placeholder="+1" value={form.values.region_code} onChange={(e) => form.set('region_code', e.target.value.replace(/\D/g, ''))} /><Input aria-label="Phone number" {...form.input('contact')} className="flex-1" /></fieldset></Field>
                 {form.values.avatar instanceof File && <p className="text-xs text-primary sm:col-span-2">New photo selected - save to apply.</p>}
               </CardBody>
               <CardFooter><Button onClick={saveProfile} loading={busy}><Save />Save changes</Button></CardFooter>

@@ -64,7 +64,7 @@ export function UserOrderDetail() {
   const terminal = ['cancelled', 'returned'].includes(o.order_status);
   return (
     <>
-      <Link to="/user/nfc-orders" className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" />My orders</Link>
+      <Link to="/user/nfc-orders" className="mb-4 inline-flex min-h-6 items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" />My orders</Link>
       <PageHeader eyebrow={fmtDateTime(o.created_at)} title={`Order ${o.order_number}`} description={`${rs(o.amount)} · ${o.is_cod ? 'Cash on delivery' : label(o.payment_type || '')}`}>
         {d.invoice && <ButtonLink href={d.invoice.url} target="_blank" rel="noreferrer" variant="outline"><FileText />Invoice {d.invoice.number}</ButtonLink>}
       </PageHeader>
@@ -146,7 +146,7 @@ export function UserShortLinks() {
                   <img src={`/api/user/short-links/${l.id}/qrcode?size=240`} alt="QR code" className="size-20 shrink-0 rounded-xl border border-border bg-white p-1" loading="lazy" />
                   <div className="min-w-0 flex-1">
                     <p className="truncate font-medium">{l.title || l.vcard?.name || l.code}</p>
-                    <button type="button" onClick={() => copy(l.short_url)} className="flex max-w-full cursor-pointer items-center gap-1 truncate font-mono text-xs text-primary hover:underline">{l.short_url.replace(/^https?:\/\//, '')}<Copy className="size-3 shrink-0" /></button>
+                    <button type="button" onClick={() => copy(l.short_url)} className="flex min-h-6 max-w-full cursor-pointer items-center gap-1 truncate font-mono text-xs text-primary hover:underline">{l.short_url.replace(/^https?:\/\//, '')}<Copy className="size-3 shrink-0" /></button>
                     <p className="mt-1 truncate text-xs text-muted-foreground">→ {l.target_type === 'url' ? l.target_url : l.vcard ? `vCard /${l.vcard.url_alias}` : l.whatsapp_store ? `Store /s/${l.whatsapp_store.url_alias}` : 'Not activated'}</p>
                   </div>
                 </div>

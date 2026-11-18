@@ -150,14 +150,14 @@ export function Pagination({ meta, onPage }) {
       <p className="text-xs text-muted-foreground">Showing <b className="text-foreground">{from}-{to}</b> of <b className="text-foreground">{total}</b></p>
       {last > 1 && (
         <div className="flex items-center gap-1">
-          <button className={cn(btn, 'hover:bg-muted')} disabled={page <= 1} onClick={() => onPage(page - 1)}><ChevronLeft className="size-4" /></button>
+          <button aria-label="Previous page" className={cn(btn, 'hover:bg-muted')} disabled={page <= 1} onClick={() => onPage(page - 1)}><ChevronLeft className="size-4" /></button>
           {pages.map((p) => (
-            <button key={p} onClick={() => onPage(p)} className={cn(btn, 'relative font-medium', p === page ? 'text-primary-foreground' : 'hover:bg-muted')}>
+            <button key={p} aria-label={`Page ${p}`} aria-current={p === page ? 'page' : undefined} onClick={() => onPage(p)} className={cn(btn, 'relative font-medium', p === page ? 'text-primary-foreground' : 'hover:bg-muted')}>
               {p === page && <motion.span layoutId="page-pill" className="absolute inset-0 rounded-lg bg-primary" />}
               <span className="relative">{p}</span>
             </button>
           ))}
-          <button className={cn(btn, 'hover:bg-muted')} disabled={page >= last} onClick={() => onPage(page + 1)}><ChevronRight className="size-4" /></button>
+          <button aria-label="Next page" className={cn(btn, 'hover:bg-muted')} disabled={page >= last} onClick={() => onPage(page + 1)}><ChevronRight className="size-4" /></button>
         </div>
       )}
     </div>
@@ -170,7 +170,7 @@ export function TableCard({ title, description, toolbar, children, list }) {
     <Card className="overflow-hidden">
       <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4">
         <div>
-          <h3 className="font-display text-[15px] font-semibold">{title} {list?.meta && <span className="ml-1 rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">{list.meta.total}</span>}</h3>
+          <h2 className="font-display text-[15px] font-semibold">{title} {list?.meta && <span className="ml-1 rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">{list.meta.total}</span>}</h2>
           {description && <p className="mt-0.5 text-[13px] text-muted-foreground">{description}</p>}
         </div>
         {toolbar && <div className="flex flex-wrap items-center gap-2">{toolbar}</div>}

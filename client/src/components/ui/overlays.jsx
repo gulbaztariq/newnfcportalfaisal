@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { cloneElement, isValidElement, useEffect, useState } from 'react';
 import * as D from '@radix-ui/react-dialog';
 import * as DM from '@radix-ui/react-dropdown-menu';
 import * as T from '@radix-ui/react-tooltip';
@@ -20,7 +20,7 @@ export function Dialog({ open, onOpenChange, title, description, children, foote
               <D.Title className="font-display text-lg font-semibold tracking-tight">{title}</D.Title>
               {description ? <D.Description className="mt-1 text-sm text-muted-foreground">{description}</D.Description> : <D.Description className="sr-only">{title}</D.Description>}
             </div>
-            <D.Close className="grid size-8 place-items-center rounded-lg text-muted-foreground transition hover:bg-muted hover:text-foreground cursor-pointer"><X className="size-4" /></D.Close>
+            <D.Close aria-label="Close" className="grid size-8 place-items-center rounded-lg text-muted-foreground transition hover:bg-muted hover:text-foreground cursor-pointer"><X className="size-4" /></D.Close>
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-6">{children}</div>
           {footer && <div className="flex items-center justify-end gap-2 border-t border-border px-6 py-4">{footer}</div>}
@@ -76,7 +76,7 @@ export function Tip({ content, children, side = 'top', align = 'center', classNa
   const rich = content && typeof content === 'object' && !Array.isArray(content) && ('title' in content || 'description' in content);
   return (
     <T.Root>
-      <T.Trigger asChild>{children}</T.Trigger>
+      <T.Trigger asChild>{typeof content === 'string' && isValidElement(children) && ['a', 'button'].includes(children.type) && !children.props['aria-label'] ? cloneElement(children, { 'aria-label': content }) : children}</T.Trigger>
       <T.Portal>
         <T.Content side={side} align={align} sideOffset={8} collisionPadding={10}
           className={cn('tip-surface anim-tip z-[60] max-w-72 rounded-xl px-3 py-2 text-xs leading-snug text-white shadow-[0_12px_32px_-8px_rgb(0_0_0/0.45)]', rich && 'px-3.5 py-2.5', className)}>

@@ -245,7 +245,7 @@ export function InvoiceEditor() {
 
   return (
     <>
-      <Link to={id ? `/admin/invoices/${id}` : '/admin/invoices'} className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" />{id ? 'Back to invoice' : 'All invoices'}</Link>
+      <Link to={id ? `/admin/invoices/${id}` : '/admin/invoices'} className="mb-4 inline-flex min-h-6 items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" />{id ? 'Back to invoice' : 'All invoices'}</Link>
       <PageHeader eyebrow="Billing" title={id ? `Edit ${inv?.number || 'invoice'}` : 'New invoice'} description="Customer details, line items, tax and delivery. Totals update as you type; the number is assigned automatically.">
         <Button variant="outline" onClick={() => save('draft')} loading={saving === 'draft'} disabled={!!saving}><Save />Save as draft</Button>
         <Button onClick={() => save(keepStatus)} loading={saving === keepStatus} disabled={!!saving}><CheckCircle2 />{id && inv?.status !== 'draft' ? 'Save invoice' : 'Save & mark as sent'}</Button>
@@ -433,7 +433,7 @@ export function InvoiceView() {
 
   return (
     <>
-      <Link to="/admin/invoices" className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" />All invoices</Link>
+      <Link to="/admin/invoices" className="mb-4 inline-flex min-h-6 items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" />All invoices</Link>
       <PageHeader eyebrow={<span className="inline-flex items-center gap-2">Invoice <InvoiceStatus value={inv.status} /></span>} title={inv.number} description={`${inv.customer_name}${inv.customer_company ? ` · ${inv.customer_company}` : ''} · issued ${fmtDate(inv.issue_date)}${inv.sent_at ? ` · last sent ${fmtDateTime(inv.sent_at)}` : ''}`}>
         <Tip content="Copy share link"><Button variant="outline" size="icon" aria-label="Copy share link" onClick={copy}><Copy /></Button></Tip>
         <Tip content="Open public page"><ButtonLink href={data.public_url} target="_blank" rel="noreferrer" variant="outline" size="icon" aria-label="Open public page"><ExternalLink /></ButtonLink></Tip>

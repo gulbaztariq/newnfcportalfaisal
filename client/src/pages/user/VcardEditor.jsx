@@ -126,7 +126,7 @@ export default function VcardEditor() {
 
   return (
     <>
-      <Link to="/user/vcards" className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" />My vCards</Link>
+      <Link to="/user/vcards" className="mb-4 inline-flex min-h-6 items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" />My vCards</Link>
       <PageHeader title={data.name} description={<a href={link} target="_blank" rel="noreferrer" className="text-primary hover:underline">{link.replace(/^https?:\/\//, '')}</a>}>
         <ButtonLink as={Link} to={`/user/vcards/${id}/analytics`} variant="outline"><BarChart3 />Analytics</ButtonLink>
         <ButtonLink href={`/api/user/vcards/${id}/qrcode`} variant="outline"><QrCode />QR code</ButtonLink>
