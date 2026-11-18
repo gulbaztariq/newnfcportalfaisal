@@ -76,7 +76,7 @@ export function Tip({ content, children, side = 'top', align = 'center', classNa
   const rich = content && typeof content === 'object' && !Array.isArray(content) && ('title' in content || 'description' in content);
   return (
     <T.Root>
-      <T.Trigger asChild>{typeof content === 'string' && isValidElement(children) && ['a', 'button'].includes(children.type) && !children.props['aria-label'] ? cloneElement(children, { 'aria-label': content }) : children}</T.Trigger>
+      <T.Trigger asChild>{typeof content === 'string' && isValidElement(children) && !children.props['aria-label'] && (['a', 'button'].includes(children.type) || (typeof children.type !== 'string' && (children.props.onClick || children.props.href || children.props.to))) ? cloneElement(children, { 'aria-label': content }) : children}</T.Trigger>
       <T.Portal>
         <T.Content side={side} align={align} sideOffset={8} collisionPadding={10}
           className={cn('tip-surface anim-tip z-[60] max-w-72 rounded-xl px-3 py-2 text-xs leading-snug text-white shadow-[0_12px_32px_-8px_rgb(0_0_0/0.45)]', rich && 'px-3.5 py-2.5', className)}>

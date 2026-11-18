@@ -86,7 +86,7 @@ function vcardCsp(nonce, clientUrl) {
   return [
     "default-src 'self'", `script-src 'self' 'nonce-${nonce}' https://www.googletagmanager.com`, "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
     "font-src 'self' data: https://fonts.gstatic.com", "img-src 'self' data: blob: https:", "media-src 'self'", 'frame-src https:',
-    "connect-src 'self' https://www.google-analytics.com https://*.google-analytics.com", "form-action 'self'", "base-uri 'self'", "object-src 'none'",
+    "connect-src 'self' https://fonts.googleapis.com https://fonts.gstatic.com https://www.google-analytics.com https://*.google-analytics.com", "form-action 'self'", "base-uri 'self'", "object-src 'none'",
     `frame-ancestors 'self' ${clientUrl}`, "manifest-src 'self'", "worker-src 'self'",
   ].join('; ');
 }

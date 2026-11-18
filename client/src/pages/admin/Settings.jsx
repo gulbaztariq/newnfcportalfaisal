@@ -66,7 +66,7 @@ export default function Settings() {
                 <>
                   {isActive && <motion.span layoutId="set-tab" className="absolute inset-0 rounded-xl bg-primary-soft" transition={{ type: 'spring', stiffness: 400, damping: 32 }} />}
                   <I className="relative size-4.5" />
-                  <span className="relative"><span className="block text-sm font-medium">{l}</span><span className="block text-xs opacity-70">{d}</span></span>
+                  <span className="relative"><span className="block text-sm font-medium">{l}</span><span className="block text-xs">{d}</span></span>
                 </>
               )}
             </NavLink>
@@ -106,7 +106,7 @@ function General({ st }) {
         <CardBody className="grid gap-4 sm:grid-cols-2">
           <Field label="App name" error={st.errors.app_name}><Input {...st.input('app_name')} /></Field>
           <Field label="Support e-mail" error={st.errors.email}><Input {...st.input('email')} type="email" /></Field>
-          <Field label="Phone"><div className="flex gap-2"><Input className="w-20" placeholder="+1" value={st.s.region_code || ''} onChange={(e) => st.set('region_code', e.target.value.replace(/\D/g, ''))} /><Input {...st.input('phone')} className="flex-1" /></div></Field>
+          <Field label="Phone"><div className="flex gap-2"><Input aria-label="Country code" className="w-20" placeholder="+1" value={st.s.region_code || ''} onChange={(e) => st.set('region_code', e.target.value.replace(/\D/g, ''))} /><Input aria-label="Phone number" {...st.input('phone')} className="flex-1" /></div></Field>
           <Field label="Default currency"><Select value={st.s.default_currency_id} onChange={(v) => st.set('default_currency_id', v)} options={st.currencies.map((c) => ({ value: c.id, label: `${c.currency_code} - ${c.currency_name}` }))} /></Field>
           <Field label="Address" className="sm:col-span-2"><Textarea {...st.input('address')} rows={2} /></Field>
         </CardBody>

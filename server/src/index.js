@@ -36,7 +36,7 @@ app.use(helmet({
       'style-src': ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com', 'https://accounts.google.com'],
       'font-src': ["'self'", 'data:', 'https://fonts.gstatic.com'],
       'img-src': ["'self'", 'data:', 'blob:', 'https:'],
-      'connect-src': ["'self'", 'https://www.google-analytics.com', 'https://*.google-analytics.com', 'https://accounts.google.com', 'https://graph.facebook.com', 'https://www.facebook.com', extraOrigins],
+      'connect-src': ["'self'", 'https://fonts.googleapis.com', 'https://fonts.gstatic.com', 'https://www.google-analytics.com', 'https://*.google-analytics.com', 'https://accounts.google.com', 'https://graph.facebook.com', 'https://www.facebook.com', extraOrigins],
       'frame-src': ["'self'", 'https://js.stripe.com', 'https://accounts.google.com', 'https://www.google.com', 'https://www.facebook.com', 'https://staticxx.facebook.com', extraOrigins],
       'frame-ancestors': ["'self'", config.clientUrl],
       'form-action': ["'self'"],

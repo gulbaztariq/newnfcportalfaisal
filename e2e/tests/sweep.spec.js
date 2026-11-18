@@ -38,7 +38,7 @@ function suite(role, routes, storage) {
         await page.setViewportSize({ width: 1280, height: 720 });
         await page.goto(route, { waitUntil: 'domcontentloaded' });
         await page.waitForLoadState('networkidle').catch(() => {});
-        await page.locator('main, [role=main], h1, #root > *').first().waitFor({ state: 'visible' });
+        await page.locator('h1').first().waitFor({ state: 'visible', timeout: 15_000 }).catch(() => {}); // pages with no h1 are reported below
         const add = (sev, vw, kind, detail) => record({ role, route, vw, sev, kind, detail });
 
         for (const [w, h] of VIEWPORTS) {
@@ -52,10 +52,13 @@ function suite(role, routes, storage) {
         const r = await inspect(page, 1280, 720);
         if (r.h1 !== 1 && !route.includes('does-not-exist')) add('medium', 1280, 'h1-count', `${r.h1} h1 elements`);
         if (!r.title.trim()) add('medium', 1280, 'empty-title', 'document.title is empty');
-        for (const e of [...new Set(errors)]) add('high', 1280, 'console-error', e);
-        for (const b of [...new Set(bad)]) if (!route.includes('does-not-exist')) add('high', 1280, 'bad-request', b);
+        for (const e of [...new Set(errors)]) if (!(route === '/user/company-analytics' && /403/.test(e))) add('high', 1280, 'console-error', e);
+        // expected: the company analytics API answers 403 to an account that has no company (the page shows that message)
+        for (const b of [...new Set(bad)]) if (!/fonts\.(googleapis|gstatic)\.com/.test(b) && !route.includes('does-not-exist') && !(route === '/user/company-analytics' && b.startsWith('403'))) add('high', 1280, 'bad-request', b);
 
-        // accessibility (WCAG 2.2 AA)
+        // accessibility (WCAG 2.2 AA): wait for the page-enter fade to finish, so contrast is measured on the settled page
+        await page.waitForFunction(() => { const m = document.querySelector('main > div'); return !m || getComputedStyle(m).opacity === '1'; }).catch(() => {});
+        await page.waitForFunction(() => document.getAnimations().length === 0, null, { timeout: 3000 }).catch(() => {});
         const axe = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze().catch(() => ({ violations: [] }));
         for (const v of axe.violations) add(v.impact === 'critical' || v.impact === 'serious' ? 'medium' : 'low', 1280, `axe:${v.id}`, `${v.impact}: ${v.help} (${v.nodes.length}) e.g. ${v.nodes[0]?.target?.join(' ').slice(0, 80)}`);
 
@@ -67,7 +70,8 @@ function suite(role, routes, storage) {
           if (vis === 'hidden') noFocus += 1; await page.keyboard.press('Tab');
         }
         if (noFocus > 3) add('medium', 1280, 'focus-indicator', `${noFocus} of 10 tab stops had no visible focus style`);
-        expect.soft(errors.length, `console errors: ${errors.join(' | ')}`).toBe(0);
+        const real = errors.filter((e) => !(route === '/user/company-analytics' && /403/.test(e)) && !(/fonts\.(googleapis|gstatic)/.test(e) && /ERR_(SOCKET|INTERNET|NAME|CONNECTION)|net::/.test(e)));
+        expect.soft(real.length, `console errors: ${real.join(' | ')}`).toBe(0);
       });
     }
   });

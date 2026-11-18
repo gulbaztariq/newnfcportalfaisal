@@ -57,7 +57,7 @@ export default function UserDashboard() {
       <div className="mt-8 grid gap-6 xl:grid-cols-3">
         <Reveal className="xl:col-span-2">
           <Card className="overflow-hidden">
-            <CardHeader icon={MessageSquareText} title="Latest enquiries" actions={<Link to="/user/enquiries" className="text-sm font-medium text-primary hover:underline">View all</Link>} />
+            <CardHeader icon={MessageSquareText} title="Latest enquiries" actions={<Link to="/user/enquiries" className="inline-flex min-h-8 items-center text-sm font-medium text-primary hover:underline">View all</Link>} />
             {!d.recentEnquiries.length ? <EmptyState icon={MessageSquareText} title="No enquiries yet" description="Messages from your card's contact form appear here." /> : (
               <ul className="divide-y divide-border">
                 {d.recentEnquiries.map((e) => (

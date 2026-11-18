@@ -18,7 +18,7 @@ export default function RichText({ value, onChange, height = 220, placeholder = 
   const editor = useEditor({
     extensions: [StarterKit.configure({ link: false }), Link.configure({ openOnClick: false, autolink: true })],
     content: value || '',
-    editorProps: { attributes: { class: 'tiptap prose-content px-4 py-3 text-sm', 'data-placeholder': placeholder } },
+    editorProps: { attributes: { class: 'tiptap prose-content px-4 py-3 text-sm', 'data-placeholder': placeholder, 'aria-label': placeholder || 'Text editor', 'aria-multiline': 'true' } },
     onUpdate: ({ editor: e }) => onChange(e.getHTML()),
   });
   useEffect(() => {

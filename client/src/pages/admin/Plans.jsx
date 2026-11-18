@@ -88,7 +88,7 @@ export function PlanForm() {
         <Button onClick={save} loading={saving}>Save plan</Button>
       </PageHeader>
       <div className="grid gap-6 xl:grid-cols-[1fr_1.1fr]">
-        <div className="space-y-6">
+        <div className="min-w-0 space-y-6">
           <Card>
             <CardHeader icon={Package} title="Plan details" />
             <CardBody className="grid gap-4 sm:grid-cols-2">
@@ -135,11 +135,13 @@ export function PlanForm() {
               {lookups.templates.map((t) => {
                 const on = v.template_ids.includes(t.id);
                 return (
-                  <button type="button" key={t.id} onClick={() => toggleTpl(t.id)} className={cn('group flex cursor-pointer items-center gap-3 rounded-xl border p-3 text-left transition', on ? 'border-primary bg-primary-soft/60' : 'border-border hover:border-primary/40')}>
-                    <span className={cn('grid size-5 shrink-0 place-items-center rounded-md border transition', on ? 'border-primary bg-primary text-white' : 'border-input')}>{on && <Check className="size-3.5" strokeWidth={3} />}</span>
-                    <span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium">{t.name}</span><span className="block truncate text-xs text-muted-foreground">{t.profession}</span></span>
-                    <a href={`/t/preview/${t.slug}`} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} aria-label={`Preview template ${t.name || t.slug}`} className="grid size-6 place-items-center text-muted-foreground opacity-0 transition group-hover:opacity-100 focus-visible:opacity-100 hover:text-primary"><Eye className="size-4" /></a>
-                  </button>
+                  <div key={t.id} className={cn('group relative flex items-center rounded-xl border transition', on ? 'border-primary bg-primary-soft/60' : 'border-border hover:border-primary/40')}>
+                    <button type="button" role="checkbox" aria-checked={on} onClick={() => toggleTpl(t.id)} className="flex min-w-0 flex-1 cursor-pointer items-center gap-3 rounded-xl p-3 text-left">
+                      <span className={cn('grid size-5 shrink-0 place-items-center rounded-md border transition', on ? 'border-primary bg-primary text-white' : 'border-input')}>{on && <Check className="size-3.5" strokeWidth={3} />}</span>
+                      <span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium">{t.name}</span><span className="block truncate text-xs text-muted-foreground">{t.profession}</span></span>
+                    </button>
+                    <a href={`/t/preview/${t.slug}`} target="_blank" rel="noreferrer" aria-label={`Preview template ${t.name || t.slug}`} className="mr-2 grid size-8 shrink-0 place-items-center rounded-lg text-muted-foreground opacity-0 transition group-hover:opacity-100 focus-visible:opacity-100 hover:text-primary"><Eye className="size-4" /></a>
+                  </div>
                 );
               })}
             </div>

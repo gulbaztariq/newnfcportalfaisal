@@ -293,7 +293,7 @@ export function Affiliation() {
       <Card className="relative mb-6 overflow-hidden p-6 md:p-8">
         <div className="absolute -top-20 -right-20 size-64 rounded-full bg-primary/15 blur-3xl" />
         <p className="text-sm font-medium text-muted-foreground">Your referral link</p>
-        <div className="mt-2 flex max-w-2xl gap-2"><Input readOnly value={d.link} className="flex-1 font-mono text-xs" /><Button onClick={copy}><Copy />Copy</Button></div>
+        <div className="mt-2 flex max-w-2xl gap-2"><Input readOnly aria-label="Your referral link" value={d.link} className="flex-1 font-mono text-xs" /><Button onClick={copy}><Copy />Copy</Button></div>
       </Card>
       <div className="grid gap-4 sm:grid-cols-3">
         <StatCard index={0} icon={Users} color="violet" label="Referred users" value={d.referrals.length} />

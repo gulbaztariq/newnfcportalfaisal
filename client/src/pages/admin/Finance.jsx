@@ -144,17 +144,17 @@ export function FinanceOverview() {
                   actions={<ButtonLink as={Link} to="/admin/finance/setup" size="sm" variant="outline">Manage</ButtonLink>} />
                 <CardBody>
                   {!d.accounts.length ? <EmptyState icon={Banknote} title="No accounts yet" description="Add your cash, bank and wallet accounts to track balances." /> : (
-                    <ul className="grid gap-3 sm:grid-cols-2">
+                    <div className="grid gap-3 sm:grid-cols-2">
                       {d.accounts.map((a, i) => (
                         <FadeIn key={a.id} delay={i * 0.04}>
-                          <li className="flex items-center gap-3 rounded-2xl border border-border p-4">
+                          <div className="flex items-center gap-3 rounded-2xl border border-border p-4">
                             <span className="grid size-10 place-items-center rounded-xl bg-primary-soft text-primary">{a.type === 'bank' ? <Landmark className="size-4.5" /> : <Wallet className="size-4.5" />}</span>
                             <div className="min-w-0 flex-1"><p className="truncate text-sm font-medium">{a.name}</p><p className="text-xs text-muted-foreground capitalize">{a.type}</p></div>
                             <Amount value={a.balance} />
-                          </li>
+                          </div>
                         </FadeIn>
                       ))}
-                    </ul>
+                    </div>
                   )}
                 </CardBody>
               </Card>

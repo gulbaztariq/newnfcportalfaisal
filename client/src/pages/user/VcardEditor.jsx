@@ -174,7 +174,7 @@ export default function VcardEditor() {
                   <CardHeader title="Contact details" />
                   <CardBody className="grid gap-4 sm:grid-cols-2">
                     {lk('email', <Field label={ll('E-mail', 'email')} error={form.errors.email}><Input {...form.input('email')} type="email" /></Field>)}
-                    {lk('phone', <Field label={ll('Phone', 'phone')}><div className="flex gap-2"><Input className="w-20" placeholder="+1" value={v.region_code || ''} onChange={(e) => form.set('region_code', e.target.value.replace(/\D/g, ''))} /><Input {...form.input('phone')} className="flex-1" /></div></Field>)}
+                    {lk('phone', <Field label={ll('Phone', 'phone')}><div className="flex gap-2"><Input aria-label="Country code" className="w-20" placeholder="+1" value={v.region_code || ''} onChange={(e) => form.set('region_code', e.target.value.replace(/\D/g, ''))} /><Input aria-label="Phone number" {...form.input('phone')} className="flex-1" /></div></Field>)}
                     {lk('alternative_email', <Field label={ll('Alternative e-mail', 'alternative_email')}><Input {...form.input('alternative_email')} type="email" /></Field>)}
                     {lk('alternative_phone', <Field label={ll('Alternative phone', 'alternative_phone')}><Input {...form.input('alternative_phone')} /></Field>)}
                     {lk('location', <Field label={ll('Location', 'location')}><Input {...form.input('location')} /></Field>)}

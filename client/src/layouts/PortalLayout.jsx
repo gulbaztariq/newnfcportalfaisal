@@ -192,10 +192,10 @@ export default function PortalLayout({ area }) {
             <p className="text-xs text-muted-foreground">{current?.group || (area === 'admin' ? 'Admin' : 'Portal')}</p>
             <p className="truncate text-sm font-semibold">{current?.label || 'Overview'}</p>
           </div>
-          <button type="button" aria-label="Search pages" onClick={() => setCmd(true)} className="ml-auto flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center gap-2.5 rounded-xl border border-border bg-muted/60 text-sm sm:w-full sm:max-w-xs sm:justify-start sm:px-3 text-muted-foreground transition hover:border-primary/40 md:ml-8">
+          <button type="button" aria-label="Search pages" onClick={() => setCmd(true)} className="ml-auto flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center gap-2.5 rounded-xl border border-border bg-muted/60 text-sm sm:w-auto sm:min-w-0 sm:flex-1 sm:max-w-xs sm:justify-start sm:px-3 text-muted-foreground transition hover:border-primary/40 md:ml-8">
             <Search className="size-4 shrink-0" /><span className="hidden min-w-0 flex-1 truncate whitespace-nowrap text-left sm:block">Go to a page...</span><span className="hidden shrink-0 sm:inline-flex"><Kbd>Ctrl K</Kbd></span>
           </button>
-          <div className="ml-auto flex items-center gap-1.5 md:ml-0">
+          <div className="ml-auto flex shrink-0 items-center gap-1.5 md:ml-0">
             {area === 'user' && <ButtonLink as={Link} to="/user/vcards/create" size="sm" className="hidden sm:inline-flex"><Plus />New vCard</ButtonLink>}
             <AnnouncementBell />
             <Tip content="View website"><a aria-label="View website" href={`${settings.app_url || ''}/`} target="_blank" rel="noreferrer" className="grid size-9 place-items-center rounded-xl text-muted-foreground transition hover:bg-muted hover:text-foreground"><Globe className="size-[18px]" /></a></Tip>
@@ -212,7 +212,7 @@ export default function PortalLayout({ area }) {
               <MenuTrigger asChild>
                 <button type="button" className="ml-1 flex cursor-pointer items-center gap-2 rounded-xl p-1 pr-2 transition hover:bg-muted">
                   <Avatar src={user.avatar} name={fullName(user)} size={32} />
-                  <span className="hidden text-left sm:block"><span className="block text-[13px] leading-tight font-semibold">{user.first_name}</span><span className="block text-[11px] leading-tight text-muted-foreground">{label(user.role)}</span></span>
+                  <span className="hidden text-left sm:block"><span className="block text-[13px] leading-tight font-semibold">{user.first_name}</span><span className="block text-[11px] leading-tight text-foreground/70">{label(user.role)}</span></span>
                   <ChevronDown className="hidden size-3.5 text-muted-foreground sm:block" />
                 </button>
               </MenuTrigger>

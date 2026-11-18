@@ -223,7 +223,7 @@ function MoneyTip({ active, payload, label }) {
 export function MoneyChart({ data, series, height = 300 }) {
   return (
     <ResponsiveContainer width="100%" height={height}>
-      <ComposedChart data={data} margin={{ top: 10, right: 8, left: -8, bottom: 0 }}>
+      <ComposedChart accessibilityLayer={false} data={data} margin={{ top: 10, right: 8, left: -8, bottom: 0 }}>
         <CartesianGrid strokeDasharray="4 4" vertical={false} />
         <XAxis dataKey="label" tickLine={false} axisLine={false} tickMargin={10} minTickGap={8} />
         <YAxis tickLine={false} axisLine={false} tickFormatter={pkrShort} width={48} />
@@ -246,7 +246,7 @@ export function MoneyDonut({ data, height = 220, center = 'total' }) {
     <div>
       <div className="relative">
         <ResponsiveContainer width="100%" height={height}>
-          <PieChart>
+          <PieChart accessibilityLayer={false}>
             <Tooltip content={<MoneyTip />} />
             <Pie data={data} dataKey="value" nameKey="name" innerRadius="68%" outerRadius="92%" paddingAngle={3} cornerRadius={6} stroke="none" animationDuration={1100}>
               {data.map((d, i) => <Cell key={d.name} fill={CHART_COLORS[i % CHART_COLORS.length]} />)}
