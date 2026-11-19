@@ -74,7 +74,9 @@ function categoryOf(t) {
   return 'Professional';
 }
 /** gallery metadata for any template slug */
-const metaOf = (t) => ({ category: categoryOf(t), description: META[t.slug]?.description || '', version: META[t.slug]?.version || 1, collection: META[t.slug]?.collection || 'classic', is_new: !!META[t.slug]?.is_new });
+// designs the gallery lists first (the Tap profile family)
+const FEATURED = new Set(Array.from({ length: 10 }, (_, i) => `vcard${171 + i}`));
+const metaOf = (t) => ({ featured: FEATURED.has(t.slug), category: categoryOf(t), description: META[t.slug]?.description || '', version: META[t.slug]?.version || 1, collection: META[t.slug]?.collection || 'classic', is_new: !!META[t.slug]?.is_new });
 
 const T = (slug, name, profession, layout, primary, secondary, background, text, font) => ({ slug, name, profession, layout, defaults: { primary, secondary, background, text, font } });
 

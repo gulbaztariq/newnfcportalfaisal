@@ -31,9 +31,9 @@ export default function TemplateGallery({ templates, value, onChange }) {
     const text = q.trim().toLowerCase();
     let rows = templates.filter((t) => (!text || `${t.name} ${t.profession} ${t.category} ${t.description || ''}`.toLowerCase().includes(text)) && (!cat || t.category === cat) && (!mine || t.allowed !== false));
     if (sort === 'favourites') rows = rows.filter((t) => favs.includes(t.slug));
-    const rank = (t) => (t.id === value ? 0 : t.collection === 'signature' ? 1 : 2);
+    const rank = (t) => (t.id === value ? 0 : t.featured ? 1 : t.collection === 'signature' ? 2 : 3);
     if (sort === 'recommended') rows = [...rows].sort((a, b) => rank(a) - rank(b) || a.id - b.id);
-    if (sort === 'new') rows = [...rows].sort((a, b) => Number(!!b.is_new) - Number(!!a.is_new) || b.id - a.id);
+    if (sort === 'new') rows = [...rows].sort((a, b) => Number(!!b.featured) - Number(!!a.featured) || Number(!!b.is_new) - Number(!!a.is_new) || b.id - a.id);
     if (sort === 'popular') rows = [...rows].sort((a, b) => (b.uses || 0) - (a.uses || 0) || a.id - b.id);
     return rows;
   }, [templates, q, cat, sort, mine, favs, value]);
