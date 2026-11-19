@@ -4,7 +4,7 @@ import { AnimatePresence, motion } from 'motion/react';
 import { Command } from 'cmdk';
 import * as D from '@radix-ui/react-dialog';
 import {
-  ChevronDown, ChevronsLeft, Search, Moon, Sun, Menu as MenuIcon, LogOut, User, KeyRound, Globe, Plus, Sparkles, CornerDownLeft, UserRoundX, Settings,
+  ChevronDown, ChevronsLeft, ChevronsUpDown, Search, Moon, Sun, Menu as MenuIcon, LogOut, User, KeyRound, Globe, Plus, Sparkles, CornerDownLeft, UserRoundX, Settings,
 } from 'lucide-react';
 import api from '@/lib/api';
 import { useAuth } from '@/lib/auth';
@@ -67,16 +67,41 @@ function NavItem({ item, collapsed, pathname, onNavigate }) {
 }
 
 function SidebarContent({ menu, collapsed, pathname, user, sub, home, onNavigate, appName }) {
+  // menu sections open and close one by one; the choice is remembered in this browser, and the section you are in opens by itself
+  const KEY = `nav-groups-${home}`;
+  const [openMap, setOpenMap] = useState(() => { try { return JSON.parse(localStorage.getItem(KEY) || '{}'); } catch { return {}; } });
+  const save = (m) => { setOpenMap(m); try { localStorage.setItem(KEY, JSON.stringify(m)); } catch { /* private mode */ } };
+  const hasActive = (g) => g.items.some((it) => isActive(pathname, it.to) || it.children?.some((c) => isActive(pathname, c.to)));
+  const activeGroup = menu.find(hasActive)?.group;
+  useEffect(() => { if (activeGroup && openMap[activeGroup] !== true) save({ ...openMap, [activeGroup]: true }); }, [activeGroup]); // eslint-disable-line
+  const isOpen = (g) => collapsed || openMap[g.group] === true;
+  const allOpen = menu.every((g) => openMap[g.group] === true);
+  const setAll = (v) => save(Object.fromEntries(menu.map((g) => [g.group, v])));
   return (
     <div className="flex h-full flex-col">
       <div className={cn('flex h-16 shrink-0 items-center px-5', collapsed && 'justify-center px-0')}>
         <Link to={home} onClick={onNavigate}>{collapsed ? <LogoMark /> : <Logo name={appName} />}</Link>
       </div>
-      <nav className="flex-1 space-y-5 overflow-y-auto px-3 pb-4">
+      {!collapsed && (
+        <div className="px-3 pb-2">
+          <button type="button" onClick={() => setAll(!allOpen)} className="flex h-8 w-full cursor-pointer items-center justify-between rounded-lg border border-border px-3 text-xs font-medium text-muted-foreground transition hover:bg-muted hover:text-foreground">
+            <span>{allOpen ? 'Close all sections' : 'Open all sections'}</span><ChevronsUpDown className="size-3.5" />
+          </button>
+        </div>
+      )}
+      <nav className="flex-1 space-y-1 overflow-y-auto px-3 pb-4">
         {menu.map((g) => (
           <div key={g.group}>
-            {!collapsed ? <p className="mb-1.5 px-3 text-[11px] font-semibold tracking-wider text-muted-foreground uppercase">{g.group}</p> : <div className="mx-auto mb-2 h-px w-6 bg-border" />}
-            <div className="space-y-0.5">{g.items.map((it) => <NavItem key={it.label} item={it} collapsed={collapsed} pathname={pathname} onNavigate={onNavigate} />)}</div>
+            {!collapsed ? (
+              <button type="button" aria-expanded={isOpen(g)} onClick={() => save({ ...openMap, [g.group]: !isOpen(g) })} className="flex h-8 w-full cursor-pointer items-center justify-between rounded-lg px-3 text-[11px] font-semibold tracking-wider text-muted-foreground uppercase transition hover:bg-muted">
+                <span>{g.group}</span><ChevronDown className={cn('size-3.5 transition-transform duration-300', isOpen(g) && 'rotate-180')} />
+              </button>
+            ) : <div className="mx-auto my-2 h-px w-6 bg-border" />}
+            <div className={cn('grid transition-[grid-template-rows] duration-300', isOpen(g) ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]')}>
+              <div className="min-h-0 overflow-hidden" inert={!isOpen(g) || undefined}>
+                <div className="space-y-0.5 pt-0.5 pb-2">{g.items.map((it) => <NavItem key={it.label} item={it} collapsed={collapsed} pathname={pathname} onNavigate={onNavigate} />)}</div>
+              </div>
+            </div>
           </div>
         ))}
       </nav>

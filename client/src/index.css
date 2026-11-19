@@ -246,3 +246,27 @@ html[data-site-theme="4"] { --primary: oklch(0.72 0.17 50); --primary-soft: oklc
 
 /* below-the-fold sections are not laid out or painted until they come near the screen (big saving on long pages) */
 .cv-auto { content-visibility: auto; contain-intrinsic-size: auto 900px; }
+
+/* number boxes have no spinner arrows (scrolling over a box can no longer change its value by accident) */
+input[type=number]{-moz-appearance:textfield;appearance:textfield}
+input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
+
+/* order wizard: smaller headings, boxes and buttons so a whole step fits on one laptop screen (same scale as the menu) */
+.wz{font-size:13px}
+.wz .text-sm{font-size:.8125rem;line-height:1.25rem}
+.wz .text-base{font-size:.875rem}
+.wz .text-lg,.wz .text-xl{font-size:1rem}
+.wz label,.wz .text-\[13px\]{font-size:12px}
+.wz input:not([type=checkbox]):not([type=radio]),.wz textarea,.wz [role=combobox]{font-size:12.5px}
+.wz .h-10{height:2.125rem}
+.wz .h-9{height:2rem}
+.wz .px-3\.5{padding-inline:.7rem}
+.wz .p-4{padding:.75rem}
+.wz .p-5{padding:.9rem}
+.wz .py-3{padding-block:.6rem}
+.wz .space-y-5>:not(:last-child){margin-bottom:.9rem!important}
+.wz .space-y-4>:not(:last-child){margin-bottom:.75rem!important}
+.wz .size-10{width:2.25rem;height:2.25rem}
+.wz .size-9{width:2rem;height:2rem}
+.wz .min-h-\[300px\]{min-height:0}
+.wz button svg{width:1em;height:1em}

@@ -209,7 +209,7 @@ async function pdf(inv) {
     block('Payment details', s.invoice_bank_details);
     block('Notes', inv.notes);
     block('Terms & conditions', inv.terms);
-    doc.fillColor('#9ca3af').font(F.r).fontSize(8).text(s.invoice_footer || `Thank you for your business - ${company}`, L, 790, { width: R - L, align: 'center' });
+    doc.fillColor('#9ca3af').font(F.r).fontSize(8).text(s.invoice_footer || `Thank you for your business - ${company}`, L, 770, { width: R - L, align: 'center', lineBreak: false }); // inside the bottom margin, so it never starts a blank second page
     doc.end();
   });
 }
