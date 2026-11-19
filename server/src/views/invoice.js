@@ -78,7 +78,7 @@ td{padding:12px;border-bottom:1px solid #eef0f4;vertical-align:top}
 .t-corporate .side:after{content:"";position:absolute;left:12mm;top:0;bottom:0;width:3mm;background:${a}33}
 .t-corporate th{background:#eef2f7;color:#0f172a;font-size:11px;text-transform:uppercase;letter-spacing:.08em}
 .t-corporate .grand td{background:#0f172a;color:#fff}
-@media print{html{background:#fff}.bar{display:none}.sheet{margin:0;box-shadow:none;width:auto;min-height:297mm}}
+@media print{html{background:#fff}.bar{display:none}.sheet{margin:0;box-shadow:none;width:auto;min-height:0;height:296mm;box-sizing:border-box;page-break-after:avoid;break-after:avoid}}
 @media screen and (max-width:820px){.sheet{width:100%;margin:0;padding:10mm 6mm 26mm}.meta,.notes{grid-template-columns:1fr}.t-modern .band,.t-bold .band{margin:0 -6mm;padding:10mm 6mm}}
 `;
 

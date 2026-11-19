@@ -77,3 +77,11 @@ test('a paid order needs a payment method; the account is stored on the order (c
   }
   const meta = await a.get('/api/admin/orders-meta'); assert.ok(meta.body.accounts.some((x) => x.id === acc.id));
 });
+
+test('an invoice PDF is one page (the footer no longer starts a blank second page)', async () => {
+  const o = await place();
+  const invoices = require('../src/services/invoices');
+  const inv = (await M.Invoice.findOne({ where: { nfc_order_id: o.id } })) || await invoices.fromOrder(o.id);
+  const buf = await invoices.pdf(inv); const b = Buffer.isBuffer(buf) ? buf : Buffer.concat(buf);
+  assert.equal((b.toString('latin1').match(/\/Type \/Page\b/g) || []).length, 1);
+});

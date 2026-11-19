@@ -76,14 +76,14 @@ r.get('/nfc-cards', (req, res, next) => (req.query.all === '1' ? next() : wrap(a
   if (req.query.visibility === 'shown') where.show_in_shop = true; else if (req.query.visibility === 'hidden') where.show_in_shop = false;
   if (req.query.sku === 'missing') where[Op.and] = [...(where[Op.and] || []), { [Op.or]: [{ sku: null }, { sku: '' }] }];
   if (req.query.category) where.category = req.query.category;
-  const { rows, count } = await M.NfcCard.findAndCountAll({ where, order: [['sort', 'ASC'], ['id', 'ASC']], limit: p.limit, offset: p.offset, include: [{ model: M.Plan, as: 'plan', attributes: ['id', 'name', 'frequency'] }, { model: M.OrderSource, as: 'order_source', attributes: ['id', 'name'], required: false }] });
+  const { rows, count } = await M.NfcCard.findAndCountAll({ where, order: [['id', 'DESC']], limit: p.limit, offset: p.offset, include: [{ model: M.Plan, as: 'plan', attributes: ['id', 'name', 'frequency'] }, { model: M.OrderSource, as: 'order_source', attributes: ['id', 'name'], required: false }] });
   const total = await M.NfcCard.count();
   const synced = await M.NfcCard.count({ where: { order_source_id: { [Op.ne]: null } } });
   res.json({ ...paged(rows, count, p), totals: { all: total, synced, shop: total - synced } });
 })(req, res, next)));
 r.use('/nfc-cards', crud(M.NfcCard, {
   fields: PRODUCT_FIELDS, booleans: ['status', 'featured', 'show_in_shop', 'track_stock', 'no_wholesale_tiers'], files: ['front_image', 'back_image'], folder: 'nfc',
-  rules: { name: 'required|max:120', price: 'required|numeric|minv:0', compare_price: 'numeric|minv:0', customization_price: 'numeric|minv:0', sku: 'max:80' }, search: ['name', 'sku', 'category'], order: [['sort', 'ASC'], ['id', 'ASC']],
+  rules: { name: 'required|max:120', price: 'required|numeric|minv:0', compare_price: 'numeric|minv:0', customization_price: 'numeric|minv:0', sku: 'max:80' }, search: ['name', 'sku', 'category'], order: [['id', 'DESC']],
   include: [{ model: M.Plan, as: 'plan', attributes: ['id', 'name', 'frequency'] }],
   beforeSave: async (data, _req, row) => {
     if (data.sku !== undefined) {

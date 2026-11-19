@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { toast } from 'sonner';
 import {
   ArrowLeft, ArrowRight, Check, User, Package, Truck, ClipboardCheck, Plus, Trash2, Store, Wand2, IdCard, Copy, ExternalLink,
-  BadgePercent, Banknote, ShoppingBag, Settings2, Sparkles, UserCheck, UserPlus, UserRound, Building2, Repeat,
+  Banknote, ShoppingBag, Settings2, Sparkles, UserCheck, UserPlus, UserRound, Building2, Repeat,
   Share2, Boxes, FlaskConical, Printer, Smartphone, Layers, CreditCard, CalendarClock, TrendingUp, RefreshCw, ShieldCheck, Plane,
 } from 'lucide-react';
 import api from '@/lib/api';
@@ -42,7 +42,7 @@ const TYPE_TITLE = Object.fromEntries(ORDER_TYPES.map((t) => [t.key, t.title]));
 const SOCIAL_VARIANTS = [{ value: 'static', label: 'Static link', kind: 'social_static' }, { value: 'dynamic', label: 'Dynamic link', kind: 'social_dynamic' }, { value: 'profile', label: 'All-in-one social profile', kind: 'social_profile' }];
 /** which product kinds an order type offers (an untagged product counts as a normal NFC product) */
 const kindsFor = (type, variant) => ({
-  nfc_profile: ['nfc_profile', null], printing: ['printing', null], reprint: ['reprint'], card_printing: ['blank_card', 'printing', null], digital: ['digital', null], renewal: ['__plan'], upgrade: ['__plan'], contact_tag: ['contact_tag'], airport_tag: ['airport_tag'],
+  nfc_profile: ['nfc_profile', null, 'plan'], printing: ['printing', null], reprint: ['reprint'], card_printing: ['blank_card', 'printing', null], digital: ['digital', null], renewal: ['__plan'], upgrade: ['__plan'], contact_tag: ['contact_tag'], airport_tag: ['airport_tag'],
   social: [SOCIAL_VARIANTS.find((v) => v.value === variant)?.kind].filter(Boolean).concat(variant ? [] : ['social_static', 'social_dynamic', 'social_profile']),
 }[type] || null); // null = every product (wholesale, samples)
 const afterDisc = (price, t, v) => Math.max(0, t === 'percent' ? price * (1 - Math.min(100, Number(v) || 0) / 100) : t === 'fixed' ? price - (Number(v) || 0) : price);
@@ -230,12 +230,12 @@ function Catalog({ meta, offered, lines, setLines, quote, valid, form, cur, samp
                 </div>
                 <div className="w-28">
                   <p className="text-[11px] text-muted-foreground">Your price</p>
-                  <Input className="h-9" type="number" min="0" step="0.01" aria-label={`Price of ${p.name}`} value={line?.unit_price ?? ''} placeholder={String(Math.round(unit * 100) / 100)}
-                    onChange={(e) => upsert(p, { unit_price: e.target.value })} />
+                  <Input className="h-9" type="text" inputMode="decimal" autoComplete="off" aria-label={`Price of ${p.name}`} value={line?.unit_price ?? ''} placeholder={String(Math.round(unit * 100) / 100)}
+                    onChange={(e) => upsert(p, { unit_price: e.target.value.replace(/[^\d.]/g, '').replace(/(\..*)\./g, '$1') })} />
                 </div>
                 <div className="flex items-center gap-1">
                   <Button size="icon-sm" variant="outline" onClick={() => setQty(p, qty - (qty > firstQty ? 1 : qty))} aria-label="Less" disabled={!qty}>-</Button>
-                  <Input className="h-9 w-16 text-center" type="number" min="0" max={form.order_type === 'sample' ? sampleMax : undefined} value={qty || ''} placeholder="0" aria-label={`Quantity of ${p.name}`} onChange={(e) => setQty(p, e.target.value)} />
+                  <Input className="h-9 w-16 text-center" type="text" inputMode="numeric" autoComplete="off" value={qty || ''} placeholder="0" aria-label={`Quantity of ${p.name}`} onChange={(e) => setQty(p, e.target.value)} />
                   <Button size="icon-sm" variant="outline" onClick={() => setQty(p, qty ? qty + 1 : firstQty)} aria-label="More">+</Button>
                 </div>
               </div>
@@ -364,7 +364,7 @@ export default function OrderWizard() {
     items: valid.map(({ product_id, variant, quantity, unit_price, customization }) => ({ product_id, variant, quantity, unit_price, customization })),
     order_type: form.order_type, social_variant: form.order_type === 'social' ? form.social_variant : undefined, sample_order_id: form.order_type === 'wholesale' ? form.sample_order?.id : undefined, plan_credit: form.order_type === 'upgrade' && form.plan_credit !== '' ? form.plan_credit : undefined,
     fulfilment: noShip(form.order_type) ? 'digital' : form.fulfilment, is_cod: !noShip(form.order_type) && form.fulfilment === 'delivery' && form.payment === 'cod', delivery_charges: form.delivery_charges,
-    discount_type: form.discount_type, discount_value: form.discount_value || 0,
+    discount_type: 'fixed', discount_value: 0,
   });
   // live price from the server (same rules as the saved order)
   useEffect(() => {
@@ -394,11 +394,15 @@ export default function OrderWizard() {
   const pickContact = (id) => { const p = people.find((x) => String(x.id) === String(id)); setValues((f) => ({ ...f, contact_id: id, name: p ? `${p.first_name} ${p.last_name}`.trim() : f.name, email: p?.email || f.email, phone: p?.contact || f.phone })); };
   const pickGuest = (g) => setValues((f) => ({ ...f, guest: g, ...(g ? { name: g.name, phone: g.phone || '', email: g.email || '', company_name: g.company_name || '', city: g.city || '', address: g.address || '' } : {}) }));
 
+  // delivery details are needed when the order goes by courier; an office pick-up or a digital order needs none
+  const courier = form.fulfilment === 'delivery' && !noShip(form.order_type);
   const checkList = [
     () => { const e = {}; if (form.order_type === 'social' && !form.social_variant) e.social_variant = 'Choose static, dynamic or all-in-one'; return e; },
-    () => { const e = {}; if (form.phone && !/^\+?[\d\s().-]{7,20}$/.test(String(form.phone).trim())) e.phone = 'Phone number is not valid. Use digits only, like 03001234567'; if (TAG_TYPES.includes(form.order_type) && String(form.phone).replace(/\D/g, '').length < 7) e.phone = 'The tag owner\'s phone number is needed: messages are sent there'; if (PLAN_CHANGE.includes(form.order_type) && !['existing', 'organisation'].includes(form.customer_type)) e.name = 'A renewal or upgrade is for an existing customer or organisation'; if (form.customer_type === 'existing' && !form.customer) e.user_id = 'Search and choose the customer'; if (form.customer_type === 'organisation' && !form.organisation) e.organisation_id = 'Search and choose the organisation'; if (!form.name.trim()) e.name = 'Enter the customer name'; if (form.customer_type === 'new' && !form.email) e.email = 'An account needs an e-mail. Tick "Dummy e-mail" if the customer has none.'; if (form.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) e.email = 'Enter a valid e-mail address'; return e; },
+    () => { const e = {}; if (form.phone && !/^\+?[\d\s().-]{7,20}$/.test(String(form.phone).trim())) e.phone = 'Phone number is not valid. Use digits only, like 03001234567'; if (TAG_TYPES.includes(form.order_type) && String(form.phone).replace(/\D/g, '').length < 7) e.phone = 'The tag owner\'s phone number is needed: messages are sent there'; if (PLAN_CHANGE.includes(form.order_type) && !['existing', 'organisation'].includes(form.customer_type)) e.name = 'A renewal or upgrade is for an existing customer or organisation'; if (form.customer_type === 'existing' && !form.customer) e.user_id = 'Search and choose the customer'; if (form.customer_type === 'organisation' && !form.organisation) e.organisation_id = 'Search and choose the organisation'; if (!form.name.trim()) e.name = 'Enter the customer name'; if (form.customer_type === 'new' && !form.email) e.email = 'An account needs an e-mail. Tick "Dummy e-mail" if the customer has none.'; if (form.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) e.email = 'Enter a valid e-mail address';
+      if (courier) { if (!String(form.phone || '').trim()) e.phone = 'Phone number is required for courier delivery'; if (!String(form.address || '').trim()) e.address = 'Delivery address is required for courier delivery'; if (!String(form.city || '').trim()) e.city = 'City is required for courier delivery'; }
+      return e; },
     () => { const e = {}; if (!valid.length) e.products = 'Add at least one product'; else if (valid.some((l) => products[l.product_id]?.variants?.length && !l.variant)) e.products = 'Choose an option for every product'; else if (valid.some((l) => l.unit_price !== '' && Number(l.unit_price) < 0)) e.products = 'Prices cannot be negative'; else if (form.order_type === 'sample' && valid.some((l) => Number(l.quantity) > sampleMax)) e.products = `Samples are limited to ${sampleMax} pieces per product`; return e; },
-    () => { const e = {}; if (form.payment === 'paid' && !form.payment_account_id) e.payment_account_id = 'Choose the payment method the money was received in'; if (form.discount_type === 'percent' && Number(form.discount_value) > 100) e.discount_value = 'Maximum 100%'; if (Number(form.discount_value) < 0) e.discount_value = 'Cannot be negative'; if (form.fulfilment !== 'collection' && !['digital', 'renewal', 'upgrade'].includes(form.order_type)) { if (!String(form.phone || '').trim()) e.phone = 'Phone number is required for courier delivery'; else if (!/^\+?[\d\s().-]{7,20}$/.test(String(form.phone).trim())) e.phone = 'Phone number is not valid'; if (!String(form.address || '').trim()) e.address = 'Delivery address is required for courier delivery'; if (!String(form.city || '').trim()) e.city = 'City is required for courier delivery'; } return e; },
+    () => { const e = {}; if (form.payment === 'paid' && !form.payment_account_id) e.payment_account_id = 'Choose the payment method the money was received in'; return e; },
     () => ({}),
   ];
   const checks = Object.fromEntries(['type', 'customer', 'products', 'delivery', 'review'].map((k, i) => [k, checkList[i]]));
@@ -479,7 +483,7 @@ export default function OrderWizard() {
         <span className="text-sm text-muted-foreground">Phone, WhatsApp, walk-in or other-website orders</span>
         {reorderOf && <Badge tone="primary"><Repeat className="size-3" />Reorder of {reorderOf}</Badge>}
       </div>
-      <div className="grid items-start gap-6 lg:grid-cols-[1fr_340px]">
+      <div className="wz grid items-start gap-5 lg:grid-cols-[1fr_320px]">
         <Card className="overflow-hidden">
           <div className="border-b border-border px-4 py-3"><Stepper screens={screens} step={step} done={done} onGo={go} /></div>
           <AnimatePresence mode="wait">
@@ -521,7 +525,7 @@ export default function OrderWizard() {
                       {TYPES.map(([k, l, text, I]) => (
                         <button key={k} type="button" onClick={() => setType(k)} className={cn('flex cursor-pointer items-center gap-2.5 rounded-2xl border-2 p-2.5 text-left transition', form.customer_type === k ? 'border-primary bg-primary-soft/50' : 'border-border hover:border-primary/40')}>
                           <span className={cn('grid size-9 shrink-0 place-items-center rounded-xl', form.customer_type === k ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground')}><I className="size-4" /></span>
-                          <span className="min-w-0"><span className="block truncate text-sm font-semibold">{l}</span><span className="block truncate text-[11px] text-muted-foreground">{text}</span></span>
+                          <span className="min-w-0"><span className="block text-sm leading-tight font-semibold">{l}</span><span className="block text-[11px] leading-tight text-muted-foreground">{text}</span></span>
                         </button>
                       ))}
                     </div>
@@ -556,7 +560,7 @@ export default function OrderWizard() {
                         </Field>
                       )}
                       <Field label={form.customer_type === 'organisation' ? 'Contact name' : 'Customer name'} required error={errors.name}><Input ref={nameRef} value={form.name} onChange={(e) => set('name', e.target.value)} onKeyDown={(e) => e.key === 'Enter' && next()} /></Field>
-                      <Field label="Phone" error={errors.phone}><Input value={form.phone} onChange={(e) => set('phone', e.target.value)} placeholder="Optional · 03xx xxxxxxx" /></Field>
+                      <Field label="Phone" required={courier || TAG_TYPES.includes(form.order_type)} error={errors.phone}><Input value={form.phone} onChange={(e) => set('phone', e.target.value)} placeholder={courier ? '03xx xxxxxxx' : 'Optional · 03xx xxxxxxx'} /></Field>
                       <Field label={<span className="flex w-full items-center justify-between gap-2">E-mail{['new', 'guest'].includes(form.customer_type) && <Checkbox id="dummy" checked={form.dummy} onChange={toggleDummy} label="Dummy e-mail" className="text-xs font-normal" />}</span>} required={form.customer_type === 'new'} error={errors.email} hint={form.dummy ? `On ${meta.dummy_domain} · no e-mails are sent to it` : undefined}>
                         <div className="flex gap-2">
                           <Input value={form.email} onChange={(e) => set('email', e.target.value)} type="email" className="flex-1" readOnly={form.dummy} placeholder={form.customer_type === 'new' ? 'Login e-mail' : 'Optional'} />
@@ -564,9 +568,15 @@ export default function OrderWizard() {
                         </div>
                       </Field>
                       {form.customer_type !== 'organisation' && <Field label="Company"><Input value={form.company_name} onChange={(e) => set('company_name', e.target.value)} placeholder="Optional" /></Field>}
-                      <Field label="City"><Input value={form.city} onChange={(e) => set('city', e.target.value)} placeholder="Optional" /></Field>
-                      <Field label="Address" className={form.customer_type === 'organisation' ? 'sm:col-span-2 xl:col-span-3' : 'sm:col-span-2'}><Input value={form.address} onChange={(e) => set('address', e.target.value)} placeholder="Optional · not needed for office collection" /></Field>
+                      <Field label="City" required={courier} error={errors.city}><Input value={form.city} onChange={(e) => set('city', e.target.value)} placeholder={courier ? 'City' : 'Optional'} /></Field>
+                      <Field label="Address" required={courier} error={errors.address} className={form.customer_type === 'organisation' ? 'sm:col-span-2 xl:col-span-3' : 'sm:col-span-2'}><Input value={form.address} onChange={(e) => set('address', e.target.value)} placeholder={courier ? 'Delivery address' : 'Optional · not needed for office collection'} /></Field>
                     </div>
+                    {!noShip(form.order_type) && (
+                      <div className="grid gap-2 sm:grid-cols-2">
+                        <ChoiceCard active={form.fulfilment === 'delivery'} onClick={() => { set('fulfilment', 'delivery'); if (form.payment === 'collection') set('payment', 'cod'); }} icon={Truck} title="Courier delivery" text="Sent by courier: phone, address and city are needed" />
+                        <ChoiceCard active={form.fulfilment === 'collection'} onClick={() => { set('fulfilment', 'collection'); if (form.payment === 'cod') set('payment', 'collection'); setErrors((e) => ({ ...e, phone: undefined, address: undefined, city: undefined })); }} icon={Store} title="Office collection" text="Customer collects: no delivery or COD charges" />
+                      </div>
+                    )}
                     {form.customer_type === 'new' && <p className="flex items-center gap-2 rounded-xl bg-primary-soft/50 px-3 py-2 text-xs text-muted-foreground"><Sparkles className="size-4 shrink-0 text-primary" />A login and a starter vCard are created and linked to this order. The plan comes from the products; an existing account with this e-mail is reused.</p>}
                   </div>
                 )}
@@ -606,12 +616,9 @@ export default function OrderWizard() {
 
                 {screen === 'delivery' && (
                   <div className="space-y-5">
-                    {noShip(form.order_type) ? (
-                      <div className="rounded-2xl bg-primary-soft/40 p-4 text-sm"><p className="flex items-center gap-2 font-semibold"><Smartphone className="size-4 text-primary" />{{ renewal: 'Renewal', upgrade: 'Upgrade' }[form.order_type] || 'Digital profile'}: nothing to ship</p><p className="mt-1 text-muted-foreground">No delivery or COD charges. Just record the payment.</p></div>
-                    ) : <div className="grid gap-3 sm:grid-cols-2">
-                      <ChoiceCard active={form.fulfilment === 'delivery'} onClick={() => { set('fulfilment', 'delivery'); if (form.payment === 'collection') set('payment', 'cod'); }} icon={Truck} title="Courier delivery" text="Sent by courier to the customer's address" />
-                      <ChoiceCard active={form.fulfilment === 'collection'} onClick={() => { set('fulfilment', 'collection'); if (form.payment === 'cod') set('payment', 'collection'); }} icon={Store} title="Office collection" text="Customer collects from the office. No delivery or COD charges." />
-                    </div>}
+                    {noShip(form.order_type)
+                      ? <div className="rounded-2xl bg-primary-soft/40 p-3 text-sm"><p className="flex items-center gap-2 font-semibold"><Smartphone className="size-4 text-primary" />{{ renewal: 'Renewal', upgrade: 'Upgrade' }[form.order_type] || 'Digital profile'}: nothing to ship</p><p className="mt-1 text-muted-foreground">No delivery or COD charges. Just record the payment.</p></div>
+                      : <p className="flex items-center gap-2 rounded-xl bg-muted/60 px-3 py-2 text-xs text-muted-foreground">{form.fulfilment === 'collection' ? <Store className="size-4 text-primary" /> : <Truck className="size-4 text-primary" />}<span><b className="text-foreground">{form.fulfilment === 'collection' ? 'Office collection' : 'Courier delivery'}</b> (chosen on the customer step)</span><button type="button" onClick={() => goTo('customer')} className="ml-auto cursor-pointer font-medium text-primary hover:underline">Change</button></p>}
                     <div className="grid gap-4 sm:grid-cols-2">
                       <Field label="Payment">
                         <Segmented id="pay" value={form.payment} onChange={(v) => set('payment', v)} options={noShip(form.order_type) ? [{ value: 'paid', label: 'Paid' }, { value: 'pending', label: 'Unpaid' }] : form.fulfilment === 'collection'
@@ -641,14 +648,6 @@ export default function OrderWizard() {
                         </div>
                       )}
                     </Field>
-                    <div className="rounded-2xl border border-border p-4">
-                      <p className="mb-3 flex items-center gap-2 text-sm font-semibold"><BadgePercent className="size-4 text-primary" />Discount</p>
-                      <div className="flex flex-wrap items-start gap-3">
-                        <Segmented id="dt" value={form.discount_type} onChange={(v) => set('discount_type', v)} options={[{ value: 'fixed', label: `Fixed (${cur})` }, { value: 'percent', label: 'Percent (%)' }]} />
-                        <Field error={errors.discount_value} className="w-40"><Input type="number" min="0" max={form.discount_type === 'percent' ? 100 : undefined} value={form.discount_value} onChange={(e) => set('discount_value', e.target.value)} placeholder={form.discount_type === 'percent' ? 'e.g. 10' : 'e.g. 500'} suffix={form.discount_type === 'percent' ? '%' : cur} /></Field>
-                        {quote?.discount > 0 && <Badge tone="success" className="mt-2">Saves {money(cur, quote.discount)}</Badge>}
-                      </div>
-                    </div>
                     <Field label="Internal note" hint="Only staff see this"><Textarea rows={2} value={form.admin_note} onChange={(e) => set('admin_note', e.target.value)} /></Field>
                   </div>
                 )}
@@ -667,7 +666,6 @@ export default function OrderWizard() {
                       ['Payment method', (meta.accounts || []).find((a) => String(a.id) === String(form.payment_account_id))?.name || '-'],
                       ['Sample credit', quote?.sample_credit > 0 ? money(cur, quote.sample_credit) : 'None'],
                       ...(form.order_type === 'upgrade' ? [['Credit for unused time', quote?.plan_credit > 0 ? money(cur, quote.plan_credit) : 'None']] : []),
-                      ['Discount', quote?.discount > 0 ? `${money(cur, quote.discount)}${quote.discount_type === 'percent' ? ` (${quote.discount_value}%)` : ''}` : 'None'],
                       ['Note', form.admin_note || '-'],
                     ]} />
                     <ReviewBlock title="Products" icon={Package} onEdit={() => goTo('products')} className="sm:col-span-2" rows={(quote?.lines || []).map((l) => [

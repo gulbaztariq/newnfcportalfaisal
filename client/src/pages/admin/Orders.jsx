@@ -16,7 +16,7 @@ import { cn } from '@/lib/cn';
 import { fmtDate, fmtDateTime, label } from '@/lib/format';
 import {
   PageHeader, TableCard, DataTable, SearchInput, FilterSelect, Action, Actions, Dialog, Sheet, Button, ButtonLink, Field, Input, Textarea, Select, Switch, SwitchRow,
-  ImageUpload, Badge, StatusBadge, EmptyState, Card, CardHeader, CardBody, Skeleton, Tip, Segmented, useList, useForm, run, confirm,
+  ImageUpload, Badge, StatusBadge, EmptyState, Card, CardHeader, CardBody, Skeleton, Tip, Segmented, Pagination, useList, useForm, run, confirm,
 } from '@/components/ui';
 
 export const rs = (v, cur = 'Rs') => `${cur} ${Number(v || 0).toLocaleString('en-US', { maximumFractionDigits: 2 })}`;
@@ -204,6 +204,36 @@ export function OrderDetail() {
             </CardBody>
           </Card>
 
+          <div className="grid gap-6 md:grid-cols-2">
+          <Card>
+            <CardHeader icon={Banknote} title="Payment" />
+            <CardBody className="space-y-3">
+              <div className="flex items-center justify-between text-sm"><span className="text-muted-foreground">Method</span><span className="font-medium">{paymentLabel(o)}</span></div>
+              <div className="flex items-center justify-between text-sm"><span className="text-muted-foreground">Status</span><Select className="w-36" value={o.payment_status} onChange={(v) => patch({ payment_status: v }, 'Payment updated')} options={['pending', 'paid', 'rejected'].map((v) => ({ value: v, label: label(v) }))} /></div>
+              {o.is_cod && !terminal && <SwitchRow title="COD settled by courier" description="Leopards has paid this amount to you" checked={o.cod_settled} onChange={(v) => patch({ cod_settled: v }, 'Updated')} />}
+            </CardBody>
+          </Card>
+
+          <Card>
+            <CardHeader title="Internal note" />
+            <CardBody><Textarea rows={3} defaultValue={o.admin_note || ''} onBlur={(e) => e.target.value !== (o.admin_note || '') && patch({ admin_note: e.target.value }, 'Note saved')} placeholder="Only visible to staff" /></CardBody>
+          </Card>
+          </div>
+          <div className="grid gap-6 md:grid-cols-2">
+          <Card>
+            <CardHeader icon={Link2} title="Dynamic links" description="QR / NFC links of this order - change their destination any time" actions={<Button size="xs" variant="outline" onClick={() => act('link', () => run(api.post(`/admin/orders/${id}/short-link`, {})))}><Plus />Add</Button>} />
+            <CardBody className="space-y-2">
+              {!d.links.length && <p className="text-sm text-muted-foreground">No link yet. One is created when you write the NFC chip.</p>}
+              {d.links.map((l) => (
+                <div key={l.id} className="flex items-center gap-2 rounded-xl border border-border px-3 py-2 text-sm">
+                  <span className="min-w-0 flex-1 truncate font-mono text-xs">{l.short_url}</span>
+                  <Tip content="Copy"><Button size="icon-sm" variant="ghost" onClick={() => copy(l.short_url)}><Copy /></Button></Tip>
+                  <Tip content="Edit destination"><ButtonLink as={Link} size="icon-sm" variant="ghost" to={`/admin/short-links?search=${l.code}`}><Pencil /></ButtonLink></Tip>
+                </div>
+              ))}
+            </CardBody>
+          </Card>
+
           <Card>
             <CardHeader icon={Palette} title="Design" description={o.design_type === 'ai' ? 'Designed by the customer with AI' : o.design_type === 'upload' ? 'Customer uploaded their own design' : 'Standard design'} />
             <CardBody className="space-y-4">
@@ -223,6 +253,7 @@ export function OrderDetail() {
               {!o.design_front && !o.design_file && !o.design_prompt && !o.customer_note && <p className="text-sm text-muted-foreground">No design files or notes.</p>}
             </CardBody>
           </Card>
+          </div>
 
           <Card>
             <CardHeader icon={MessageCircle} title="WhatsApp / SMS" description="Every step can notify the customer (Settings > WhatsApp & SMS)"
@@ -308,33 +339,6 @@ export function OrderDetail() {
             </CardBody>
           </Card>}
 
-          <Card>
-            <CardHeader icon={Banknote} title="Payment" />
-            <CardBody className="space-y-3">
-              <div className="flex items-center justify-between text-sm"><span className="text-muted-foreground">Method</span><span className="font-medium">{paymentLabel(o)}</span></div>
-              <div className="flex items-center justify-between text-sm"><span className="text-muted-foreground">Status</span><Select className="w-36" value={o.payment_status} onChange={(v) => patch({ payment_status: v }, 'Payment updated')} options={['pending', 'paid', 'rejected'].map((v) => ({ value: v, label: label(v) }))} /></div>
-              {o.is_cod && !terminal && <SwitchRow title="COD settled by courier" description="Leopards has paid this amount to you" checked={o.cod_settled} onChange={(v) => patch({ cod_settled: v }, 'Updated')} />}
-            </CardBody>
-          </Card>
-
-          <Card>
-            <CardHeader icon={Link2} title="Dynamic links" description="QR / NFC links of this order - change their destination any time" actions={<Button size="xs" variant="outline" onClick={() => act('link', () => run(api.post(`/admin/orders/${id}/short-link`, {})))}><Plus />Add</Button>} />
-            <CardBody className="space-y-2">
-              {!d.links.length && <p className="text-sm text-muted-foreground">No link yet. One is created when you write the NFC chip.</p>}
-              {d.links.map((l) => (
-                <div key={l.id} className="flex items-center gap-2 rounded-xl border border-border px-3 py-2 text-sm">
-                  <span className="min-w-0 flex-1 truncate font-mono text-xs">{l.short_url}</span>
-                  <Tip content="Copy"><Button size="icon-sm" variant="ghost" onClick={() => copy(l.short_url)}><Copy /></Button></Tip>
-                  <Tip content="Edit destination"><ButtonLink as={Link} size="icon-sm" variant="ghost" to={`/admin/short-links?search=${l.code}`}><Pencil /></ButtonLink></Tip>
-                </div>
-              ))}
-            </CardBody>
-          </Card>
-
-          <Card>
-            <CardHeader title="Internal note" />
-            <CardBody><Textarea rows={3} defaultValue={o.admin_note || ''} onBlur={(e) => e.target.value !== (o.admin_note || '') && patch({ admin_note: e.target.value }, 'Note saved')} placeholder="Only visible to staff" /></CardBody>
-          </Card>
           {d.movements.length > 0 && (
             <Card>
               <CardHeader icon={Boxes} title="Stock movements" />
@@ -422,12 +426,7 @@ export function Products() {
           ))}
         </div>
       )}
-      {meta && meta.last_page > 1 && (
-        <div className="mt-6 flex items-center justify-between gap-3 text-sm">
-          <span className="text-muted-foreground">Showing {(meta.page - 1) * meta.per_page + 1}-{Math.min(meta.page * meta.per_page, meta.total)} of {meta.total}</span>
-          <div className="flex items-center gap-2"><Button size="sm" variant="outline" disabled={meta.page <= 1} onClick={() => setPage(meta.page - 1)}>Previous</Button><span className="tabular-nums">Page {meta.page} of {meta.last_page}</span><Button size="sm" variant="outline" disabled={meta.page >= meta.last_page} onClick={() => setPage(meta.page + 1)}>Next</Button></div>
-        </div>
-      )}
+      {meta && meta.last_page > 1 && <Card className="mt-5"><Pagination meta={meta} onPage={(n) => { setPage(n); window.scrollTo({ top: 0, behavior: 'smooth' }); }} /></Card>}
       {editing && <ProductForm product={editing} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); load(); }} />}
       {costing && <ProductCosting product={costing} onClose={() => setCosting(null)} onSaved={load} />}
     </>
