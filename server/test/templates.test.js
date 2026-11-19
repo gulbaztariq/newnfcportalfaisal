@@ -28,10 +28,10 @@ const bodyOf = (html) => html.split('</style>').pop().split('<script')[0];
 const count = (html, re) => (html.match(re) || []).length;
 
 /* ------------------------------------------------ collection */
-test('signature collection: 30 designs, each with its own layout, name, category and description', () => {
-  assert.equal(SIG.length, 30);
-  assert.equal(new Set(SIG.map((t) => t.layout)).size, 30, 'every design has its own page structure');
-  assert.equal(new Set(SIG.map((t) => t.name)).size, 30);
+test('signature collection: 40 designs, each with its own layout, name, category and description', () => {
+  assert.equal(SIG.length, 40);
+  assert.equal(new Set(SIG.map((t) => t.layout)).size, 40, 'every design has its own page structure');
+  assert.equal(new Set(SIG.map((t) => t.name)).size, 40);
   for (const t of SIG) {
     const m = metaOf(t);
     assert.ok(CATEGORIES.includes(m.category), `${t.slug} category`);
@@ -42,7 +42,7 @@ test('signature collection: 30 designs, each with its own layout, name, category
   }
 });
 test('the 140 earlier templates are still in the catalogue, unchanged in number and order', () => {
-  assert.equal(TEMPLATES.length, 170);
+  assert.equal(TEMPLATES.length, 180);
   assert.deepEqual(TEMPLATES.slice(0, 140).map((t) => t.slug), Array.from({ length: 140 }, (_, i) => `vcard${i + 1}`));
   assert.ok(TEMPLATES.slice(0, 140).every((t) => !signature.ARCH[t.layout]));
   for (const t of TEMPLATES) assert.ok(CATEGORIES.includes(metaOf(t).category), t.slug);
@@ -194,4 +194,25 @@ test('default palettes of the signature designs keep body text readable (WCAG AA
     if (t.layout !== 'sxholo') assert.ok(custom.contrast(picked, primary) >= 4.5, `${t.slug} button text ${custom.contrast(picked, primary).toFixed(2)}`);
     assert.ok(custom.contrast(on, primary) >= 4.5, `${t.slug} best button text`);
   }
+});
+
+/* ------------------------------------------------ tap profile cards (signature5.js) */
+const TAP = TEMPLATES.filter((t) => /^sxtap/.test(t.layout));
+test('tap profile cards: ten designs, each with the Connect button, round actions and a My links sheet', () => {
+  assert.equal(TAP.length, 10);
+  for (const t of TAP) {
+    const body = bodyOf(page(t, { ...FULL, custom_links: [{ label: 'My <b>Portfolio</b>', url: 'https://example.com/work' }] }));
+    assert.match(body, /Connect with me/, t.slug); assert.match(body, /My links/, t.slug);
+    assert.equal(count(body, /class="tp-l[ "]|class="tp-r[ "]/g), 5, `${t.slug}: four networks and one custom link`);
+    assert.match(body, /data-k="instagram"/, t.slug);
+    assert.match(body, /contact\.vcf/, t.slug);
+    assert.ok(!body.includes('<b>Portfolio</b>'), `${t.slug}: link labels are escaped`);
+    assert.equal(count(body, /<h1\b/g), 1, `${t.slug}: one heading`);
+  }
+});
+test('tap profile cards: no links means no sheet, a link without a cover still renders, other languages are translated', () => {
+  const t = TAP[0];
+  const bare = bodyOf(page(t, { ...FULL, social_links: {}, custom_links: [] }));
+  assert.ok(!/My links/.test(bare)); assert.match(bare, /Connect with me/);
+  assert.match(bodyOf(page(t, { ...FULL, default_language: 'fr' })), /Me contacter/);
 });
