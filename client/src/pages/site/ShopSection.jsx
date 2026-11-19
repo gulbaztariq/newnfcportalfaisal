@@ -29,7 +29,7 @@ function ShopSectionInner({ limit }) {
     cfg.ai_design && [Wand2, 'Design your card with AI'],
   ].filter(Boolean);
   return (
-    <section id="shop" className="cv-auto relative overflow-hidden py-28">
+    <section className="cv-auto relative overflow-hidden py-28">
       <div className="pointer-events-none absolute inset-x-0 top-1/3 -z-10 mx-auto h-96 max-w-4xl rounded-full bg-linear-to-r from-violet-500/15 via-fuchsia-500/15 to-lime-300/15 blur-[120px]" />
       <div className="mx-auto max-w-6xl px-4 sm:px-6">
         <Reveal className="mx-auto mb-12 max-w-2xl text-center">

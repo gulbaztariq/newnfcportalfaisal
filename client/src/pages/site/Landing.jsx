@@ -151,7 +151,7 @@ function Professions({ templates }) {
     <section className="border-y border-border bg-card/50 py-8">
       <p className="mb-6 text-center text-xs font-semibold tracking-[0.2em] text-muted-foreground uppercase">Templates crafted for every profession</p>
       <Marquee duration={50}>
-        {list.map((p) => <span key={p} className="flex items-center gap-2 rounded-full border border-border bg-card px-4 py-2 text-sm font-medium whitespace-nowrap shadow-soft"><Sparkles className="size-3.5 text-primary" />{p}</span>)}
+        {list.map((p) => <span key={p} className="flex items-center gap-2 rounded-full border border-border bg-card px-4 py-2 text-sm font-medium whitespace-nowrap shadow-soft"><span aria-hidden className="size-1.5 rounded-full bg-primary" />{p}</span>)}
       </Marquee>
     </section>
   );
@@ -162,7 +162,7 @@ function Features({ features }) {
   if (!features.length) return null;
   const spans = ['md:col-span-2 md:row-span-2', '', '', 'md:col-span-2', '', ''];
   return (
-    <section id="features" className="cv-auto relative py-28">
+    <section className="cv-auto relative py-28">
       <div className="mx-auto max-w-6xl px-6">
         <SectionHead eyebrow="Features" title={<>Everything a paper card <span className="text-gradient">never could</span></>} text="Share instantly, update anytime, and see exactly who's engaging with your card." />
         <Stagger className="grid auto-rows-[minmax(200px,auto)] gap-4 md:grid-cols-4">
@@ -207,7 +207,7 @@ function HowItWorks() {
     { icon: Share2, title: 'Tap, scan or share', text: 'Share with an NFC card, QR code or link. Every update is live instantly, everywhere.' },
   ];
   return (
-    <section id="how" ref={ref} className="cv-auto relative overflow-hidden bg-zinc-950 py-28 text-white">
+    <section ref={ref} className="cv-auto relative overflow-hidden bg-zinc-950 py-28 text-white">
       <div className="bg-grid mask-radial absolute inset-0 opacity-20" />
       <div className="absolute -top-40 left-1/2 size-[600px] -translate-x-1/2 rounded-full bg-violet-600/30 blur-[140px]" />
       <div className="relative mx-auto max-w-6xl px-6">
@@ -240,7 +240,7 @@ function Templates({ templates }) {
   const list = templates.slice(0, 14);
   const by = (d) => scroller.current?.scrollBy({ left: d * 320, behavior: 'smooth' });
   return (
-    <section id="templates" className="cv-auto py-28">
+    <section className="cv-auto py-28">
       <div className="mx-auto max-w-6xl px-6">
         <div className="flex flex-wrap items-end justify-between gap-6">
           <SectionHead center={false} eyebrow={`${templates.length}+ templates`} title="Beautiful from the very first tap" text="Every template is live below. Pick one, then make every colour, font and section your own." />
@@ -288,7 +288,7 @@ function Stats({ templates, plans }) {
 function About({ about, appName }) {
   if (!about.length) return null;
   return (
-    <section id="about" className="cv-auto py-28">
+    <section className="cv-auto py-28">
       <div className="mx-auto max-w-6xl px-6">
         <SectionHead eyebrow="Why us" title={<>Why teams choose <span className="text-gradient">{appName}</span></>} />
         <div className="grid gap-5 md:grid-cols-3">
@@ -321,7 +321,7 @@ function Pricing({ plans, registerEnabled }) {
   const shown = plans.filter((p) => p.frequency === freq);
   const per = { monthly: '/month', yearly: '/year', unlimited: ' lifetime' };
   return (
-    <section id="pricing" className="cv-auto relative overflow-hidden bg-muted/40 py-28">
+    <section className="cv-auto relative overflow-hidden bg-muted/40 py-28">
       <div className="mx-auto max-w-6xl px-6">
         <SectionHead eyebrow="Pricing" title="Simple pricing that grows with you" text="Start free. Upgrade when you need more cards, templates and features." />
         {freqs.length > 1 && <div className="mb-12 flex justify-center"><Segmented id="price" value={freq} onChange={setFreq} options={freqs.map((f) => ({ value: f, label: f === 'unlimited' ? 'Lifetime' : f[0].toUpperCase() + f.slice(1) }))} /></div>}
@@ -372,7 +372,7 @@ function Testimonials({ testimonials }) {
     </figure>
   );
   return (
-    <section id="testimonials" className="cv-auto py-28">
+    <section className="cv-auto py-28">
       <SectionHead eyebrow="Testimonials" title="People love tapping into it" />
       <div className="space-y-5">
         <Marquee duration={60}>{list.map((t, i) => card(t, `a${i}`))}</Marquee>
@@ -386,7 +386,7 @@ function Testimonials({ testimonials }) {
 function Faq({ faqs }) {
   if (!faqs.length) return null;
   return (
-    <section id="faq" className="cv-auto py-28">
+    <section className="cv-auto py-28">
       <div className="mx-auto grid max-w-6xl gap-12 px-6 lg:grid-cols-[1fr_1.4fr]">
         <SectionHead center={false} eyebrow="FAQ" title="Questions? We've got answers." text="Can't find what you're looking for? Send us a message below." />
         <Reveal>
@@ -442,7 +442,7 @@ function ContactSection({ s }) {
     try { const { data } = await api.post('/public/contact', { ...f, recaptcha_token: await recaptchaToken(s, 'contact') }); toast.success(data.message); setSent(true); setF({ name: '', email: '', subject: '', message: '', website: '' }); } catch (ex) { setErrors(ex.errors || {}); toast.error(Object.values(ex.errors || {})[0] || ex.message); } finally { setBusy(false); }
   };
   return (
-    <section id="contact" className="cv-auto py-28">
+    <section className="cv-auto py-28">
       <div className="mx-auto grid max-w-6xl gap-10 px-6 lg:grid-cols-[1fr_1.3fr]">
         <div>
           <SectionHead center={false} eyebrow="Contact" title="Let's talk" text="Questions about plans, NFC cards or bulk orders for your team? We usually reply within a day." />
@@ -485,7 +485,7 @@ function ContactSection({ s }) {
 function BlogSection({ blogs, enabled }) {
   if (!enabled || !blogs?.length) return null;
   return (
-    <section id="blog" className="cv-auto py-28">
+    <section className="cv-auto py-28">
       <div className="mx-auto max-w-6xl px-6">
         <SectionHead eyebrow="Blog" title="Fresh from the blog" text="Ideas to network smarter and make every introduction count." />
         <Stagger className="grid gap-6 md:grid-cols-3">{blogs.map((b) => <StaggerItem key={b.id}><BlogCard b={b} /></StaggerItem>)}</Stagger>
@@ -511,6 +511,24 @@ function Banner({ s }) {
   );
 }
 
+/**
+ * Below-the-fold sections are only built when they come within reach of the screen. The page then starts with a few hundred
+ * elements instead of several thousand, which is most of the load-time work on a phone. The wrapper keeps the section's #id,
+ * so menu links and shared #links still land in the right place (the section builds as it scrolls into range).
+ */
+function Deferred({ id, minHeight = 720, children }) {
+  const ref = useRef(null);
+  const [on, setOn] = useState(false);
+  useEffect(() => {
+    if (on) return undefined;
+    if (!('IntersectionObserver' in window) || (id && window.location.hash === `#${id}`)) { setOn(true); return undefined; }
+    const io = new IntersectionObserver(([e]) => { if (e.isIntersecting) { setOn(true); io.disconnect(); } }, { rootMargin: '900px 0px' });
+    if (ref.current) io.observe(ref.current);
+    return () => io.disconnect();
+  }, [on, id]);
+  return <div ref={ref} id={id} style={on ? undefined : { minHeight }}>{on ? children : null}</div>;
+}
+
 export default function Landing() {
   const [d, setD] = useState(null);
   useEffect(() => { api.get('/public/landing').then(({ data }) => setD(data)); }, []);
@@ -526,18 +544,18 @@ export default function Landing() {
       <Navbar settings={s} />
       <Hero s={s} professions={professions.length ? professions : ['everyone']} />
       <Professions templates={d.templates} />
-      {s.front_sec_features !== '0' && <Features features={d.features} />}
-      <ShopSection />
-      <Stats templates={d.templates} plans={d.plans} />
-      <HowItWorks />
-      {s.front_sec_templates !== '0' && <Templates templates={d.templates} />}
-      {s.front_sec_about !== '0' && <About about={d.about} appName={s.app_name} />}
-      {s.front_sec_pricing !== '0' && <Pricing plans={d.plans} registerEnabled={reg} />}
-      {s.front_sec_testimonials !== '0' && <Testimonials testimonials={d.testimonials} />}
-      {s.front_sec_faqs !== '0' && <Faq faqs={d.faqs} />}
-      <BlogSection blogs={d.blogs} enabled={s.front_blog_enable !== '0'} />
-      <Cta registerEnabled={reg} />
-      {s.front_sec_contact !== '0' && <ContactSection s={s} />}
+      {s.front_sec_features !== '0' && <Deferred id="features"><Features features={d.features} /></Deferred>}
+      <Deferred id="shop" minHeight={500}><ShopSection /></Deferred>
+      <Deferred minHeight={300}><Stats templates={d.templates} plans={d.plans} /></Deferred>
+      <Deferred id="how"><HowItWorks /></Deferred>
+      {s.front_sec_templates !== '0' && <Deferred id="templates"><Templates templates={d.templates} /></Deferred>}
+      {s.front_sec_about !== '0' && <Deferred id="about"><About about={d.about} appName={s.app_name} /></Deferred>}
+      {s.front_sec_pricing !== '0' && <Deferred id="pricing"><Pricing plans={d.plans} registerEnabled={reg} /></Deferred>}
+      {s.front_sec_testimonials !== '0' && <Deferred id="testimonials"><Testimonials testimonials={d.testimonials} /></Deferred>}
+      {s.front_sec_faqs !== '0' && <Deferred id="faq"><Faq faqs={d.faqs} /></Deferred>}
+      <Deferred id="blog" minHeight={400}><BlogSection blogs={d.blogs} enabled={s.front_blog_enable !== '0'} /></Deferred>
+      <Deferred minHeight={400}><Cta registerEnabled={reg} /></Deferred>
+      {s.front_sec_contact !== '0' && <Deferred id="contact"><ContactSection s={s} /></Deferred>}
       <Footer settings={s} />
       <Banner s={s} />
       <SiteExtras settings={s} />

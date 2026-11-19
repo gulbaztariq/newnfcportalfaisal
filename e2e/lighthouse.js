@@ -22,6 +22,7 @@ const WORK = path.join(__dirname, '.work'); const OUT = path.join(WORK, 'lightho
     rows.push(row); fs.writeFileSync(path.join(OUT, `${label.replace(/\W+/g, '_')}-${mode}.json`), JSON.stringify(l)); console.log(JSON.stringify({ ...row, failed: row.failed.slice(0, 8) }));
   };
   for (const mode of modes) for (const p of pages) await run(`public${p}`, base + p, mode);
+  if (process.env.LH_PUBLIC_ONLY) { fs.writeFileSync(path.join(OUT, 'summary-live.json'), JSON.stringify(rows, null, 1)); await chrome.kill(); return; }
   for (const [role, ps] of Object.entries(authedPages)) {
     const st = JSON.parse(fs.readFileSync(path.join(WORK, `${role}.json`), 'utf8')); const cookie = st.cookies.map((c) => `${c.name}=${c.value}`).join('; ');
     for (const mode of modes) for (const p of ps) await run(`${role}${p}`, base + p, mode, cookie);
