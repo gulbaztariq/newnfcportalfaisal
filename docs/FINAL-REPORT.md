@@ -65,7 +65,17 @@ New: `Leads.jsx` (leads, integrations, webhooks, Google), `Signatures.jsx`. Chan
 
 ## 10. Testing
 
-Server suite: 337 of 338 pass. The one failure is the long-standing "LOAD: 300 concurrent page + API requests" test, which is timing-sensitive on this machine and passes on some runs. New test files: `leads-webhooks.test.js`, `team-brand.test.js`, `campaigns.test.js`, `signature.test.js`, `googlecontacts.test.js`, plus additions to `content.test.js` and `templates.test.js`. New screens were checked in the browser against a throwaway local database. **Not done:** a logged-in click-through of the new screens on production (no production login was used), and testing signatures pasted into real Gmail/Outlook or `.vcf` import on a real iPhone/Android.
+`npm test` in `server/` now runs the files one after another (`--test-concurrency=1`). Run in parallel, the machine's CPU was shared between files and the 300-request load test sometimes crossed its 3-second limit (3.02 s once); serially it always passes (p95 about 0.7 s).
+
+Result of the last full run: **363 of 363 pass** (about 84 s).
+
+- **Unit tests** (pure helpers, no server): `units-new.test.js` (phone formatting, vCard escaping and folding with multi-byte text, unsafe URL dropping, signature escaping and styles, webhook signing and address rules, Google person body and OAuth state, brand cleaning, CSV parsing, tag cleaning, source detection, private-IP boundaries).
+- **Feature tests** (real HTTP, throwaway database): `leads-webhooks`, `team-brand`, `campaigns`, `signature`, `googlecontacts` (Google mocked), plus additions to `content`, `templates` and `analytics`.
+- **Scenario test** `scenario.test.js`: one company story in 12 steps that adds and then changes data: company setup and update, team design, CSV check and import with a full-seats case, invited member sets a password, member fills in and then edits bank accounts and WhatsApp message, public card and `.vcf` checked, webhook and Google connected, visitors scan the QR, tap the NFC link, follow campaign links, send a form lead, subscribe and message on WhatsApp, lead status/tags/notes updated twice and searched and exported, analytics by channel and campaign, company analytics includes the member, owner changes the design and applies it to every card, lock/unlock/block/remove, and a second company that cannot see or change any of it.
+- **Browser walk-through on the throwaway database** (not production): a visitor sent a lead from the public card form; in the dashboard a webhook was added and a signed test delivery was received by a local listener; the lead was changed to Qualified with tags and a note, and the status counts updated.
+- **Phone width (375 px)**: Leads, Integrations, Email signature and Organisation have no sideways overflow.
+
+Not covered: production click-through with a real login, real Gmail/Outlook pasting, `.vcf` import on a real phone, real Google, a penetration test.
 
 ## 11. Known limitations
 
