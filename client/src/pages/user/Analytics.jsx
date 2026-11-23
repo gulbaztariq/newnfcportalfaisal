@@ -3,6 +3,8 @@ import { Link, Navigate, useParams, useSearchParams } from 'react-router-dom';
 import { motion } from 'motion/react';
 import { ResponsiveContainer, ComposedChart, Area, Line, XAxis, YAxis, CartesianGrid, Tooltip, AreaChart, PieChart, Pie, Cell, BarChart, Bar } from 'recharts';
 import { Eye, Users, MousePointerClick, UserPlus, MessageSquareText, Percent, TrendingUp, TrendingDown, Minus, Download, Lightbulb, Globe2, Smartphone, Clock, Filter, Link2, BarChart3, Share2, AlertTriangle, Info, CheckCircle2, ExternalLink, RefreshCw, ChevronDown, X, Printer, SlidersHorizontal, Search, ArrowUp, ArrowDown, ArrowUpDown, Repeat, Target, Layers, CalendarDays, Pencil, Building2, Armchair, UserCheck, IdCard, Trophy } from 'lucide-react';
+import { toast } from 'sonner';
+import { useAuth } from '@/lib/auth';
 import api from '@/lib/api';
 import { cn } from '@/lib/cn';
 import { PageHeader, Card, CardHeader, CardBody, Segmented, Select, Button, Badge, Skeleton, EmptyState, Tip, CountUp, Input, Menu, MenuTrigger, MenuContent, MenuItem, MenuLabel, MenuSeparator } from '@/components/ui';
@@ -178,16 +180,45 @@ function rangeFor(preset, custom) {
 const COMPARE = [{ value: 'previous', label: 'Previous period' }, { value: 'year', label: 'Same period last year' }, { value: 'none', label: 'No comparison' }];
 const GRAN = [{ value: 'auto', label: 'Auto' }, { value: 'day', label: 'Day' }, { value: 'week', label: 'Week' }, { value: 'month', label: 'Month' }];
 const ALL = { value: 'all', label: 'All' };
+
+/** builds a tagged link for a campaign (newsletter, ad, poster...) so its visits show up under Campaigns */
+function CampaignTools({ cards, rows, total, onPick, active }) {
+  const { settings } = useAuth();
+  const [b, setB] = useState({ alias: '', source: '', medium: '', campaign: '' });
+  const alias = b.alias || cards[0]?.alias || '';
+  const clean = (v) => v.replace(/[^\w .+@:/-]/g, '').slice(0, 80);
+  const qs = new URLSearchParams(Object.entries({ utm_source: b.source, utm_medium: b.medium, utm_campaign: b.campaign }).filter(([, v]) => v.trim()));
+  const url = alias ? `${settings?.app_url || window.location.origin}/${alias}${qs.toString() ? `?${qs}` : ''}` : '';
+  const copy = async () => { try { await navigator.clipboard.writeText(url); toast.success('Link copied'); } catch { toast.info(url); } };
+  return (
+    <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
+      <Section icon={Link2} title="Campaigns" description="Visits that came through a tagged link. Click one to filter">
+        {rows?.length ? <BarList rows={rows} total={total} onPick={onPick} active={active} /> : <p className="py-6 text-center text-sm text-muted-foreground">No tagged visits yet. Build a link on the right and use it in an ad, newsletter or poster.</p>}
+      </Section>
+      <Card className="xl:col-span-2">
+        <CardHeader icon={Link2} title="Campaign link builder" description="Add tags to your card link. Nothing to set up: visits are counted automatically." />
+        <CardBody className="grid gap-3 sm:grid-cols-2">
+          {cards.length > 1 && <div className="sm:col-span-2"><p className="mb-1 text-xs font-medium text-muted-foreground">Card</p><Select value={alias} onChange={(v) => setB({ ...b, alias: v })} options={cards.map((c) => ({ value: c.alias, label: c.name }))} /></div>}
+          <div><p className="mb-1 text-xs font-medium text-muted-foreground">Campaign name</p><Input value={b.campaign} onChange={(e) => setB({ ...b, campaign: clean(e.target.value) })} placeholder="expo-2026" /></div>
+          <div><p className="mb-1 text-xs font-medium text-muted-foreground">Source</p><Input value={b.source} onChange={(e) => setB({ ...b, source: clean(e.target.value) })} placeholder="newsletter, facebook, poster" /></div>
+          <div className="sm:col-span-2"><p className="mb-1 text-xs font-medium text-muted-foreground">Medium</p><Input value={b.medium} onChange={(e) => setB({ ...b, medium: clean(e.target.value) })} placeholder="email, cpc, print" /></div>
+          <div className="flex items-center gap-2 rounded-xl bg-muted/60 px-3 py-2 sm:col-span-2"><code className="min-w-0 flex-1 truncate text-xs">{url || 'Create a card first'}</code><Button size="sm" variant="outline" onClick={copy} disabled={!url}>Copy</Button></div>
+        </CardBody>
+      </Card>
+    </div>
+  );
+}
+
 const FILTERS = [
-  { key: 'channel', label: 'Channel', options: ['Direct / NFC / QR', 'Search', 'Social', 'Referral'].map((x) => ({ value: x, label: x })) },
+  { key: 'channel', label: 'Channel', options: ['QR scan', 'NFC / short link', 'Campaign link', 'Direct / NFC / QR', 'Search', 'Social', 'Referral'].map((x) => ({ value: x, label: x })) },
   { key: 'device', label: 'Device', options: [{ value: 'mobile', label: 'Mobile' }, { value: 'tablet', label: 'Tablet' }, { value: 'desktop', label: 'Desktop' }] },
   { key: 'os', label: 'System', options: ['iOS', 'Android', 'Windows', 'macOS', 'Linux', 'ChromeOS'].map((x) => ({ value: x, label: x })) },
   { key: 'browser', label: 'Browser', options: ['Chrome', 'Safari', 'Edge', 'Firefox', 'Samsung Internet', 'Opera', 'In-app browser'].map((x) => ({ value: x, label: x })) },
   { key: 'visitor', label: 'Visitors', options: [{ value: 'new', label: 'New (one day)' }, { value: 'returning', label: 'Returning (2+ days)' }] },
   { key: 'action', label: 'Action', options: [['save', 'Saved contact'], ['call', 'Calls'], ['email', 'E-mails'], ['whatsapp', 'WhatsApp'], ['map', 'Directions'], ['share', 'Shares'], ['social', 'Social links'], ['link', 'Custom links']].map(([value, label]) => ({ value, label })) },
 ];
-const INITIAL = { preset: '30', custom: { from: iso(addDays(new Date(), -29)), to: iso(new Date()) }, compare: 'previous', granularity: 'auto', card: 'all', cardName: '', member: 'all', channel: 'all', device: 'all', os: 'all', browser: 'all', source: 'all', visitor: 'all', action: 'all' };
-const FILTER_KEYS = ['channel', 'device', 'os', 'browser', 'source', 'visitor', 'action'];
+const INITIAL = { preset: '30', custom: { from: iso(addDays(new Date(), -29)), to: iso(new Date()) }, compare: 'previous', granularity: 'auto', card: 'all', cardName: '', member: 'all', channel: 'all', campaign: 'all', device: 'all', os: 'all', browser: 'all', source: 'all', visitor: 'all', action: 'all' };
+const FILTER_KEYS = ['channel', 'device', 'os', 'browser', 'source', 'visitor', 'action', 'campaign'];
 const fmtDay = (s, o = { day: 'numeric', month: 'short' }) => new Date(`${s}T12:00:00`).toLocaleDateString('en-GB', o);
 
 function download(name, rows) {
@@ -198,7 +229,7 @@ function download(name, rows) {
 const exporters = {
   daily: (d) => ['Traffic', [['Date', 'Views', 'Visitors', 'Actions', 'Leads', 'Previous views', 'Previous visitors', 'Previous actions'], ...d.series.map((p) => [p.date, p.views, p.visitors, p.actions, p.leads, p.previous, p.previousVisitors, p.previousActions])]],
   cards: (d) => ['Cards', [['Card', 'Link', 'Views', 'Change %', 'Visitors', 'Actions', 'Saved', 'Leads', 'Action rate %', 'Share of views %'], ...d.topCards.map((c) => [c.name, `/${c.alias}`, c.views, c.change, c.visitors, c.actions, c.saves, c.leads, c.conversion, c.share])]],
-  breakdown: (d) => ['Breakdown', [['Group', 'Name', 'Views'], ...[['Channel', d.channels], ['Source', d.sources], ['Device', d.devices], ['Browser', d.browsers], ['System', d.systems]].flatMap(([g, rows]) => rows.map((r) => [g, r.name, r.value])), ...d.actions.map((a) => ['Action', a.name, a.value])]],
+  breakdown: (d) => ['Breakdown', [['Group', 'Name', 'Views'], ...[['Channel', d.channels], ['Source', d.sources], ['Campaign', d.campaigns || []], ['Device', d.devices], ['Browser', d.browsers], ['System', d.systems]].flatMap(([g, rows]) => rows.map((r) => [g, r.name, r.value])), ...d.actions.map((a) => ['Action', a.name, a.value])]],
 };
 
 /* ------------------------------------------------------------------ extra pieces */
@@ -452,6 +483,7 @@ export function AnalyticsDashboard({ endpoint, admin = false, company = false, i
     ...(f.card !== 'all' ? [{ key: 'card', label: 'Card', value: cardName }] : []),
     ...FILTERS.filter((x) => f[x.key] !== 'all').map((x) => ({ key: x.key, label: x.label, value: x.options.find((o) => o.value === f[x.key])?.label || f[x.key] })),
     ...(f.source !== 'all' ? [{ key: 'source', label: 'Source', value: f.source }] : []),
+    ...(f.campaign !== 'all' ? [{ key: 'campaign', label: 'Campaign', value: f.campaign }] : []),
   ];
   const clear = (k) => set(k === 'card' ? { card: 'all', cardName: '' } : { [k]: 'all', ...(k === 'member' ? { card: 'all', cardName: '' } : {}) });
   const clearAll = () => set({ card: 'all', cardName: '', member: 'all', ...Object.fromEntries(FILTER_KEYS.map((k) => [k, 'all'])) });
@@ -580,8 +612,10 @@ export function AnalyticsDashboard({ endpoint, admin = false, company = false, i
                     <Section icon={Clock} title="Views by weekday" description="In your local time"><MiniBars data={d.byWeekday} x="name" /></Section>
                   </div>
 
+                  <CampaignTools cards={cards} rows={d.campaigns} total={total} onPick={(n) => pick('campaign', n)} active={f.campaign} />
+
                   <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
-                    <Section icon={Globe2} title="Where visitors come from" description="Click a channel to filter. Direct includes NFC taps and QR scans"><DonutLegend rows={d.channels} center={total} centerLabel="views" onPick={(n) => pick('channel', n)} /></Section>
+                    <Section icon={Globe2} title="Where visitors come from" description="Click a channel to filter. QR scans and NFC taps are counted from the codes made here; older printed codes show as NFC / short link"><DonutLegend rows={d.channels} center={total} centerLabel="views" onPick={(n) => pick('channel', n)} /></Section>
                     <Section icon={ExternalLink} title="Top sources" description="Click a site to filter"><BarList rows={d.sources} total={total} onPick={(n) => pick('source', n)} active={f.source} /></Section>
                     <Section icon={Smartphone} title="Devices" description="Click a device to filter"><DonutLegend rows={d.devices} center={total} centerLabel="views" onPick={(n) => pick('device', n.toLowerCase())} /></Section>
                   </div>
