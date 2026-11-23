@@ -2,7 +2,7 @@ import {
   LayoutDashboard, ShieldCheck, Users, LayoutTemplate, IdCard, Nfc, Package, Receipt, Banknote, ArrowLeftRight, TicketPercent,
   Network, Coins, Globe2, Languages, Mail, Newspaper, Settings, MessageSquareText, UserCircle, Wallet, Store, Link2, CalendarClock, MailCheck, MonitorPlay, Building2,
   ShoppingBag, FileText, TrendingUp, BookOpen, Boxes, Truck, Megaphone, History, QrCode, Landmark,
-  UserRound, BarChart3,
+  UserRound, BarChart3, Zap,
 } from 'lucide-react';
 import { can } from '@/lib/perms';
 
@@ -105,9 +105,10 @@ export const userMenu = (user) => filterMenu([
   },
   {
     group: 'Leads', items: [
-      { label: 'Enquiries', icon: MessageSquareText, to: '/user/enquiries', perm: 'leads' },
+      { label: 'Leads', icon: MessageSquareText, to: '/user/enquiries', perm: 'leads' },
       { label: 'Appointments', icon: CalendarClock, to: '/user/appointments', perm: 'leads' },
       { label: 'Subscribers', icon: MailCheck, to: '/user/subscribers', perm: 'leads' },
+      { label: 'Integrations', icon: Zap, to: '/user/webhooks', perm: 'leads' },
     ],
   },
   {

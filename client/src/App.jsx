@@ -35,7 +35,8 @@ const U = {
   Dashboard: lazy(() => import('@/pages/user/UserDashboard')),
   VcardList: lazyNamed(() => import('@/pages/user/Vcards'), 'VcardList'),
   VcardCreate: lazyNamed(() => import('@/pages/user/Vcards'), 'VcardCreate'),
-  Enquiries: lazyNamed(() => import('@/pages/user/Vcards'), 'UserEnquiries'),
+  Enquiries: lazyNamed(() => import('@/pages/user/Leads'), 'UserEnquiries'),
+  Webhooks: lazyNamed(() => import('@/pages/user/Leads'), 'Webhooks'),
   Settings: lazyNamed(() => import('@/pages/user/Account'), 'UserSettings'),
   ProductOrders: lazyNamed(() => import('@/pages/user/Account'), 'ProductOrders'),
   Editor: lazy(() => import('@/pages/user/VcardEditor')),
@@ -228,6 +229,7 @@ export default function App() {
                 <Route path="stores/:sid" element={<U.StoreEditor />} />
                 <Route path="store-orders" element={<U.StoreOrders />} />
                 <Route path="enquiries" element={<U.Enquiries />} />
+                <Route path="webhooks" element={<U.Webhooks />} />
                 <Route path="settings" element={<U.Settings />} />
                 <Route path="product-orders" element={<U.ProductOrders />} />
                 <Route path="nfc-orders" element={<UB.Orders />} />

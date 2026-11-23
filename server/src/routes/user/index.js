@@ -18,6 +18,7 @@ const extras = require('../../services/extras');
 const docs = require('../../services/documents');
 const labels = require('../../utils/labels');
 const mail = require('../../services/mail');
+const webhooks = require('../../services/webhooks');
 const fs = require('fs');
 
 const r = express.Router();
@@ -470,11 +471,34 @@ for (const [path, Model, fields, rules] of [
   }));
 }
 
+const LEAD_STATUS = ['new', 'contacted', 'qualified', 'won', 'lost'];
 r.get('/enquiries', wrap(async (req, res) => {
   const p = paginate(req);
   const ids = (await M.Vcard.findAll({ where: { user_id: req.user.id }, attributes: ['id'] })).map((v) => v.id);
-  const { rows, count } = await M.VcardEnquiry.findAndCountAll({ where: { vcard_id: ids }, include: [{ model: M.Vcard, attributes: ['id', 'name'] }], order: [['id', 'DESC']], limit: p.limit, offset: p.offset });
-  res.json(paged(rows, count, p));
+  const where = { vcard_id: ids };
+  if (LEAD_STATUS.includes(req.query.status)) where.status = req.query.status;
+  if (req.query.vcard_id && ids.includes(Number(req.query.vcard_id))) where.vcard_id = Number(req.query.vcard_id);
+  const q = String(req.query.search || '').trim().slice(0, 80);
+  if (q) where[Op.or] = ['name', 'email', 'phone', 'message', 'notes', 'tags'].map((f) => ({ [f]: { [Op.like]: `%${q.replace(/[%_]/g, '\\$&')}%` } }));
+  const { rows, count } = await M.VcardEnquiry.findAndCountAll({ where, include: [{ model: M.Vcard, attributes: ['id', 'name'] }], order: [['id', 'DESC']], limit: p.limit, offset: p.offset });
+  const tally = await M.VcardEnquiry.findAll({ where: { vcard_id: ids }, attributes: ['status', [fn('COUNT', col('id')), 'n']], group: ['status'], raw: true });
+  const body = paged(rows, count, p);
+  body.counts = Object.fromEntries(LEAD_STATUS.map((st) => [st, Number(tally.find((x) => (x.status || 'new') === st)?.n || 0)]));
+  res.json(body);
+}));
+/** follow-up fields the owner can change: status, tags, notes */
+r.patch('/enquiries/:id', wrap(async (req, res) => {
+  const e = await M.VcardEnquiry.findByPk(req.params.id, { include: [M.Vcard] });
+  if (!e || e.vcard.user_id !== req.user.id) fail(404, 'Not found');
+  const b = req.body || {}; const data = {};
+  if (b.status !== undefined) { if (!LEAD_STATUS.includes(b.status)) fail(422, 'Choose a valid status', { status: 'Choose a valid status' }); data.status = b.status; }
+  if (b.tags !== undefined) {
+    if (!Array.isArray(b.tags)) fail(422, 'Tags must be a list', { tags: 'Tags must be a list' });
+    data.tags = [...new Set(b.tags.map((t) => String(t).replace(/[\r\n]/g, ' ').trim().slice(0, 30)).filter(Boolean))].slice(0, 12);
+  }
+  if (b.notes !== undefined) data.notes = String(b.notes).slice(0, 4000) || null;
+  await e.update(data);
+  res.json({ message: 'Saved', data: e });
 }));
 r.delete('/enquiries/:id', wrap(async (req, res) => {
   const e = await M.VcardEnquiry.findByPk(req.params.id, { include: [M.Vcard] });
@@ -482,6 +506,39 @@ r.delete('/enquiries/:id', wrap(async (req, res) => {
   await e.destroy();
   res.json({ message: 'Deleted' });
 }));
+
+
+/* ================================================================ webhooks */
+const hookOut = (h) => ({ id: h.id, name: h.name, url: h.url, secret: h.secret, events: h.events || [], active: h.active, last_status: h.last_status, last_at: h.last_at, failures: h.failures });
+const hookFields = async (b) => {
+  validate(b, { name: 'required|max:80', url: 'required|max:500' });
+  const events = (Array.isArray(b.events) ? b.events : []).filter((e) => webhooks.EVENTS[e]);
+  if (!events.length) fail(422, 'Choose at least one event', { events: 'Choose at least one event' });
+  await webhooks.checkUrl(b.url).catch((e) => fail(422, e.message, { url: e.message }));
+  return { name: String(b.name).trim(), url: String(b.url).trim(), events };
+};
+const ownHook = async (req) => { const h = await M.Webhook.findByPk(req.params.id); if (!h || h.user_id !== req.user.id) fail(404, 'Not found'); return h; };
+r.get('/webhooks', wrap(async (req, res) => res.json({ data: (await M.Webhook.findAll({ where: { user_id: req.user.id }, order: [['id', 'DESC']] })).map(hookOut), events: webhooks.EVENTS })));
+r.post('/webhooks', wrap(async (req, res) => {
+  if (await M.Webhook.count({ where: { user_id: req.user.id } }) >= 10) fail(422, 'You can add up to 10 webhooks');
+  const h = await M.Webhook.create({ ...(await hookFields(req.body || {})), user_id: req.user.id, secret: webhooks.newSecret(), active: true });
+  res.status(201).json({ message: 'Webhook added', data: hookOut(h) });
+}));
+r.put('/webhooks/:id', wrap(async (req, res) => {
+  const h = await ownHook(req); const b = req.body || {};
+  const data = await hookFields({ name: b.name ?? h.name, url: b.url ?? h.url, events: b.events ?? h.events });
+  if (b.active !== undefined) { data.active = toBool(b.active); if (data.active) data.failures = 0; }
+  await h.update(data);
+  res.json({ message: 'Saved', data: hookOut(h) });
+}));
+r.post('/webhooks/:id/secret', wrap(async (req, res) => { const h = await ownHook(req); await h.update({ secret: webhooks.newSecret() }); res.json({ message: 'New signing secret created', data: hookOut(h) }); }));
+r.delete('/webhooks/:id', wrap(async (req, res) => { const h = await ownHook(req); await h.destroy(); res.json({ message: 'Deleted' }); }));
+r.post('/webhooks/:id/test', wrap(async (req, res) => {
+  const h = await ownHook(req);
+  const out = await webhooks.deliver(h, 'lead.created', { test: true, card: { id: 0, name: 'Sample card', alias: 'sample' }, lead: { id: 0, name: 'Sample Lead', email: 'lead@example.com', phone: '+923001234567', message: 'This is a test delivery from NFC Profile', status: 'new' } });
+  res.json({ message: out.ok ? 'Test delivered' : `Test failed: ${out.error}`, data: out });
+}));
+r.get('/webhooks/:id/deliveries', wrap(async (req, res) => { const h = await ownHook(req); res.json({ data: await M.WebhookDelivery.findAll({ where: { webhook_id: h.id }, order: [['id', 'DESC']], limit: 30 }) }); }));
 
 /* =========================================================== subscription */
 r.get('/plans', wrap(async (req, res) => {
@@ -611,8 +668,8 @@ r.get('/export/:what', wrap(async (req, res) => {
   const fmt = (x) => dayjs(x).format('YYYY-MM-DD HH:mm');
   let title; let cols; let rows;
   if (req.params.what === 'enquiries') {
-    title = 'Enquiries'; cols = [['vcard', 'vCard'], ['name', 'Name'], ['email', 'E-mail'], ['phone', 'Phone'], ['product_name', 'About'], ['message', 'Message'], ['date', 'Date']];
-    rows = (await M.VcardEnquiry.findAll({ where, raw: true, order: [['id', 'DESC']] })).map((x) => ({ ...x, vcard: names[x.vcard_id], date: fmt(x.created_at) }));
+    title = 'Enquiries'; cols = [['vcard', 'vCard'], ['name', 'Name'], ['email', 'E-mail'], ['phone', 'Phone'], ['product_name', 'About'], ['message', 'Message'], ['status', 'Status'], ['tags', 'Tags'], ['notes', 'Notes'], ['date', 'Date']];
+    rows = (await M.VcardEnquiry.findAll({ where, order: [['id', 'DESC']] })).map((e) => ({ ...e.toJSON(), vcard: names[e.vcard_id], tags: (e.tags || []).join(', '), status: e.status || 'new', date: fmt(e.created_at) }));
   } else if (req.params.what === 'appointments') {
     title = 'Appointments'; cols = [['vcard', 'vCard'], ['name', 'Name'], ['email', 'E-mail'], ['phone', 'Phone'], ['date', 'Date'], ['time', 'Time'], ['status', 'Status']];
     rows = (await M.Appointment.findAll({ where, raw: true, order: [['date', 'DESC']] })).map((x) => ({ ...x, vcard: names[x.vcard_id], time: `${x.from_time}-${x.to_time}` }));
