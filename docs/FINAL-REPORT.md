@@ -60,7 +60,8 @@ New: `Leads.jsx` (leads, integrations, webhooks, Google), `Signatures.jsx`. Chan
 - Ownership checks on every new route (leads, webhooks, signatures, brand, exports): another account gets 404 or 403; tests cover this.
 - Input: campaign tags restricted to short plain text with no leading formula characters; lead tags/notes length-limited; signature and team-file HTML fully escaped, no scripts; `.vcf` fields escaped so a visitor cannot inject properties.
 - Product sync and webhooks share one hardened private-address check.
-- Not done: no external penetration test, no dependency audit run in this session, no rate limit specific to webhook creation beyond the 10-per-account cap.
+- Dependency audit run (2026-11-23): `npm audit fix` applied; client has 0 known vulnerabilities and the server went from 10 to 3 moderate. The 3 left are `uuid` inside `exceljs` and `sequelize`; the advisory only applies when code passes its own buffer to uuid v3/v5/v6, which this app does not, and the only fix offered is a breaking downgrade (sequelize 3), so it was left alone.
+- Not done: no external penetration test, no rate limit specific to webhook creation beyond the 10-per-account cap.
 
 ## 10. Testing
 
@@ -72,7 +73,7 @@ Server suite: 337 of 338 pass. The one failure is the long-standing "LOAD: 300 c
 - Google Contacts has never been run against real Google.
 - Email signatures load photos/QR from your server, so recipients who block images will not see them.
 - Template count is 112 distinct layouts; further colour variants were removed on purpose.
-- Mobile layout of the new screens was checked at phone width only for Analytics and Signatures.
+- Phone width (375 px): Leads, Integrations, Email signature and Organisation were checked for horizontal overflow with none found.
 
 ## 12. Credentials and services needed
 
