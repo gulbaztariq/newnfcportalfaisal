@@ -16,11 +16,20 @@ const MAX_PAGES = 20;
 
 const isPrivateIp = (ip) => {
   if (net.isIPv4(ip)) {
-    const [a, b] = ip.split('.').map(Number);
-    return a === 10 || a === 127 || a === 0 || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 100 && b >= 64 && b <= 127);
+    const [a, b, c] = ip.split('.').map(Number);
+    return a === 10 || a === 127 || a === 0 || a >= 224 || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168)
+      || (a === 192 && b === 0 && c === 0) || (a === 198 && (b === 18 || b === 19)) || (a === 100 && b >= 64 && b <= 127);
   }
-  const x = ip.toLowerCase();
-  return x === '::1' || x.startsWith('fc') || x.startsWith('fd') || x.startsWith('fe80') || x.startsWith('::ffff:127.') || x.startsWith('::ffff:10.') || x.startsWith('::ffff:192.168.');
+  const x = String(ip).toLowerCase().replace(/^\[|\]$/g, '');
+  const mapped = /^(?:::ffff:|0:0:0:0:0:ffff:)(.+)$/.exec(x); // IPv4 inside IPv6, dotted (::ffff:10.0.0.1) or hex (::ffff:a00:1)
+  if (mapped) {
+    const m = mapped[1];
+    if (net.isIPv4(m)) return isPrivateIp(m);
+    const h = m.split(':').map((p2) => parseInt(p2, 16));
+    if (h.length === 2 && h.every(Number.isFinite)) return isPrivateIp([h[0] >> 8, h[0] & 255, h[1] >> 8, h[1] & 255].join('.'));
+    return true;
+  }
+  return x === '::' || x === '::1' || /^f[cd]/.test(x) || /^fe[89abc]/.test(x) || x.startsWith('ff');
 };
 /** only public http(s) hosts: an order source URL must never let the server reach internal services */
 async function assertPublicUrl(raw) {
@@ -208,4 +217,4 @@ async function syncAll(ids) {
   return results;
 }
 
-module.exports = { syncAll, syncSource, importPasted, fetchProducts, assertPublicUrl };
+module.exports = { syncAll, syncSource, importPasted, fetchProducts, assertPublicUrl, isPrivateIp };

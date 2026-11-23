@@ -260,7 +260,7 @@ r.put('/vcards/:id', vcardUpload, trackStorage, wrap(async (req, res) => {
     data.extras = {
       banner: { enabled: toBool(bn.enabled) && !!str(bn.title, 80), title: str(bn.title, 80), text: str(bn.text, 300), button: str(bn.button, 30), url: link },
       terms_checkbox: toBool(x.terms_checkbox), share_sheet: x.share_sheet === undefined ? true : toBool(x.share_sheet),
-      dob_icon: /^ri-[a-z0-9-]{2,40}$/.test(String(x.dob_icon || '')) ? x.dob_icon : '', store_id: storeId,
+      dob_icon: /^ri-[a-z0-9-]{2,40}$/.test(String(x.dob_icon || '')) ? x.dob_icon : '', store_id: storeId, whatsapp_text: str(x.whatsapp_text, 300).replace(/[\r\n]+/g, ' '),
     };
   } else delete data.extras;
   if (b.qr_settings) {

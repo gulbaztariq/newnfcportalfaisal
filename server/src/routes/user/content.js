@@ -313,6 +313,20 @@ r.post('/organisation/brand/apply', wrap(async (req, res) => {
   org.logEvent(owner.id, req.user, 'brand_applied', `Applied the team design to ${n} card(s)`, what);
   res.json({ message: `Updated ${n} card(s)`, updated: n });
 }));
+r.get('/organisation/members/signatures', wrap(async (req, res) => {
+  const owner = await orgOwner(req);
+  const sig = require('../../services/signature');
+  const members = await M.User.findAll({ where: { organisation_id: owner.id }, order: [['id', 'ASC']] });
+  const cards = await M.Vcard.findAll({ where: { user_id: members.map((m) => m.id) }, order: [['id', 'ASC']] });
+  const brand = (await M.Organisation.findOne({ where: { owner_id: owner.id } }))?.brand || {};
+  const esc = (t) => String(t ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  const blocks = members.map((m) => {
+    const card = cards.find((c) => c.user_id === m.id); if (!card) return '';
+    return `<section style="margin:0 0 28px;padding:0 0 22px;border-bottom:1px solid #e5e5e5;"><p style="font:12px Arial,sans-serif;color:#888;margin:0 0 10px;">${esc(m.fullName())} &lt;${esc(m.email)}&gt;</p>${sig.build(card, { style: req.query.style, color: brand.primary, photo: true, qr: false, social: true }, appUrl)}</section>`;
+  }).filter(Boolean);
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>Team email signatures</title></head><body style="margin:24px;font-family:Arial,sans-serif;"><h1 style="font-size:18px;">Team email signatures (${blocks.length})</h1><p style="color:#666;font-size:13px;">Open this file in a browser, select a signature, copy it and paste it into the person's email settings.</p>${blocks.join('')}</body></html>`;
+  res.type('html').set('Content-Disposition', 'attachment; filename="team-signatures.html"').send(html);
+}));
 r.get('/organisation/members/export', wrap(async (req, res) => {
   const owner = await orgOwner(req);
   const members = await M.User.findAll({ where: { organisation_id: owner.id }, order: [['id', 'ASC']] });

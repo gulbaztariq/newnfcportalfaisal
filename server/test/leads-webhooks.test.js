@@ -85,3 +85,33 @@ test('webhooks: test button reports failures, and 10 failures pause the hook', a
   const now = (await c.get('/api/user/webhooks')).body.data.find((x) => x.id === h.id); assert.equal(now.active, false); assert.equal(now.failures, 10);
   const rot = await c.post(`/api/user/webhooks/${h.id}/secret`); assert.notEqual(rot.body.data.secret, h.secret);
 });
+
+test('WhatsApp leads fire the same webhook as card-form leads', async () => {
+  const h = (await c.post('/api/user/webhooks', { name: 'WA', url: sinkUrl('/wa'), events: ['lead.created'] })).body.data;
+  await M.Webhook.update({ active: false }, { where: { user_id: u.id, id: { [require('sequelize').Op.ne]: h.id } } });
+  const line = await M.WhatsappLine.create({ user_id: u.id, vcard_id: card.id, label: 'Line', phone_number_id: `pn-${Date.now()}`, provider: 'qr', status: true });
+  hits = [];
+  await require('../src/services/whatsapp').receive(line, { waId: '923007778888', name: 'Hina', text: 'Price please', msgId: `wa-${Date.now()}` });
+  assert.ok(await wait(() => hits.length === 1), 'delivered');
+  const p = JSON.parse(hits[0].body); assert.equal(p.event, 'lead.created'); assert.equal(p.data.lead.name, 'Hina'); assert.match(p.data.lead.message, /Price please/);
+});
+test('WhatsApp button can open the chat with a prepared message', async () => {
+  await card.update({ phone: '3001234567', region_code: '92', social_links: {}, extras: { whatsapp_text: 'Hi, I saw your card & want details' } });
+  const html = await (await fetch(`${ctx.base}/${card.url_alias}`)).text();
+  assert.ok(html.includes('wa.me/923001234567?text=Hi%2C%20I%20saw%20your%20card%20%26%20want%20details'), 'prefilled');
+  await card.update({ extras: {} }); const plain = await (await fetch(`${ctx.base}/${card.url_alias}`)).text();
+  assert.ok(plain.includes('wa.me/923001234567') && !plain.includes('wa.me/923001234567?text='), 'no text when not set');
+  const save = await c.put(`/api/user/vcards/${card.id}`, { extras: { whatsapp_text: `x\r\ny`.repeat(200) } });
+  assert.equal(save.status, 200); assert.ok(!/[\r\n]/.test((await card.reload()).extras.whatsapp_text) && card.extras.whatsapp_text.length <= 300);
+});
+
+test('private-network addresses are recognised, including IPv6-mapped forms', () => {
+  const { isPrivateIp } = require('../src/services/productsync');
+  for (const ip of ['10.1.2.3', '127.0.0.1', '169.254.169.254', '172.20.0.1', '192.168.1.1', '100.64.0.1', '0.0.0.0', '224.0.0.1', '198.18.0.1', '::1', '::', 'fd00::1', 'fe80::1', '::ffff:10.0.0.1', '::ffff:a00:1', '::ffff:7f00:1', 'ff02::1']) assert.equal(isPrivateIp(ip), true, ip);
+  for (const ip of ['8.8.8.8', '1.1.1.1', '93.184.216.34', '2606:4700:4700::1111', '::ffff:8.8.8.8']) assert.equal(isPrivateIp(ip), false, ip);
+});
+test('a name that resolves to a private address is refused at send time (no request is made)', async () => {
+  const h = { id: 0, url: 'https://localhost.localdomain.invalid/x', secret: 's', failures: 0, update: async () => {} };
+  const out = await require('../src/services/webhooks').deliver(h, 'lead.created', {}, { log: false });
+  assert.equal(out.ok, false);
+});

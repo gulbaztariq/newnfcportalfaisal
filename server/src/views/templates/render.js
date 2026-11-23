@@ -162,7 +162,10 @@ function render({ v, template, services = [], gallery = [], testimonials = [], p
   const fullName = [v.first_name, v.last_name].filter(Boolean).join(' ') || v.name;
   const initials = fullName.split(/\s+/).map((w) => w[0]).slice(0, 2).join('').toUpperCase();
   const phone = v.phone ? `${v.region_code ? `+${v.region_code}` : ''}${v.phone}` : '';
-  const wa = v.social_links?.whatsapp || (phone ? `https://wa.me/${phone.replace(/\D/g, '')}` : '');
+  let wa = v.social_links?.whatsapp || (phone ? `https://wa.me/${phone.replace(/\D/g, '')}` : '');
+  // optional opening message, so the chat starts with text already typed (owner sets it under Advanced)
+  const waText = String(v.extras?.whatsapp_text || '').replace(/[\r\n]+/g, ' ').trim().slice(0, 300);
+  if (wa && waText && /^https:\/\/wa\.me\//i.test(wa) && !/[?&]text=/.test(wa)) wa += `${wa.includes('?') ? '&' : '?'}text=${encodeURIComponent(waText)}`;
   const title = v.site_title || `${fullName}${v.occupation ? ` - ${v.occupation}` : ''}`;
   const days = v.week_format === 'sun' ? [DAYS[6], ...DAYS.slice(0, 6)] : DAYS;
   const today = DAYS[(new Date().getDay() + 6) % 7][0];

@@ -62,6 +62,12 @@ async function addLead(line, waId, name, text) {
     return { lead: existing, created: false };
   }
   const lead = await M.VcardEnquiry.create({ vcard_id: line.vcard_id, line_id: line.id, wa_id: waId, source: 'whatsapp', name: (name || phone).slice(0, 120), phone, message: text.slice(0, 4000) });
+  // same follow-up as a lead from the card's form: owner's webhooks and Google Contacts
+  M.Vcard.findByPk(line.vcard_id, { attributes: ['id', 'name', 'url_alias', 'user_id'] }).then((v) => {
+    if (!v) return;
+    require('./webhooks').emit(v.user_id, 'lead.created', require('./webhooks').leadPayload(v, lead));
+    require('./googlecontacts').onLead(v.user_id, lead, v);
+  }).catch(() => {});
   return { lead, created: true };
 }
 

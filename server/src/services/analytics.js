@@ -34,7 +34,7 @@ function sourceOf(ref) {
 
 
 /** campaign tags from a request's query string: only short, plain values are kept (they are shown back in the dashboard) */
-const tagOf = (v) => { const t = String(Array.isArray(v) ? v[0] : v ?? '').replace(/[^\w .+@:/-]/g, '').trim().slice(0, 80); return t || null; };
+const tagOf = (v) => { const t = String(Array.isArray(v) ? v[0] : v ?? '').replace(/[^\w .+@:/-]/g, '').replace(/^[+@\-/:.]+/, '').trim().slice(0, 80); return t || null; }; // no leading + @ - (spreadsheet formulas)
 const VIA = ['qr', 'nfc', 'link'];
 function trackingOf(query = {}) {
   const via = String(Array.isArray(query.via) ? query.via[0] : query.via || '').toLowerCase();

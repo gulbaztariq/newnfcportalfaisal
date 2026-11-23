@@ -59,3 +59,9 @@ test('member export: CSV with card link and counts, owner only', async () => {
   assert.equal(r.status, 200); assert.match(r.text, /Name,E-mail,Role,Status,Job title,Cards,Card link,Views,Leads/); assert.match(r.text, /ayesha\.t@acme\.test/); assert.match(r.text, /Sales Lead/);
   assert.equal((await sc.get('/api/user/organisation/members/export')).status, 403);
 });
+test('team signatures: one downloadable file with each user\'s signature, owner only', async () => {
+  const r = await c.get('/api/user/organisation/members/signatures');
+  assert.equal(r.status, 200); assert.match(r.headers.get('content-disposition'), /team-signatures\.html/);
+  assert.match(r.text, /ayesha\.t@acme\.test/); assert.match(r.text, /Sales Lead/); assert.ok(!/<script/i.test(r.text)); assert.match(r.text, /utm_campaign=signature/);
+  assert.equal((await sc.get('/api/user/organisation/members/signatures')).status, 403);
+});

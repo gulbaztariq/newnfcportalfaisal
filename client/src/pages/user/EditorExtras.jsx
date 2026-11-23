@@ -445,6 +445,7 @@ function CardExtras({ v, form }) {
   useEffect(() => { api.get('/user/stores', { params: { limit: 100 } }).then(({ data }) => setStores(data.data || [])).catch(() => {}); }, []);
   return (
     <>
+      <Field label="WhatsApp opening message" hint="Optional. When someone taps your WhatsApp button the chat opens with this text already typed, e.g. Hi, I saw your card and would like to know more."><Input value={x.whatsapp_text || ''} maxLength={300} onChange={(e) => set({ whatsapp_text: e.target.value })} /></Field>
       <SwitchRow id="shr" title="Share menu" description="The Share button opens WhatsApp, Facebook, X, LinkedIn, Telegram, Snapchat, e-mail and copy link" checked={x.share_sheet !== false} onChange={(val) => set({ share_sheet: val })} />
       <SwitchRow id="trm" title="Ask visitors to accept your terms" description="Adds a checkbox to the enquiry and appointment forms. Needs Terms or a Privacy policy on the Legal tab." checked={!!x.terms_checkbox} onChange={(val) => set({ terms_checkbox: val })} />
       <SwitchRow id="bnr" title="Popup banner" description="A message with a button, shown once when someone opens your card" checked={!!bn.enabled} onChange={(val) => setBn({ enabled: val })} />
