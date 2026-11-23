@@ -302,6 +302,9 @@ const VcardEnquiry = sequelize.define('vcard_enquiry', {
   source: T.STRING(20), // null = the card's form, 'whatsapp' = came in on a WhatsApp number
   line_id: T.INTEGER, // which WhatsApp number it arrived on
   wa_id: T.STRING(30), // sender's WhatsApp number, used to keep one lead per person per number
+  status: { type: T.STRING(20), defaultValue: 'new' }, // new | contacted | qualified | won | lost
+  tags: json('tags', []), // owner's own labels, e.g. ['hot','expo-2026']
+  notes: T.TEXT, // owner's private follow-up notes
 });
 /** a WhatsApp Business number (Cloud API) whose incoming messages become leads on the chosen vCard */
 const WhatsappLine = sequelize.define('whatsapp_line', {
@@ -426,6 +429,27 @@ const VcardEvent = sequelize.define('vcard_event', {
   visitor: T.STRING(64), // same hash as the view, so one visitor can be followed across views and actions
   device: T.STRING(20),
 }, { updatedAt: false, indexes: [{ fields: ['vcard_id', 'created_at'] }] });
+/** an outgoing webhook: the owner's URL gets a signed JSON POST when something happens on their cards (Zapier, Make, n8n, own CRM) */
+const Webhook = sequelize.define('webhook', {
+  user_id: { type: T.INTEGER, allowNull: false },
+  name: { type: T.STRING(80), allowNull: false },
+  url: { type: T.STRING(500), allowNull: false },
+  secret: { type: T.STRING(64), allowNull: false }, // signs every request (HMAC-SHA256); shown to the owner so they can verify
+  events: json('events', []), // ['lead.created','appointment.created','subscriber.created']
+  active: { type: T.BOOLEAN, defaultValue: true },
+  last_status: T.INTEGER, // HTTP status of the latest delivery (0 = could not connect)
+  last_at: T.DATE,
+  failures: { type: T.INTEGER, defaultValue: 0 }, // consecutive failures; the webhook pauses itself after 10
+});
+const WebhookDelivery = sequelize.define('webhook_delivery', {
+  webhook_id: { type: T.INTEGER, allowNull: false },
+  event: { type: T.STRING(40), allowNull: false },
+  status: T.INTEGER,
+  ok: { type: T.BOOLEAN, defaultValue: false },
+  error: T.STRING(255),
+  ms: T.INTEGER,
+}, { updatedAt: false, indexes: [{ fields: ['webhook_id', 'id'] }] });
+Webhook.hasMany(WebhookDelivery, { foreignKey: 'webhook_id', onDelete: 'CASCADE' });
 for (const M of [VcardService, VcardGallery, VcardTestimonial, VcardEnquiry, VcardView, VcardEvent, VcardProduct, VcardOrder, Appointment, VcardBlog, VcardPage, VcardSubscriber]) {
   Vcard.hasMany(M, { foreignKey: 'vcard_id', onDelete: 'CASCADE' }); M.belongsTo(Vcard, { foreignKey: 'vcard_id' });
 }
@@ -670,7 +694,7 @@ const business = require('./business')(sequelize, json, { User, Vcard, NfcCard, 
 module.exports = {
   sequelize, PLAN_FEATURES, STAFF_ROLES, COMPANY_ROLES, ...business,
   User, Organisation, Currency, Country, State, City, Language, Template, Plan, CouponCode, Transaction, Subscription,
-  Vcard, VcardService, VcardGallery, VcardTestimonial, VcardEnquiry, WhatsappLine, WhatsappContact, WhatsappMessage, WaLease, UserSetting, VcardOrder, StoreSubscriber, StaffRole, VcardView, VcardEvent, VcardProduct, Appointment, VcardBlog, VcardPage, VcardSubscriber,
+  Vcard, VcardService, VcardGallery, VcardTestimonial, VcardEnquiry, Webhook, WebhookDelivery, WhatsappLine, WhatsappContact, WhatsappMessage, WaLease, UserSetting, VcardOrder, StoreSubscriber, StaffRole, VcardView, VcardEvent, VcardProduct, Appointment, VcardBlog, VcardPage, VcardSubscriber,
   FrontBlog, WhatsappStore, StoreCategory, StoreProduct, StoreOrder,
   NfcCard, NfcOrder, AffiliateUser, Withdrawal,
   Setting, Feature, AboutUs, FrontTestimonial, FrontFaq, Enquiry, EmailSubscription, SentEmail,

@@ -12,6 +12,7 @@ const settings = require('../services/settings');
 const subs = require('../services/subscription');
 const extras = require('../services/extras');
 const mail = require('../services/mail');
+const webhooks = require('../services/webhooks');
 const qrstyle = require('../services/qrstyle');
 const usersettings = require('../services/usersettings');
 const userpay = require('../services/userpay');
@@ -154,6 +155,7 @@ api.post('/vcards/:alias/enquiry', formLimiter, enquiryUpload, wrap(async (req, 
     vcard_id: v.id, name: req.body.name, email: req.body.email || null, phone: req.body.phone || null, message: req.body.message,
     product_name: req.body.product_name || null, attachment: v.enquiry_attachment && req.file ? fileUrl('enquiries', req.file) : null,
   });
+  webhooks.emit(v.user_id, 'lead.created', webhooks.leadPayload(v, e));
   if (req.body.message !== 'Downloaded the contact card') {
     mail.sendTemplate('enquiry_received', v.user.email, { vcard: v.name, customer: e.name, contact: [e.email, e.phone].filter(Boolean).join(' · '), message: e.message }).catch(() => {});
   }
@@ -164,7 +166,8 @@ api.post('/vcards/:alias/subscribe', formLimiter, wrap(async (req, res) => {
   const v = await liveVcard(req.params.alias);
   validate(req.body, { email: 'required|email|max:191' });
   await guardEmail(req.body.email);
-  await M.VcardSubscriber.findOrCreate({ where: { vcard_id: v.id, email: String(req.body.email).toLowerCase().trim() } });
+  const [sub, fresh] = await M.VcardSubscriber.findOrCreate({ where: { vcard_id: v.id, email: String(req.body.email).toLowerCase().trim() } });
+  if (fresh) webhooks.emit(v.user_id, 'subscriber.created', { card: { id: v.id, name: v.name, alias: v.url_alias }, subscriber: { email: sub.email, created_at: sub.created_at } });
   res.json({ message: 'Thanks for subscribing!' });
 }));
 
@@ -205,6 +208,7 @@ api.post('/vcards/:alias/appointments', formLimiter, wrap(async (req, res) => {
   if (methods.length && !methods.some((m) => m.id === req.body.method)) fail(422, 'Please choose how you want to pay', { method: 'Please choose how you want to pay' });
   const ap = await M.Appointment.create({ vcard_id: v.id, name: req.body.name, email: req.body.email || null, phone: req.body.phone || null, date: req.body.date, from_time: slot.from, to_time: slot.to, notes: req.body.notes || null, service_name: req.body.service_name || null, amount: price });
   mail.sendTemplate('appointment_booked', v.user.email, { customer: ap.name, date: ap.date, time: `${ap.from_time} - ${ap.to_time}`, vcard: v.name, notes: ap.notes || '' }).catch(() => {});
+  webhooks.emit(v.user_id, 'appointment.created', { card: { id: v.id, name: v.name, alias: v.url_alias }, appointment: { id: ap.id, name: ap.name, email: ap.email, phone: ap.phone, date: ap.date, from: ap.from_time, to: ap.to_time, notes: ap.notes, service: ap.service_name } });
   extras.slack('appointment', `New appointment on ${ap.date} ${ap.from_time} for ${v.name}`);
   if (methods.length) {
     let out;
