@@ -319,7 +319,7 @@ r.get('/vcards/:id/qrcode', wrap(async (req, res) => {
   const q = v.qr_settings || {};
   const opts = { width: Number(req.query.size) || q.size || 600, margin: q.margin ?? 2, errorCorrectionLevel: q.ec || 'M', color: { dark: q.fg || v.theme?.primary || '#000000', light: q.bg || '#ffffff' } };
   // QR codes point at the vCard's dynamic short link (destination can change later); ?direct=1 encodes the vCard URL itself
-  const target = req.query.direct === '1' ? `${appUrl}/${v.url_alias}` : require('../../services/shortlinks').shortUrl((await require('../../services/shortlinks').forVcard(v)).code);
+  const target = `${req.query.direct === '1' ? `${appUrl}/${v.url_alias}` : require('../../services/shortlinks').shortUrl((await require('../../services/shortlinks').forVcard(v)).code)}?via=qr`; // via=qr: scans are counted as QR scans
   if (req.query.format === 'svg' || qrstyle.isStyled(q)) {
     // styled codes (dots, rounded, round eyes) only exist as SVG; the editor turns it into a PNG in the browser when asked
     const out = qrstyle.svg(target, { fg: opts.color.dark, bg: opts.color.light, margin: opts.margin, ec: opts.errorCorrectionLevel, style: q.style, eye: q.eye, size: opts.width });

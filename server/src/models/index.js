@@ -422,6 +422,8 @@ const VcardView = sequelize.define('vcard_view', {
   user_agent: T.STRING(255),
   referrer: T.STRING(255),
   device: T.STRING(20),
+  via: T.STRING(8), // how the card was opened: qr | nfc | link (set by the QR code and NFC tag links)
+  utm_source: T.STRING(80), utm_medium: T.STRING(80), utm_campaign: T.STRING(80), // campaign tags in the link, e.g. ?utm_campaign=expo
 }, { updatedAt: false });
 /** what visitors do on a card: save contact, call, e-mail, WhatsApp, directions, share, social / custom link taps (no personal data, no IP) */
 const VcardEvent = sequelize.define('vcard_event', {

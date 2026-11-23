@@ -32,6 +32,25 @@ function sourceOf(ref) {
   return { source: host, channel: 'Referral' };
 }
 
+
+/** campaign tags from a request's query string: only short, plain values are kept (they are shown back in the dashboard) */
+const tagOf = (v) => { const t = String(Array.isArray(v) ? v[0] : v ?? '').replace(/[^\w .+@:/-]/g, '').trim().slice(0, 80); return t || null; };
+const VIA = ['qr', 'nfc', 'link'];
+function trackingOf(query = {}) {
+  const via = String(Array.isArray(query.via) ? query.via[0] : query.via || '').toLowerCase();
+  return { via: VIA.includes(via) ? via : null, utm_source: tagOf(query.utm_source), utm_medium: tagOf(query.utm_medium), utm_campaign: tagOf(query.utm_campaign) };
+}
+
+
+/** how the visit started: a QR scan / NFC tap (from the code's own link) beats the referrer; a campaign tag names the source of untracked visits */
+function opener(x) {
+  const out = {};
+  if (x.via === 'qr') Object.assign(out, { channel: 'QR scan', source: 'QR code' });
+  else if (x.via === 'nfc') Object.assign(out, { channel: 'NFC / short link', source: 'NFC / short link' });
+  else if (!x.referrer && (x.utm_source || x.utm_campaign)) Object.assign(out, { channel: 'Campaign link', source: x.utm_source || 'Campaign link' });
+  return out;
+}
+
 /** user agent -> { browser, os } (small, dependency-free; good enough for a dashboard) */
 function agentOf(ua) {
   const s = String(ua || '');
@@ -53,7 +72,7 @@ const tally = (rows, fn, top = 8) => {
   return [...list.slice(0, top - 1), { name: 'Other', value: rest }];
 };
 
-const FILTER_KEYS = ['channel', 'device', 'os', 'browser', 'source', 'visitor', 'action'];
+const FILTER_KEYS = ['channel', 'device', 'os', 'browser', 'source', 'visitor', 'action', 'campaign'];
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 /**
@@ -94,7 +113,7 @@ async function report(vcardIds, { days = 30, from, to, tz = 0, now = new Date(),
   const since = { [Op.or]: spans.map((s) => ({ created_at: s })) };
 
   const [views, events, enquiries, appointments, subscribers] = await Promise.all([
-    M.VcardView.findAll({ where: { ...cardWhere, ...since }, attributes: ['vcard_id', 'ip_hash', 'user_agent', 'referrer', 'device', 'created_at'], limit: MAX_ROWS, order: [['created_at', 'DESC']], raw: true }),
+    M.VcardView.findAll({ where: { ...cardWhere, ...since }, attributes: ['vcard_id', 'ip_hash', 'user_agent', 'referrer', 'device', 'via', 'utm_source', 'utm_medium', 'utm_campaign', 'created_at'], limit: MAX_ROWS, order: [['created_at', 'DESC']], raw: true }),
     M.VcardEvent.findAll({ where: { ...cardWhere, ...since }, attributes: ['vcard_id', 'type', 'label', 'visitor', 'created_at'], limit: MAX_ROWS, raw: true }),
     M.VcardEnquiry.findAll({ where: { ...cardWhere, ...since }, attributes: ['vcard_id', 'created_at'], raw: true }),
     M.Appointment.findAll({ where: { ...cardWhere, ...since }, attributes: ['vcard_id', 'created_at'], raw: true }),
@@ -109,7 +128,7 @@ async function report(vcardIds, { days = 30, from, to, tz = 0, now = new Date(),
   const dayKey = (r) => local(r.created_at).format('YYYY-MM-DD');
 
   // enrich every view once: browser, system, channel, source
-  const rich = views.map((x) => ({ ...x, ...agentOf(x.user_agent), ...sourceOf(x.referrer), dev: x.device ? x.device[0].toUpperCase() + x.device.slice(1) : 'Unknown', day: dayKey(x) }));
+  const rich = views.map((x) => ({ ...x, ...agentOf(x.user_agent), ...sourceOf(x.referrer), ...opener(x), dev: x.device ? x.device[0].toUpperCase() + x.device.slice(1) : 'Unknown', day: dayKey(x) }));
   const viewFilters = ['channel', 'device', 'os', 'browser', 'source', 'visitor'].filter((k) => f[k]);
 
   const build = (inSet) => {
@@ -121,6 +140,7 @@ async function report(vcardIds, { days = 30, from, to, tz = 0, now = new Date(),
     if (f.os) v = v.filter((x) => x.os === f.os);
     if (f.browser) v = v.filter((x) => x.browser === f.browser);
     if (f.source) v = v.filter((x) => x.source === f.source);
+    if (f.campaign) v = v.filter((x) => x.utm_campaign === f.campaign);
     // new = seen on one day in the period, returning = on two or more different days
     const daysOf = new Map();
     for (const x of v) { if (!x.ip_hash) continue; (daysOf.get(x.ip_hash) || daysOf.set(x.ip_hash, new Set()).get(x.ip_hash)).add(x.day); }
@@ -193,7 +213,10 @@ async function report(vcardIds, { days = 30, from, to, tz = 0, now = new Date(),
   const byHour = Array.from({ length: 24 }, (_, h) => ({ hour: h, value: heat.reduce((a, row) => a + row[h], 0) }));
 
   const sources = tally(cur.v, (x) => x.source, 10);
-  const channels = tally(cur.v, (x) => x.channel, 4);
+  const channels = tally(cur.v, (x) => x.channel, 6);
+  const tagged = cur.v.filter((x) => x.utm_campaign || x.utm_source || x.utm_medium);
+  const campaigns = tally(cur.v.filter((x) => x.utm_campaign), (x) => x.utm_campaign, 10);
+  const campaignSources = tally(tagged, (x) => [x.utm_source, x.utm_medium].filter(Boolean).join(' / ') || 'No source', 10);
   const devices = tally(cur.v, (x) => x.dev, 4);
   const browsers = tally(cur.v, (x) => x.browser, 7);
   const systems = tally(cur.v, (x) => x.os, 7);
@@ -261,7 +284,7 @@ async function report(vcardIds, { days = 30, from, to, tz = 0, now = new Date(),
   const insights = buildInsights({ kpis, byWeekday, byHour, channels, sources, days, devices, actionCounts, series, compare, filtered: viewFilters.length > 0 || !!f.action });
   return {
     range, granularity: g, filters: f, leadsNotFiltered: viewFilters.length > 0,
-    members, teamInsights, kpis, series, heatmap: heat, byWeekday, byHour, sources, channels, devices, browsers, systems, newVsReturning, actions: actionCounts, topLinks, leadParts, topCards, funnel, highlights, insights,
+    members, teamInsights, kpis, series, heatmap: heat, byWeekday, byHour, sources, channels, campaigns, campaignSources, devices, browsers, systems, newVsReturning, actions: actionCounts, topLinks, leadParts, topCards, funnel, highlights, insights,
     hasData: cur.v.length + cur.e.length + leads(cur) > 0, truncated,
   };
 }
@@ -272,7 +295,7 @@ function empty(range, f) {
   return {
     range, granularity: 'day', filters: f, leadsNotFiltered: false,
     kpis: { views: zero, visitors: zero, actions: zero, saves: zero, leads: zero, engagement: pctz, viewsPerVisitor: zero, returning: pctz, perDay: zero, conversion: pctz },
-    series: [], heatmap: Array.from({ length: 7 }, () => Array(24).fill(0)), byWeekday: [], byHour: [], sources: [], channels: [], devices: [], browsers: [], systems: [], newVsReturning: [], actions: [], topLinks: [], leadParts: [], topCards: [], funnel: [], highlights: {}, insights: [], hasData: false, truncated: false,
+    series: [], heatmap: Array.from({ length: 7 }, () => Array(24).fill(0)), byWeekday: [], byHour: [], sources: [], channels: [], campaigns: [], campaignSources: [], devices: [], browsers: [], systems: [], newVsReturning: [], actions: [], topLinks: [], leadParts: [], topCards: [], funnel: [], highlights: {}, insights: [], hasData: false, truncated: false,
   };
 }
 
@@ -305,4 +328,4 @@ function optionsFrom(q = {}) {
   return { days: q.days, from: q.from, to: q.to, tz: q.tz, compare: q.compare, granularity: q.granularity, filters };
 }
 
-module.exports = { report, optionsFrom, sourceOf, agentOf, ACTIONS, ACTION_LABELS };
+module.exports = { report, optionsFrom, trackingOf, sourceOf, agentOf, ACTIONS, ACTION_LABELS };

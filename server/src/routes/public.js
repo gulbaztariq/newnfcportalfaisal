@@ -336,7 +336,7 @@ function countView(req, v) {
   if (recentViews.size > 50000) recentViews.clear();
   const device = deviceOf(ua);
   M.Vcard.increment('views', { where: { id: v.id } }).catch(() => {});
-  M.VcardView.create({ vcard_id: v.id, ip_hash: ipHash, user_agent: ua.slice(0, 255), referrer: String(req.get('referer') || '').slice(0, 255), device }).catch(() => {});
+  M.VcardView.create({ vcard_id: v.id, ip_hash: ipHash, user_agent: ua.slice(0, 255), referrer: String(req.get('referer') || '').slice(0, 255), device, ...analytics.trackingOf(req.query) }).catch(() => {});
 }
 
 async function findVcard(alias) {
@@ -610,14 +610,14 @@ pages.get('/:alias/qr.svg', wrap(async (req, res, next) => {
   const v = await findVcard(req.params.alias);
   if (!v) return next();
   const q = v.qr_settings || {}; const hex = (c) => /^#[0-9a-f]{6}$/i.test(c || '');
-  res.set('Content-Type', 'image/svg+xml').set('Cache-Control', 'public, max-age=3600').send(qrstyle.svg(`${appUrl}/${v.url_alias}`, { fg: hex(q.fg) ? q.fg : hex(v.theme?.primary) ? v.theme.primary : '#000000', bg: q.bg, margin: q.margin ?? 1, ec: q.ec, style: q.style, eye: q.eye, size: 480 }));
+  res.set('Content-Type', 'image/svg+xml').set('Cache-Control', 'public, max-age=3600').send(qrstyle.svg(`${appUrl}/${v.url_alias}?via=qr`, { fg: hex(q.fg) ? q.fg : hex(v.theme?.primary) ? v.theme.primary : '#000000', bg: q.bg, margin: q.margin ?? 1, ec: q.ec, style: q.style, eye: q.eye, size: 480 }));
 }));
 pages.get('/:alias/qr.png', wrap(async (req, res, next) => {
   const v = await findVcard(req.params.alias);
   if (!v) return next();
   const q = v.qr_settings || {};
   if (qrstyle.isStyled(q)) return res.redirect(302, `/${encodeURIComponent(v.url_alias)}/qr.svg`);
-  const png = await QRCode.toBuffer(`${appUrl}/${v.url_alias}`, { width: 480, margin: q.margin ?? 1, errorCorrectionLevel: q.ec || 'M', color: { dark: /^#[0-9a-f]{6}$/i.test(q.fg || '') ? q.fg : /^#[0-9a-f]{6}$/i.test(v.theme?.primary || '') ? v.theme.primary : '#000000', light: /^#[0-9a-f]{6}$/i.test(q.bg || '') ? q.bg : '#ffffff' } });
+  const png = await QRCode.toBuffer(`${appUrl}/${v.url_alias}?via=qr`, { width: 480, margin: q.margin ?? 1, errorCorrectionLevel: q.ec || 'M', color: { dark: /^#[0-9a-f]{6}$/i.test(q.fg || '') ? q.fg : /^#[0-9a-f]{6}$/i.test(v.theme?.primary || '') ? v.theme.primary : '#000000', light: /^#[0-9a-f]{6}$/i.test(q.bg || '') ? q.bg : '#ffffff' } });
   res.set('Content-Type', 'image/png').set('Cache-Control', 'public, max-age=3600').send(png);
 }));
 
