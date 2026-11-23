@@ -306,6 +306,7 @@ const VcardEnquiry = sequelize.define('vcard_enquiry', {
   status: { type: T.STRING(20), defaultValue: 'new' }, // new | contacted | qualified | won | lost
   tags: json('tags', []), // owner's own labels, e.g. ['hot','expo-2026']
   notes: T.TEXT, // owner's private follow-up notes
+  google_contact: T.STRING(100), // Google Contacts resource name once the lead was added there
 });
 /** a WhatsApp Business number (Cloud API) whose incoming messages become leads on the chosen vCard */
 const WhatsappLine = sequelize.define('whatsapp_line', {

@@ -325,7 +325,7 @@ function MailSettings({ st }) {
 
 function Integrations({ st }) {
   const keys = ['login_otp_enable', 'enforce_2fa_staff', 'require_totp_staff', 'require_totp_company', 'max_login_attempts', 'lockout_minutes', 'email_verification_enable', 'blocked_email_domains', 'recaptcha_enable', 'recaptcha_site_key', 'recaptcha_secret', 'recaptcha_min_score',
-    'google_login_enable', 'google_client_id', 'facebook_login_enable', 'facebook_app_id', 'facebook_app_secret', 'slack_enable', 'slack_webhook_url', 'slack_events', 'ai_enable', 'anthropic_api_key'];
+    'google_login_enable', 'google_client_id', 'google_client_secret', 'facebook_login_enable', 'facebook_app_id', 'facebook_app_secret', 'slack_enable', 'slack_webhook_url', 'slack_events', 'ai_enable', 'anthropic_api_key'];
   const events = String(st.s.slack_events || '').split(',').filter(Boolean);
   const toggleEvent = (e) => st.set('slack_events', (events.includes(e) ? events.filter((x) => x !== e) : [...events, e]).join(','));
   const [testing, setTesting] = useState(false);
@@ -364,6 +364,7 @@ function Integrations({ st }) {
         <CardBody className="space-y-4">
           <SwitchRow title="Enable Google sign-in" {...st.flag('google_login_enable')} />
           <Field label="OAuth client ID"><Input {...st.input('google_client_id')} placeholder="xxxxxxxx.apps.googleusercontent.com" autoComplete="off" /></Field>
+          <Field label="OAuth client secret" hint={`Only needed for "Google Contacts" sync in users' Integrations page. Stored hidden. In Google Cloud add this redirect URI: ${window.location.origin}/api/public/integrations/google/callback`}><Input {...st.input('google_client_secret')} type="password" autoComplete="off" /></Field>
           <SwitchRow title="Enable Facebook sign-in" description="Needs a Facebook app with Facebook Login and your site address under Allowed domains" {...st.flag('facebook_login_enable')} />
           <div className="grid gap-4 sm:grid-cols-2"><Field label="Facebook app ID"><Input {...st.input('facebook_app_id')} inputMode="numeric" autoComplete="off" /></Field><Field label="Facebook app secret" hint="Stored hidden. Leave the dots to keep it."><Input {...st.input('facebook_app_secret')} type="password" autoComplete="off" /></Field></div>
         </CardBody>

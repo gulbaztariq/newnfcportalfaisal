@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
-import { MessageSquareText, ExternalLink, Trash2, Pencil, Webhook, Plus, Copy, Send, RefreshCw, Zap } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
+import { MessageSquareText, ExternalLink, Trash2, Pencil, Webhook, Users, Plus, Copy, Send, RefreshCw, Zap } from 'lucide-react';
 import api from '@/lib/api';
 import { fmtDateTime } from '@/lib/format';
 import {
-  PageHeader, Card, CardHeader, CardBody, Button, Field, Input, Textarea, Select, Badge, EmptyState, Skeleton, Switch,
+  PageHeader, Card, CardHeader, CardBody, Button, Field, Input, Textarea, Select, Badge, EmptyState, Skeleton, Switch, SwitchRow,
   TableCard, DataTable, Action, Actions, SearchInput, FilterSelect, useList, run, confirm, Dialog,
 } from '@/components/ui';
 import ExportMenu from '@/components/ExportMenu';
@@ -101,6 +102,43 @@ function Deliveries({ hook, onClose }) {
   );
 }
 
+
+/** connect a Google account so every new lead is added to the owner's Google Contacts */
+function GoogleContacts() {
+  const [st, setSt] = useState(null); const [busy, setBusy] = useState(false);
+  const [q, setQ] = useSearchParams();
+  const load = () => api.get('/user/integrations/google').then(({ data }) => setSt(data)).catch(() => setSt(false));
+  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    const r = q.get('google'); if (!r) return;
+    if (r === 'connected') toast.success('Google Contacts connected'); else if (r === 'denied') toast.info('Google access was not allowed'); else toast.error(`Could not connect Google${q.get('reason') ? `: ${q.get('reason')}` : ''}`);
+    setQ({}, { replace: true });
+  }, []); // eslint-disable-line
+  const connect = async () => { setBusy(true); try { const { data } = await api.post('/user/integrations/google/connect'); window.location.href = data.url; } catch (e) { toast.error(e.message); setBusy(false); } };
+  const act = async (fn) => { setBusy(true); try { await fn(); await load(); } catch (e) { toast.error(e.message); } finally { setBusy(false); } };
+  if (st === null) return <Skeleton className="mb-6 h-28" />;
+  if (st === false) return null;
+  return (
+    <Card className="mb-6">
+      <CardHeader icon={Users} title={<span className="flex items-center gap-2">Google Contacts{st.connected && <Badge tone="success">Connected</Badge>}</span>} description="Every new lead is added to your Google Contacts, so it is on your phone straight away." />
+      <CardBody className="space-y-3">
+        {!st.configured ? <p className="text-sm text-muted-foreground">The administrator has not set up Google access yet (Admin, Settings, Integrations: Google client ID and secret).</p> : !st.connected ? (
+          <><p className="text-sm text-muted-foreground">You choose the Google account and can disconnect any time. Only contacts are written; your existing contacts are not read.</p><Button onClick={connect} loading={busy}>Connect Google</Button></>
+        ) : (
+          <>
+            <p className="text-sm">Connected as <b>{st.email || 'your Google account'}</b></p>
+            <SwitchRow id="g-auto" title="Add new leads automatically" checked={st.auto} onChange={(v) => act(() => api.put('/user/integrations/google', { auto: v }))} />
+            <div className="flex flex-wrap gap-2">
+              <Button size="sm" variant="outline" loading={busy} onClick={() => act(async () => { const { data } = await api.post('/user/integrations/google/sync-all'); toast.success(data.message); })}>Send existing leads</Button>
+              <Button size="sm" variant="outline" onClick={() => act(() => api.post('/user/integrations/google/disconnect'))}>Disconnect</Button>
+            </div>
+          </>
+        )}
+      </CardBody>
+    </Card>
+  );
+}
+
 export function Webhooks() {
   const [state, setState] = useState({ rows: null, events: {} });
   const [edit, setEdit] = useState(null); const [log, setLog] = useState(null);
@@ -114,6 +152,7 @@ export function Webhooks() {
   return (
     <>
       <PageHeader title="Integrations & webhooks" description="Send new leads, bookings and subscribers to Zapier, Make, n8n or your own CRM the moment they arrive."><Button onClick={() => setEdit({})}><Plus />Add webhook</Button></PageHeader>
+      <GoogleContacts />
       {!state.rows ? <Skeleton className="h-40" /> : !state.rows.length ? (
         <Card><CardBody><EmptyState icon={Zap} title="No webhooks yet" description="Add one to push every new lead into your CRM, Google Sheets or WhatsApp automations." action={<Button onClick={() => setEdit({})}><Plus />Add webhook</Button>} /></CardBody></Card>
       ) : (
