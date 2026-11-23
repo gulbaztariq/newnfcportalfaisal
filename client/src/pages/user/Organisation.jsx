@@ -572,6 +572,7 @@ export default function Organisation() {
             </div>
             <div className="flex flex-wrap gap-2">
               <ExportMenu what="export" base="/api/user/organisation/members" label="Export team" />
+              <Tip content="One file with every user's email signature, in your team colour"><span><Button variant="outline" onClick={() => { window.location.href = '/api/user/organisation/members/signatures'; }}><Mail />Signatures</Button></span></Tip>
               <Tip content={full ? 'No seats left' : 'Add many users from a CSV file'}><span><Button variant="outline" onClick={() => setDialog('import')} disabled={full}><Upload />Import CSV</Button></span></Tip>
               <Tip content={full ? 'No seats left. Contact the administrator for more.' : 'Add one user'}><span><Button onClick={() => setDialog('add')} disabled={full}><Plus />Add user</Button></span></Tip>
             </div>

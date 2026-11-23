@@ -7,7 +7,10 @@
  */
 const crypto = require('crypto');
 const M = require('../models');
-const { assertPublicUrl } = require('./productsync');
+const http = require('http');
+const https = require('https');
+const dns = require('dns');
+const { assertPublicUrl, isPrivateIp } = require('./productsync');
 const { HttpError } = require('../utils/http');
 const { isProd } = require('../config');
 
@@ -27,19 +30,36 @@ async function checkUrl(raw) {
   return assertPublicUrl(raw);
 }
 
+
+/** POST without following redirects. The address is checked again at connect time (not only when saved), so a host that later
+ *  resolves to an internal address (DNS rebinding) is refused. */
+function post(urlStr, headers, body, ms = 6000) {
+  const u = new URL(urlStr); const lib = u.protocol === 'https:' ? https : http;
+  const dev = !isProd && ['localhost', '127.0.0.1'].includes(u.hostname);
+  const lookup = (host, opts, cb) => dns.lookup(host, opts, (err, addr, fam) => {
+    if (err) return cb(err);
+    const list = Array.isArray(addr) ? addr : [{ address: addr, family: fam }];
+    if (list.some((a) => isPrivateIp(a.address))) return cb(new Error('This address points to a private network'));
+    return Array.isArray(addr) ? cb(null, addr) : cb(null, addr, fam);
+  });
+  return new Promise((resolve, reject) => {
+    const req = lib.request({ protocol: u.protocol, hostname: u.hostname.replace(/^\[|\]$/g, ''), port: u.port || undefined, path: `${u.pathname}${u.search}`, method: 'POST', timeout: ms, headers: { ...headers, 'Content-Length': Buffer.byteLength(body) }, ...(dev ? {} : { lookup }) }, (res) => {
+      res.resume(); res.on('end', () => resolve({ status: res.statusCode })); res.on('error', reject);
+    });
+    req.on('timeout', () => req.destroy(new Error('The server did not answer in time')));
+    req.on('error', reject); req.end(body);
+  });
+}
+
 async function deliver(hook, event, data, { log = true } = {}) {
   const ts = Math.floor(Date.now() / 1000);
   const body = JSON.stringify({ id: crypto.randomUUID(), event, created: new Date().toISOString(), data });
   const t0 = Date.now(); let status = 0; let error = null;
   try {
     await checkUrl(hook.url); // re-checked on every send: DNS may have changed since it was saved
-    const res = await fetch(hook.url, {
-      method: 'POST', redirect: 'manual', signal: AbortSignal.timeout(6000),
-      headers: { 'Content-Type': 'application/json', 'User-Agent': 'NFCProfile-Webhook/1.0', 'X-NFC-Event': event, 'X-NFC-Timestamp': String(ts), 'X-NFC-Signature': sign(hook.secret, ts, body) },
-      body,
-    });
+    const res = await post(hook.url, { 'Content-Type': 'application/json', 'User-Agent': 'NFCProfile-Webhook/1.0', 'X-NFC-Event': event, 'X-NFC-Timestamp': String(ts), 'X-NFC-Signature': sign(hook.secret, ts, body) }, body);
     status = res.status;
-    if (!res.ok) error = `The server answered ${res.status}`;
+    if (res.status < 200 || res.status >= 300) error = `The server answered ${res.status}`;
   } catch (e) { error = String(e.message || e).slice(0, 200); }
   const ok = status >= 200 && status < 300;
   if (log) {
