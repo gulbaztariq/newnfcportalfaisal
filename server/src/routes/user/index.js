@@ -314,6 +314,14 @@ r.delete('/vcards/:id', cardsUnlocked, wrap(async (req, res) => {
   res.json({ message: 'vCard deleted' });
 }));
 
+
+/* email signature: email-safe HTML for a card (style, colour, photo, QR, social links, button text) */
+r.get('/vcards/:id/signature', wrap(async (req, res) => {
+  const v = await ownVcard(req); const q = req.query;
+  const on = (x, d) => (x === undefined ? d : !['0', 'false', 'off'].includes(String(x)));
+  const html = require('../../services/signature').build(v, { style: q.style, color: q.color, photo: on(q.photo, true), qr: on(q.qr, false), social: on(q.social, true), button: q.button }, appUrl);
+  res.json({ html, styles: require('../../services/signature').STYLES });
+}));
 r.get('/vcards/:id/qrcode', wrap(async (req, res) => {
   const v = await ownVcard(req);
   const q = v.qr_settings || {};

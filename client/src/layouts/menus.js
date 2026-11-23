@@ -100,6 +100,7 @@ export const userMenu = (user) => filterMenu([
       { label: 'vCards', icon: IdCard, to: '/user/vcards', perm: 'vcards' },
       { label: 'Dynamic links & QR', icon: QrCode, to: '/user/short-links', perm: 'shortlinks' },
       { label: 'NFC orders', icon: Nfc, to: '/user/nfc-orders', perm: 'orders' },
+      { label: 'Email signature', icon: Mail, to: '/user/signatures', perm: 'vcards' },
       { label: 'Virtual Background', icon: MonitorPlay, to: '/user/virtual-background', perm: 'vcards' },
     ],
   },
