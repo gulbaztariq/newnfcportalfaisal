@@ -26,6 +26,7 @@ Gaps found: weak `.vcf`, no lead follow-up fields, no outbound integrations, no 
 | Campaign (utm_*) analytics, QR vs NFC channel split, campaign link builder | Analytics page | `server/src/services/analytics.js`, `server/src/routes/redirects.js`, `client/src/pages/user/Analytics.jsx` |
 | Email signature generator (4 styles) | User menu > Email signature | `server/src/services/signature.js`, `client/src/pages/user/Signatures.jsx` |
 | Team: CSV check before import, extra CSV columns, team card design applied to new and existing cards, team export, team signature file | Organisation page | `server/src/services/organisation.js`, `server/src/routes/user/content.js`, `client/src/pages/user/Organisation.jsx` |
+| Wallet passes: signed Apple `.pkpass` and Google Wallet save link, buttons under the QR code | Admin > Settings > Integrations (credentials); card page; `/{alias}/wallet.pkpass`, `/{alias}/wallet-google` | `server/src/services/wallet.js`, `server/src/routes/public.js` |
 | WhatsApp button with a prepared opening message | Editor > Advanced | `server/src/views/templates/render.js`, `EditorExtras.jsx` |
 
 ## 5. Partly implemented or not built, and why
@@ -33,7 +34,7 @@ Gaps found: weak `.vcf`, no lead follow-up fields, no outbound integrations, no 
 | Item | Status | Reason |
 |---|---|---|
 | Google Contacts sync | Built, inactive | Needs your Google OAuth client ID and secret; tested only against a mocked Google; Google app verification needed beyond test users |
-| Apple / Google Wallet passes | Not built | Needs Apple Developer certificate and Google Wallet issuer account |
+| Apple / Google Wallet passes | Built, inactive | Code, admin settings and card buttons are done and tested with throwaway certificates/keys; they switch on once you paste a real Apple Pass Type ID certificate + WWDR certificate and a Google Wallet issuer ID + service-account key (Admin > Settings > Integrations > Wallet passes). Not yet seen on a real iPhone or Android |
 | Paper-card / badge scanner | Not built | Needs a paid OCR/vision API key |
 | HubSpot, Salesforce, Outlook native sync | Not built | Needs their OAuth apps; webhooks (Zapier/Make) cover them meanwhile |
 | SSO, SCIM, directory sync | Not built | Enterprise-customer feature; no demand yet |
@@ -87,7 +88,7 @@ Not covered: production click-through with a real login, real Gmail/Outlook past
 
 ## 12. Credentials and services needed
 
-Google OAuth client (ID + secret, People API enabled, redirect `https://app.smartvisitingcards.com/api/public/integrations/google/callback`); later, optionally: Apple Developer certificate and Google Wallet issuer account, an OCR/vision API key, HubSpot/Salesforce OAuth apps.
+Apple Developer account (Pass Type ID certificate + private key, Team ID, Apple WWDR certificate) and Google Wallet issuer ID + service-account key for wallet passes; Google OAuth client (ID + secret, People API enabled, redirect `https://app.smartvisitingcards.com/api/public/integrations/google/callback`); later, optionally: Apple Developer certificate and Google Wallet issuer account, an OCR/vision API key, HubSpot/Salesforce OAuth apps.
 
 ## 13. Deployment
 

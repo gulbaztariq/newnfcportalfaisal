@@ -38,7 +38,9 @@ const DEFAULTS = {
   // integrations & security
   slack_enable: '0', slack_webhook_url: '', slack_events: 'user_registered,payment,nfc_order,store_order,appointment',
   recaptcha_enable: '0', recaptcha_site_key: '', recaptcha_secret: '', recaptcha_min_score: '0.5',
-  google_login_enable: '0', google_client_id: '', google_client_secret: '', facebook_login_enable: '0', facebook_app_id: '', facebook_app_secret: '',
+  google_login_enable: '0', google_client_id: '', google_client_secret: '',
+  apple_wallet_enable: '0', apple_pass_type_id: '', apple_team_id: '', apple_wallet_cert: '', apple_wallet_key: '', apple_wallet_key_pass: '', apple_wwdr_cert: '',
+  google_wallet_enable: '0', google_wallet_issuer_id: '', google_wallet_sa_email: '', google_wallet_sa_key: '', facebook_login_enable: '0', facebook_app_id: '', facebook_app_secret: '',
   // look and feel + front site extras
   panel_color: '', auth_theme: 'split', front_extra_scripts: '', cookie_consent_enable: '0', cookie_consent_text: 'We use cookies to keep you signed in and to understand how the site is used.',
   front_sec_templates: '1', front_sec_features: '1', front_sec_about: '1', front_sec_pricing: '1', front_sec_testimonials: '1', front_sec_faqs: '1', front_sec_contact: '1',
@@ -79,7 +81,7 @@ const DEFAULTS = {
 };
 const SECRET_KEYS = ['stripe_secret', 'paypal_secret', 'razorpay_secret', 'flutterwave_secret', 'paystack_secret', 'phonepe_salt_key',
   'mercadopago_access_token', 'cashfree_secret', 'sslcommerz_store_password', 'payfast_passphrase', 'iyzico_secret', 'mail_password',
-  'slack_webhook_url', 'recaptcha_secret', 'anthropic_api_key', 'leopards_api_password', 'whatsapp_access_token', 'whatsapp_app_secret', 'twilio_token', 'facebook_app_secret', 'google_client_secret'];
+  'slack_webhook_url', 'recaptcha_secret', 'anthropic_api_key', 'leopards_api_password', 'whatsapp_access_token', 'whatsapp_app_secret', 'twilio_token', 'facebook_app_secret', 'google_client_secret', 'apple_wallet_key', 'apple_wallet_key_pass', 'google_wallet_sa_key'];
 const PUBLIC_KEYS = [
   'app_name', 'email', 'phone', 'region_code', 'address', 'app_logo', 'dashboard_logo', 'favicon', 'default_country_code',
   'default_language', 'register_enable', 'mobile_validation', 'front_theme', 'banner_enable', 'banner_title', 'banner_description', 'banner_url',

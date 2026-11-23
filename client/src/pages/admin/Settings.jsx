@@ -325,7 +325,7 @@ function MailSettings({ st }) {
 
 function Integrations({ st }) {
   const keys = ['login_otp_enable', 'enforce_2fa_staff', 'require_totp_staff', 'require_totp_company', 'max_login_attempts', 'lockout_minutes', 'email_verification_enable', 'blocked_email_domains', 'recaptcha_enable', 'recaptcha_site_key', 'recaptcha_secret', 'recaptcha_min_score',
-    'google_login_enable', 'google_client_id', 'google_client_secret', 'facebook_login_enable', 'facebook_app_id', 'facebook_app_secret', 'slack_enable', 'slack_webhook_url', 'slack_events', 'ai_enable', 'anthropic_api_key'];
+    'google_login_enable', 'google_client_id', 'google_client_secret', 'apple_wallet_enable', 'apple_pass_type_id', 'apple_team_id', 'apple_wallet_cert', 'apple_wallet_key', 'apple_wallet_key_pass', 'apple_wwdr_cert', 'google_wallet_enable', 'google_wallet_issuer_id', 'google_wallet_sa_email', 'google_wallet_sa_key', 'facebook_login_enable', 'facebook_app_id', 'facebook_app_secret', 'slack_enable', 'slack_webhook_url', 'slack_events', 'ai_enable', 'anthropic_api_key'];
   const events = String(st.s.slack_events || '').split(',').filter(Boolean);
   const toggleEvent = (e) => st.set('slack_events', (events.includes(e) ? events.filter((x) => x !== e) : [...events, e]).join(','));
   const [testing, setTesting] = useState(false);
@@ -367,6 +367,30 @@ function Integrations({ st }) {
           <Field label="OAuth client secret" hint={`Only needed for "Google Contacts" sync in users' Integrations page. Stored hidden. In Google Cloud add this redirect URI: ${window.location.origin}/api/public/integrations/google/callback`}><Input {...st.input('google_client_secret')} type="password" autoComplete="off" /></Field>
           <SwitchRow title="Enable Facebook sign-in" description="Needs a Facebook app with Facebook Login and your site address under Allowed domains" {...st.flag('facebook_login_enable')} />
           <div className="grid gap-4 sm:grid-cols-2"><Field label="Facebook app ID"><Input {...st.input('facebook_app_id')} inputMode="numeric" autoComplete="off" /></Field><Field label="Facebook app secret" hint="Stored hidden. Leave the dots to keep it."><Input {...st.input('facebook_app_secret')} type="password" autoComplete="off" /></Field></div>
+        </CardBody>
+      </Card>
+      <Card>
+        <CardHeader icon={Globe} title="Wallet passes" description='Adds "Add to Apple Wallet" and "Add to Google Wallet" buttons under the QR code on every card. A wallet only shows once its switch is on and every field is filled in.' />
+        <CardBody className="space-y-6">
+          <div className="space-y-4">
+            <SwitchRow title="Apple Wallet" description="Needs an Apple Developer account: a Pass Type ID certificate (certificate + private key) and Apple's WWDR certificate" {...st.flag('apple_wallet_enable')} />
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label="Pass Type ID" hint="e.g. pass.com.yourcompany.card"><Input {...st.input('apple_pass_type_id')} autoComplete="off" /></Field>
+              <Field label="Team ID" hint="10 characters, from your Apple Developer membership"><Input {...st.input('apple_team_id')} autoComplete="off" /></Field>
+              <Field label="Pass certificate (PEM)" hint="-----BEGIN CERTIFICATE----- ..."><Textarea {...st.input('apple_wallet_cert')} rows={4} className="font-mono text-xs" /></Field>
+              <Field label="Apple WWDR certificate (PEM)" hint="Apple Worldwide Developer Relations certificate, converted to PEM"><Textarea {...st.input('apple_wwdr_cert')} rows={4} className="font-mono text-xs" /></Field>
+              <Field label="Private key (PEM)" hint="Stored hidden. Leave the dots to keep it."><Textarea {...st.input('apple_wallet_key')} rows={4} className="font-mono text-xs" /></Field>
+              <Field label="Private key password" hint="Only if the key is protected. Stored hidden."><Input {...st.input('apple_wallet_key_pass')} type="password" autoComplete="off" /></Field>
+            </div>
+          </div>
+          <div className="space-y-4 border-t border-border pt-6">
+            <SwitchRow title="Google Wallet" description="Needs a Google Wallet issuer account and a service account added to it as a user" {...st.flag('google_wallet_enable')} />
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label="Issuer ID" hint="From Google Pay and Wallet Console"><Input {...st.input('google_wallet_issuer_id')} inputMode="numeric" autoComplete="off" /></Field>
+              <Field label="Service account e-mail"><Input {...st.input('google_wallet_sa_email')} autoComplete="off" placeholder="name@project.iam.gserviceaccount.com" /></Field>
+              <Field label="Service account private key" className="sm:col-span-2" hint='The "private_key" value from the downloaded JSON key file. Stored hidden. Leave the dots to keep it.'><Textarea {...st.input('google_wallet_sa_key')} rows={4} className="font-mono text-xs" /></Field>
+            </div>
+          </div>
         </CardBody>
       </Card>
       <Card>
