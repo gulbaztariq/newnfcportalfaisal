@@ -41,10 +41,11 @@ test('signature collection: 40 designs, each with its own layout, name, category
     assert.deepEqual(custom.sanitizeTheme({}, t.defaults), t.defaults, `${t.slug} defaults pass the schema unchanged`);
   }
 });
-test('the 140 earlier templates are still in the catalogue, unchanged in number and order', () => {
-  assert.equal(TEMPLATES.length, 180);
-  assert.deepEqual(TEMPLATES.slice(0, 140).map((t) => t.slug), Array.from({ length: 140 }, (_, i) => `vcard${i + 1}`));
-  assert.ok(TEMPLATES.slice(0, 140).every((t) => !signature.ARCH[t.layout]));
+test('the catalogue keeps one template per page layout (same-layout copies were removed)', () => {
+  assert.equal(TEMPLATES.length, 112);
+  assert.equal(new Set(TEMPLATES.map((t) => t.layout)).size, 112);
+  assert.equal(TEMPLATES.filter((t) => !signature.ARCH[t.layout]).length, 72);
+  for (const slug of ['vcard1', 'vcard8', 'vcard174']) assert.ok(TEMPLATES.some((t) => t.slug === slug), `${slug} is used by live cards`);
   for (const t of TEMPLATES) assert.ok(CATEGORIES.includes(metaOf(t).category), t.slug);
 });
 

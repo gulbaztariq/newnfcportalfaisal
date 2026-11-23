@@ -271,5 +271,5 @@ test('tracking: the public card page carries the tracker, the editor preview doe
   assert.doesNotThrow(() => new Function(pub));
   assert.ok(pub.includes('replace(/\\s+/g,'), 'whitespace is collapsed with a real \\s (a template-string escape bug once turned every "s" into a space)');
   assert.ok(!js(render({ ...base, preview: { still: true } })).includes('/event'), 'editor preview taps are not counted');
-  for (const t of TEMPLATES.slice(140)) assert.ok(js(render({ ...base, template: t })).includes('/event'), t.slug);
+  for (const t of TEMPLATES.filter((t) => Number(t.slug.slice(5)) > 140)) assert.ok(js(render({ ...base, template: t })).includes('/event'), t.slug);
 });
