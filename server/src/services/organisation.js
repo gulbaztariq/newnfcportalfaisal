@@ -54,6 +54,41 @@ async function profileOf(owner) {
   return org || { owner_id: owner.id, name: `${owner.first_name} ${owner.last_name}`.trim(), seats: 0 };
 }
 
+
+/* ------------------------------------------------------------ team brand */
+const HEX = /^#[0-9a-f]{6}$/i;
+/** the organisation's card design, cleaned: a template slug plus optional colours and font */
+function cleanBrand(b = {}) {
+  const out = {};
+  if (b.template) out.template = String(b.template).slice(0, 60);
+  for (const k of ['primary', 'secondary', 'background', 'text']) if (HEX.test(String(b[k] || ''))) out[k] = String(b[k]).toLowerCase();
+  if (b.font) out.font = String(b.font).replace(/[^\w ,'-]/g, '').slice(0, 60);
+  return out;
+}
+/** write the team design / company details onto one card; `what` picks template, colours and/or company details */
+async function styleCard(card, org, what = { template: true, colours: true, company: true }) {
+  const brand = org?.brand || {}; const data = {};
+  if (what.template && brand.template) { const t = await M().Template.findOne({ where: { slug: brand.template, status: true }, attributes: ['id'] }); if (t) data.template_id = t.id; }
+  if (what.colours) { const { template, ...theme } = brand; if (Object.keys(theme).length) data.theme = { ...(card.theme || {}), ...theme }; }
+  if (what.company && org) {
+    data.company = org.name;
+    const loc = [org.address, org.city, org.country].filter(Boolean).join(', '); if (loc) data.location = loc;
+    if (org.website) data.social_links = { ...(card.social_links || {}), website: org.website };
+  }
+  if (Object.keys(data).length) await card.update(data);
+  return Object.keys(data).length > 0;
+}
+/** apply the team design to every member card (never the owner's own cards); returns how many cards changed */
+async function applyBrand(owner, what) {
+  const org = await M().Organisation.findOne({ where: { owner_id: owner.id } });
+  if (!org) return 0;
+  const ids = (await M().User.findAll({ where: { organisation_id: owner.id }, attributes: ['id'], raw: true })).map((u) => u.id);
+  if (!ids.length) return 0;
+  let n = 0;
+  for (const card of await M().Vcard.findAll({ where: { user_id: ids } })) if (await styleCard(card, org, what)) n += 1;
+  return n;
+}
+
 /** Seats: the number set on the organisation, otherwise the plan's organisation-user limit */
 async function seatLimit(owner) {
   const org = await M().Organisation.findOne({ where: { owner_id: owner.id }, attributes: ['seats'] });
@@ -91,7 +126,12 @@ async function createMember(owner, input, { notify = true, company } = {}) {
     if (v && org) {
       const social = { ...(v.social_links || {}) };
       if (org.website) social.website = org.website;
-      await v.update({ company: org.name, job_title: input.job_title ? String(input.job_title).slice(0, 150) : v.job_title, location: [org.address, org.city, org.country].filter(Boolean).join(', ') || null, social_links: social });
+      const own = {};
+      if (input.alt_email) own.alternative_email = String(input.alt_email).slice(0, 191);
+      if (input.location) own.location = String(input.location).slice(0, 255);
+      for (const k of ['whatsapp', 'linkedin', 'instagram']) if (/^https?:\/\//i.test(String(input[k] || ''))) social[k] = String(input[k]).slice(0, 255);
+      await v.update({ company: org.name, job_title: input.job_title ? String(input.job_title).slice(0, 150) : v.job_title, location: [org.address, org.city, org.country].filter(Boolean).join(', ') || null, social_links: social, ...own });
+      await styleCard(v, org, { template: true, colours: true, company: false });
     }
   }
   if (chosen) {
@@ -126,6 +166,7 @@ const HEADER_ALIASES = {
   first_name: ['first_name', 'firstname', 'first name', 'name'], last_name: ['last_name', 'lastname', 'last name', 'surname'],
   email: ['email', 'e-mail', 'email address'], contact: ['phone', 'contact', 'mobile'], region_code: ['country_code', 'region_code', 'code'],
   password: ['password'], company_role: ['role', 'company_role'], job_title: ['job_title', 'job title', 'designation', 'title'],
+  alt_email: ['alt_email', 'alternative_email', 'work_email'], location: ['location', 'office', 'address'], whatsapp: ['whatsapp'], linkedin: ['linkedin'], instagram: ['instagram'],
 };
 function csvRecords(text) {
   const [head, ...rows] = parseCsv(text);
@@ -136,7 +177,7 @@ function csvRecords(text) {
 }
 
 /** Bulk import members from CSV text. Valid rows are created until the seats run out; the rest are reported. */
-async function importMembers(owner, text, { notify = true, defaultRole = 'member' } = {}) {
+async function importMembers(owner, text, { notify = true, defaultRole = 'member', dryRun = false } = {}) {
   const records = csvRecords(text);
   if (!records.length) return { created: [], errors: [{ line: 1, message: 'The file has no rows. Use the sample file as a template.' }] };
   if (records.length > 1000) return { created: [], errors: [{ line: 1, message: 'Import at most 1000 users at a time' }] };
@@ -156,6 +197,7 @@ async function importMembers(owner, text, { notify = true, defaultRole = 'member
     if (used >= limit) { fail(`No seats left (${limit} allowed)`); continue; }
     if (await M().User.findOne({ where: { email }, attributes: ['id'] })) { fail('This e-mail is already registered'); continue; }
     const role = ROLES.includes(String(r.company_role || '').toLowerCase()) ? String(r.company_role).toLowerCase() : defaultRole;
+    if (dryRun) { used += 1; created.push({ name: `${r.first_name} ${r.last_name || ''}`.trim(), email, role, job_title: r.job_title || '' }); continue; }
     try {
       const { member, password, invite_url: inviteUrl } = await createMember(owner, { ...r, email, company_role: role }, { notify, company });
       used += 1;
@@ -234,5 +276,5 @@ async function timeline(owner) {
 
 module.exports = {
   LOCKED_MESSAGE, ORG_STATUSES, ROLES, LOCKABLE, CARD_FIELDS, cleanLocks, lockedOf, isLocked, canSignIn, isLive, stripCardLocks, stripProfileLocks,
-  profileOf, seatLimit, seatsUsed, randomPassword, credentialsMail, createMember, parseCsv, importMembers, announce, logEvent, timeline, fullName,
+  cleanBrand, styleCard, applyBrand, profileOf, seatLimit, seatsUsed, randomPassword, credentialsMail, createMember, parseCsv, importMembers, announce, logEvent, timeline, fullName,
 };

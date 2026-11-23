@@ -12,10 +12,11 @@ import { useAuth } from '@/lib/auth';
 import { cn } from '@/lib/cn';
 import { fmtDate, fmtDateTime, fullName } from '@/lib/format';
 import {
-  PageHeader, Card, CardHeader, CardBody, Button, ButtonLink, Field, Input, Textarea, Select, Switch, SwitchRow, Badge, StatusBadge, StatCard, EmptyState, Skeleton, Segmented, Dialog,
+  PageHeader, Card, CardHeader, CardBody, Button, ButtonLink, Field, Input, Textarea, Select, Switch, SwitchRow, Badge, StatusBadge, StatCard, EmptyState, Skeleton, Segmented, Dialog, ColorInput,
   TableCard, DataTable, UserCell, Avatar, ImageUpload, Menu, MenuTrigger, MenuContent, MenuItem, MenuSeparator, Tip, useForm, run, confirm,
 } from '@/components/ui';
 import PermissionMatrix from '@/components/PermissionMatrix';
+import ExportMenu from '@/components/ExportMenu';
 
 const RichText = lazy(() => import('@/components/ui/RichText'));
 
@@ -37,7 +38,7 @@ const CARD_FIELDS = [
   ['location', 'Address / location'], ['location_url', 'Google Maps link', 'url'], ['description', 'About', 'textarea'],
 ];
 const OTHER_LOCKS = ['profile_image', 'cover_image', 'social_links', 'custom_links', 'name', 'url_alias', 'template_id', 'theme', 'manage_cards'];
-const SAMPLE_CSV = 'first_name,last_name,email,phone,job_title,role,password\nAyesha,Khan,ayesha@company.com,3001234567,Sales Manager,member,\nBilal,Ahmed,bilal@company.com,,Designer,member,\n';
+const SAMPLE_CSV = 'first_name,last_name,email,phone,job_title,role,password,alt_email,location,linkedin\nAyesha,Khan,ayesha@company.com,3001234567,Sales Manager,member,,,Office 2 Lahore,https://linkedin.com/in/ayesha\nBilal,Ahmed,bilal@company.com,,Designer,member,,,,\n';
 
 const randomPassword = () => {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
@@ -146,14 +147,14 @@ export function ImportUsers({ meta, seatsLeft, onClose, onSaved, endpoint = '/us
   const [notify, setNotify] = useState(false);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState(null);
-  const go = async () => {
+  const go = async (dry = false) => {
     if (!file) return toast.error('Choose a CSV file');
     setBusy(true);
-    try { setResult(await run(api.post(endpoint, { csv: await file.text(), default_role: role, notify }))); onSaved(); } catch { /* toast */ } finally { setBusy(false); }
+    try { setResult(await run(api.post(endpoint, { csv: await file.text(), default_role: role, notify, dry_run: dry }))); if (!dry) onSaved(); } catch { /* toast */ } finally { setBusy(false); }
   };
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()} size="lg" icon={FileSpreadsheet} title="Import users from CSV" description={`Add many users at once. ${seatsLeft} seat(s) left.`}
-      footer={result ? <><Button variant="outline" onClick={() => { setResult(null); setFile(null); }}>Import another file</Button><Button onClick={onClose}>Done</Button></> : <><Button variant="outline" onClick={onClose}>Cancel</Button><Button onClick={go} loading={busy} disabled={!file}><Upload />Import</Button></>}>
+      footer={result?.dry_run ? <><Button variant="outline" onClick={() => setResult(null)}>Back</Button><Button onClick={() => go(false)} loading={busy} disabled={!result.created.length}><Upload />Import {result.created.length} user(s)</Button></> : result ? <><Button variant="outline" onClick={() => { setResult(null); setFile(null); }}>Import another file</Button><Button onClick={onClose}>Done</Button></> : <><Button variant="outline" onClick={onClose}>Cancel</Button><Button variant="outline" onClick={() => go(true)} loading={busy} disabled={!file}>Check file</Button><Button onClick={() => go(false)} loading={busy} disabled={!file}><Upload />Import</Button></>}>
       {!result ? (
         <div className="space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-muted/60 p-4 text-sm">
@@ -175,10 +176,10 @@ export function ImportUsers({ meta, seatsLeft, onClose, onSaved, endpoint = '/us
       ) : (
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-3">
-            <div className="rounded-2xl bg-success-soft p-4"><p className="font-display text-3xl font-bold text-success">{result.created.length}</p><p className="text-sm text-success">users created</p></div>
+            <div className="rounded-2xl bg-success-soft p-4"><p className="font-display text-3xl font-bold text-success">{result.created.length}</p><p className="text-sm text-success">{result.dry_run ? 'ready to import' : 'users created'}</p></div>
             <div className={cn('rounded-2xl p-4', result.errors.length ? 'bg-warning-soft' : 'bg-muted')}><p className={cn('font-display text-3xl font-bold', result.errors.length ? 'text-warning' : 'text-muted-foreground')}>{result.errors.length}</p><p className="text-sm text-muted-foreground">rows skipped</p></div>
           </div>
-          {result.created.length > 0 && <Button className="w-full" variant="soft" onClick={() => download(`user-logins-${new Date().toISOString().slice(0, 10)}.csv`, credentialsCsv(result.created))}><Download />Download login details ({result.created.length})</Button>}
+          {!result.dry_run && result.created.length > 0 && <Button className="w-full" variant="soft" onClick={() => download(`user-logins-${new Date().toISOString().slice(0, 10)}.csv`, credentialsCsv(result.created))}><Download />Download login details ({result.created.length})</Button>}
           {result.errors.length > 0 && (
             <div className="max-h-56 space-y-1.5 overflow-y-auto rounded-2xl border border-border p-3">
               {result.errors.map((e, i) => <p key={i} className="flex gap-2 text-sm"><TriangleAlert className="mt-0.5 size-4 shrink-0 text-warning" /><span><b>Row {e.line}</b>{e.email ? ` (${e.email})` : ''}: {e.message}</span></p>)}
@@ -473,6 +474,36 @@ function CompanyTab({ org, seats, onSaved }) {
   );
 }
 
+/** one design for the whole team: a template + colours, used for every new user and applied to existing cards on request */
+function TeamDesign({ org, onSaved }) {
+  const b = org.brand || {};
+  const [templates, setTemplates] = useState([]);
+  const [f, setF] = useState({ template: b.template || '', primary: b.primary || '', secondary: b.secondary || '', background: b.background || '', text: b.text || '' });
+  const [what, setWhat] = useState({ template: true, colours: true, company: false });
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { api.get('/user/vcards/templates').then(({ data }) => setTemplates(data.data.filter((t) => t.allowed !== false))).catch(() => {}); }, []);
+  const save = async () => { setBusy(true); try { await run(api.put('/user/organisation/brand', f)); onSaved(); } catch { /* toast */ } finally { setBusy(false); } };
+  const apply = async () => {
+    if (!(await confirm({ title: 'Apply to every user\'s card?', description: 'Saves the design, then changes the selected parts on all users\' cards (your own cards are not touched). Their other content stays as it is.', confirmText: 'Apply' }))) return;
+    setBusy(true);
+    try { await api.put('/user/organisation/brand', f); await run(api.post('/user/organisation/brand/apply', what)); onSaved(); } catch { /* toast */ } finally { setBusy(false); }
+  };
+  const tick = (k, l) => <label className="flex cursor-pointer items-center gap-2 text-sm"><input type="checkbox" checked={what[k]} onChange={() => setWhat({ ...what, [k]: !what[k] })} className="size-4 accent-[var(--color-primary)]" />{l}</label>;
+  return (
+    <Card className="mt-6">
+      <CardHeader icon={IdCard} title="Team card design" description="Every new user gets this template and these colours. Leave a colour empty to keep the template's own." />
+      <CardBody className="space-y-5">
+        <Field label="Template"><Select value={f.template} onChange={(v) => setF({ ...f, template: v })} allowEmpty placeholder="Default template" options={templates.map((t) => ({ value: t.slug, label: t.name }))} /></Field>
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {[['primary', 'Main colour'], ['secondary', 'Second colour'], ['background', 'Background'], ['text', 'Text']].map(([k, l]) => <ColorInput key={k} label={l} value={f[k]} onChange={(v) => setF({ ...f, [k]: v })} />)}
+        </div>
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-2 rounded-2xl bg-muted/60 p-3"><span className="text-sm font-medium">Apply to existing cards:</span>{tick('template', 'Template')}{tick('colours', 'Colours')}{tick('company', 'Company details')}</div>
+        <div className="flex flex-wrap justify-end gap-2"><Button variant="outline" onClick={save} loading={busy}>Save design</Button><Button onClick={apply} loading={busy} disabled={!what.template && !what.colours && !what.company}>Save and apply to all cards</Button></div>
+      </CardBody>
+    </Card>
+  );
+}
+
 function CardsTab() {
   const [cards, setCards] = useState(null);
   useEffect(() => { api.get('/user/organisation/vcards').then(({ data }) => setCards(data.data)).catch(() => setCards([])); }, []);
@@ -540,6 +571,7 @@ export default function Organisation() {
               </div>
             </div>
             <div className="flex flex-wrap gap-2">
+              <ExportMenu what="export" base="/api/user/organisation/members" label="Export team" />
               <Tip content={full ? 'No seats left' : 'Add many users from a CSV file'}><span><Button variant="outline" onClick={() => setDialog('import')} disabled={full}><Upload />Import CSV</Button></span></Tip>
               <Tip content={full ? 'No seats left. Contact the administrator for more.' : 'Add one user'}><span><Button onClick={() => setDialog('add')} disabled={full}><Plus />Add user</Button></span></Tip>
             </div>
@@ -552,7 +584,7 @@ export default function Organisation() {
           {tab === 'users' && <UsersTab meta={meta} reload={load} onAdd={() => setDialog('add')} onImport={() => setDialog('import')} />}
           {tab === 'announcements' && <AnnouncementsTab />}
           {tab === 'cards' && <CardsTab />}
-          {tab === 'company' && org.is_owner && <CompanyTab org={org.data} seats={org.seats} onSaved={load} />}
+          {tab === 'company' && org.is_owner && <><CompanyTab org={org.data} seats={org.seats} onSaved={load} /><TeamDesign org={org.data} onSaved={load} /></>}
         </motion.div>
       </AnimatePresence>
       {dialog === 'add' && <AddUser meta={meta} onClose={() => setDialog(null)} onSaved={load} />}
