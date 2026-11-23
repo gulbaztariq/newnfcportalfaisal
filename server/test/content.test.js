@@ -117,3 +117,18 @@ test('payments: payfast notify without a valid signature never marks anything pa
   const r = await fetch(`${ctx.base}/pay/notify/payfast`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ m_payment_id: t.transaction_id || t.id, payment_status: 'COMPLETE', amount_gross: '500.00' }) });
   await new Promise((r2) => setTimeout(r2, 300)); assert.equal((await M.Transaction.findByPk(t.id)).status, 'pending', `notify status ${r.status}`);
 });
+
+test('vcard file: escaping, international phone, folding, photo and profile links', () => {
+  const { vcardFile: vf } = require('../src/services/vcf');
+  const out = vf({ name: 'Ali', first_name: 'Ali', last_name: 'Khan, Jr', company: 'A;B', job_title: 'CEO', region_code: '92', phone: '0300 1234567', alternative_phone: '+971501112222', email: 'a@b.co',
+    description: 'Line1\nLine2, with; chars ' + 'x'.repeat(120), location: 'Lahore, PK', url_alias: 'ali', social_links: { website: 'https://a.pk', instagram: 'https://instagram.com/ali', facebook: 'javascript:alert(1)', whatsapp: 'https://wa.me/923001234567' } }, { appUrl: 'https://app.test' });
+  const lines = out.split('\r\n');
+  assert.ok(out.startsWith('BEGIN:VCARD\r\nVERSION:3.0') && out.endsWith('END:VCARD\r\n'));
+  assert.ok(lines.includes('N:Khan\\, Jr;Ali;;;') && lines.includes('ORG:A\\;B'));
+  assert.ok(lines.some((l) => l === 'TEL;TYPE=CELL,VOICE,PREF:+923001234567'), 'trunk 0 removed');
+  assert.ok(lines.some((l) => l === 'TEL;TYPE=WORK,VOICE:+971501112222'));
+  assert.ok(lines.some((l) => l === 'URL;TYPE=PROFILE:https://app.test/ali') && lines.some((l) => l.startsWith('X-SOCIALPROFILE;TYPE=instagram:')));
+  assert.ok(!out.includes('javascript:') && lines.some((l) => l.includes('wa.me/923001234567')));
+  assert.ok(lines.every((l) => Buffer.byteLength(l) <= 75), 'folded to 75 octets');
+  assert.match(out.replace(/\r\n /g, ''), /NOTE:Line1\\nLine2\\, with\\; chars x{100}/);
+});

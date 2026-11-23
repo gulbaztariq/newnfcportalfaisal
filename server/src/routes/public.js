@@ -599,7 +599,7 @@ pages.get('/:alias/contact.vcf', wrap(async (req, res, next) => {
   const v = await findVcard(req.params.alias);
   if (!v || locked(req, v)) return next();
   countEvent(req, v, 'save');
-  res.set('Content-Type', 'text/vcard; charset=utf-8').set('Content-Disposition', `attachment; filename="${v.url_alias}.vcf"`).send(vcardFile(v));
+  res.set('Content-Type', 'text/vcard; charset=utf-8').set('Content-Disposition', `attachment; filename="${v.url_alias}.vcf"`).send(vcardFile(v, { appUrl }));
 }));
 
 pages.get('/:alias/qr.svg', wrap(async (req, res, next) => {
