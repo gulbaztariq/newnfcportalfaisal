@@ -92,20 +92,7 @@ function vcardCsp(nonce, clientUrl) {
 }
 
 
-function vcardFile(v) {
-  const lines = ['BEGIN:VCARD', 'VERSION:3.0', `N:${v.last_name || ''};${v.first_name || v.name};;;`, `FN:${[v.first_name, v.last_name].filter(Boolean).join(' ') || v.name}`];
-  if (v.company) lines.push(`ORG:${v.company}`);
-  if (v.job_title || v.occupation) lines.push(`TITLE:${v.job_title || v.occupation}`);
-  if (v.phone) lines.push(`TEL;TYPE=CELL:${v.region_code ? `+${v.region_code}` : ''}${v.phone}`);
-  if (v.alternative_phone) lines.push(`TEL;TYPE=WORK:${v.alternative_phone}`);
-  if (v.email) lines.push(`EMAIL;TYPE=INTERNET:${v.email}`);
-  if (v.alternative_email) lines.push(`EMAIL;TYPE=WORK:${v.alternative_email}`);
-  if (v.location) lines.push(`ADR;TYPE=WORK:;;${v.location};;;;`);
-  if (v.social_links?.website) lines.push(`URL:${v.social_links.website}`);
-  if (v.dob) lines.push(`BDAY:${v.dob}`);
-  lines.push('END:VCARD');
-  return lines.map((l) => l.replace(/\r?\n/g, ' ')).join('\r\n');
-}
+const { vcardFile } = require('../../services/vcf');
 
 /** theme -> CSS variables + meta shared by the main page and sub pages */
 function themeOf(v, template, app) {
