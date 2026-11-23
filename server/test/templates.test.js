@@ -216,3 +216,38 @@ test('tap profile cards: no links means no sheet, a link without a cover still r
   assert.ok(!/My links/.test(bare)); assert.match(bare, /Connect with me/);
   assert.match(bodyOf(page(t, { ...FULL, default_language: 'fr' })), /Me contacter/);
 });
+
+/* ------------------------------------------------ bank & wallet accounts */
+const BANKS = [
+  { kind: 'bank', name: 'Meezan Bank', title: 'Sarah <b>Morgan</b>', account: '0123456789012', iban: 'PK36MEZN0001230123456789', note: 'Branch: I-8' },
+  { kind: 'wallet', name: 'JazzCash', title: 'Sarah Morgan', account: '03001234567' },
+  { kind: 'bank', name: 'My Own Bank', account: '999' },
+];
+test('every template shows the bank / wallet accounts with copy buttons (and escapes what the owner typed)', () => {
+  for (const t of TEMPLATES) {
+    const html = page(t, { ...FULL, bank_accounts: BANKS });
+    const b = bodyOf(html);
+    assert.equal(count(b, /class="bk-cp"/g), 4, `${t.slug}: 4 copy buttons (account + IBAN, wallet, own bank)`);
+    assert.ok(b.includes('data-copy="0123456789012"') && b.includes('data-copy="PK36MEZN0001230123456789"'), `${t.slug}: copies the raw numbers`);
+    assert.ok(b.includes('PK36 MEZN 0001 2301 2345 6789'), `${t.slug}: IBAN shown in groups`);
+    assert.ok(!b.includes('<b>Morgan</b>'), `${t.slug}: escaped`);
+  }
+});
+test('no accounts: no bank block; the section can be hidden', () => {
+  const t = TEMPLATES[0];
+  assert.ok(!bodyOf(page(t, { ...FULL })).includes('class="bk"'));
+  assert.ok(!bodyOf(page(t, { ...FULL, bank_accounts: BANKS, sections: { payments: false } })).includes('class="bk"'));
+});
+test('accounts are saved through the card editor API: unlimited, cleaned, empty ones dropped', async () => {
+  const [t] = await M.Template.findOrCreate({ where: { slug: 'vcard1' }, defaults: { name: 'Classic', defaults: TEMPLATES[0].defaults } });
+  const { u, c } = await owner([t]);
+  const v = await M.Vcard.create({ user_id: u.id, template_id: t.id, url_alias: 'bank-test', name: 'Bank test', status: true });
+  const many = Array.from({ length: 30 }, (_, i) => ({ kind: i % 2 ? 'wallet' : 'bank', name: `Bank ${i}`, account: `${1000 + i}`, iban: i === 0 ? 'pk36 mezn 0001 2301 2345 6789' : '' }));
+  many.push({ name: '', account: '1' }, { name: 'No number' });
+  const r = await c.put(`/api/user/vcards/${v.id}`, { bank_accounts: JSON.stringify(many) });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  const saved = (await v.reload()).bank_accounts;
+  assert.equal(saved.length, 30);
+  assert.equal(saved[0].iban, 'PK36MEZN0001230123456789');
+  const pub = await fetch(`${ctx.base}/bank-test`); assert.ok((await pub.text()).includes('data-copy="1000"'));
+});

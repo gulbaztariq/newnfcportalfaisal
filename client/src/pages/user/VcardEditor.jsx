@@ -50,7 +50,7 @@ const TABS = [
   ['basic', IdCard, 'Basic details'], ['design', Palette, 'Design'], ['menu', BookOpen, 'Menu / catalogue'], ['media', Film, 'Media & embeds'], ['social', Share2, 'Social links'],
   ['links', Link2, 'Custom links'], ['services', Briefcase, 'Services'], ['products', Package, 'Products'], ['gallery', Images, 'Gallery'],
   ['testimonials', MessageSquareQuote, 'Testimonials'], ['appointments', CalendarClock, 'Appointments'], ['blog', Newspaper, 'Blog'],
-  ['pages', FileStack, 'Custom pages'], ['payments', WalletIcon, 'Payment links'], ['hours', Clock, 'Business hours'], ['qr', QrIcon, 'QR code'],
+  ['pages', FileStack, 'Custom pages'], ['payments', WalletIcon, 'Payments & bank accounts'], ['hours', Clock, 'Business hours'], ['qr', QrIcon, 'QR code'],
   ['legal', Scale, 'Terms & privacy'], ['advanced', Settings2, 'Advanced & SEO'],
 ];
 
@@ -74,7 +74,7 @@ export default function VcardEditor() {
 
   const load = async () => {
     const [{ data: d }, { data: t }] = await Promise.all([api.get(`/user/vcards/${id}`), api.get('/user/vcards/templates')]);
-    const v = { ...d.data, password: '', theme: d.data.theme || {}, social_links: d.data.social_links || {}, custom_links: d.data.custom_links || [], business_hours: d.data.business_hours || {}, sections: d.data.sections || {}, section_order: d.data.section_order || [], section_titles: d.data.section_titles || {}, iframes: d.data.iframes || [], payment_links: d.data.payment_links || [], qr_settings: d.data.qr_settings || {}, appointment_settings: d.data.appointment_settings || {}, extras: d.data.extras || {} };
+    const v = { ...d.data, password: '', theme: d.data.theme || {}, social_links: d.data.social_links || {}, custom_links: d.data.custom_links || [], business_hours: d.data.business_hours || {}, sections: d.data.sections || {}, section_order: d.data.section_order || [], section_titles: d.data.section_titles || {}, iframes: d.data.iframes || [], payment_links: d.data.payment_links || [], bank_accounts: d.data.bank_accounts || [], qr_settings: d.data.qr_settings || {}, appointment_settings: d.data.appointment_settings || {}, extras: d.data.extras || {} };
     setData(d.data); setFeatures(d.features); setTemplates(t.data); setSchema(t.schema || null); form.setValues(v); setSnapshot(JSON.stringify(v));
   };
   useEffect(() => { load(); }, [id]); // eslint-disable-line
@@ -95,7 +95,7 @@ export default function VcardEditor() {
     const bad = check(v0, { name: 'required|max:120', url_alias: 'required|min:2|max:80', email: 'email|max:191', alternative_email: 'email|max:191', phone: 'phone', alternative_phone: 'phone', location_url: 'url' }, { name: 'Card name', url_alias: 'Card link', location_url: 'Google Maps link' });
     if (Object.keys(bad).length) { form.setErrors(bad); toast.error(Object.values(bad)[0]); return; }
     setSaving(true);
-    const fields = ['name', 'url_alias', 'occupation', 'description', 'first_name', 'last_name', 'email', 'region_code', 'phone', 'alternative_email', 'alternative_phone', 'location', 'location_url', 'company', 'job_title', 'dob', 'menu_title', 'menu_desc', 'default_language', 'template_id', 'theme', 'social_links', 'custom_links', 'business_hours', 'sections', 'section_order', 'section_titles', 'status', 'enable_enquiry_form', 'show_qr_code', 'hide_branding', 'custom_css', 'site_title', 'meta_keyword', 'meta_description', 'google_analytics', 'cover_type', 'youtube_link', 'instagram_embed', 'linkedin_embed', 'iframes', 'location_embed', 'payment_links', 'terms_conditions', 'privacy_policy', 'sticky_bar', 'newsletter_popup', 'ask_before_contact', 'enquiry_attachment', 'pwa_enable', 'business_directory', 'week_format', 'qr_settings', 'appointment_settings', 'extras', 'custom_domain', 'custom_code', 'custom_code_enabled'];
+    const fields = ['name', 'url_alias', 'occupation', 'description', 'first_name', 'last_name', 'email', 'region_code', 'phone', 'alternative_email', 'alternative_phone', 'location', 'location_url', 'company', 'job_title', 'dob', 'menu_title', 'menu_desc', 'default_language', 'template_id', 'theme', 'social_links', 'custom_links', 'business_hours', 'sections', 'section_order', 'section_titles', 'status', 'enable_enquiry_form', 'show_qr_code', 'hide_branding', 'custom_css', 'site_title', 'meta_keyword', 'meta_description', 'google_analytics', 'cover_type', 'youtube_link', 'instagram_embed', 'linkedin_embed', 'iframes', 'location_embed', 'payment_links', 'bank_accounts', 'terms_conditions', 'privacy_policy', 'sticky_bar', 'newsletter_popup', 'ask_before_contact', 'enquiry_attachment', 'pwa_enable', 'business_directory', 'week_format', 'qr_settings', 'appointment_settings', 'extras', 'custom_domain', 'custom_code', 'custom_code_enabled'];
     const payload = {};
     for (const f of fields) payload[f] = typeof v[f] === 'boolean' ? (v[f] ? '1' : '0') : v[f] ?? '';
     if (v.password || v.remove_password) payload.password = v.remove_password ? '' : v.password;
