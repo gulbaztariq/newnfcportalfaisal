@@ -154,7 +154,7 @@ const vcardUpload = makeUpload('vcards', { maxMb: 5 }).fields([{ name: 'profile_
 const videoUpload = makeUpload('vcards', { types: { 'video/mp4': '.mp4', 'video/webm': '.webm' }, maxMb: 25 }).single('video');
 const VCARD_FIELDS = ['name', 'occupation', 'description', 'first_name', 'last_name', 'email', 'region_code', 'phone', 'alternative_email', 'alternative_phone',
   'location', 'location_url', 'company', 'job_title', 'dob', 'menu_title', 'menu_desc', 'site_title', 'meta_keyword', 'meta_description', 'google_analytics', 'default_language', 'custom_css', 'custom_code', 'custom_code_enabled'];
-const JSON_FIELDS = ['theme', 'social_links', 'custom_links', 'business_hours', 'sections', 'section_order', 'section_titles', 'iframes', 'payment_links', 'qr_settings', 'appointment_settings', 'extras'];
+const JSON_FIELDS = ['theme', 'social_links', 'custom_links', 'business_hours', 'sections', 'section_order', 'section_titles', 'iframes', 'payment_links', 'bank_accounts', 'qr_settings', 'appointment_settings', 'extras'];
 // sections of the public card that can be shown/hidden, reordered and renamed (views/templates/render.js)
 const SECTION_KEYS = ['about', 'contact', 'social', 'links', 'menu', 'services', 'products', 'store', 'appointments', 'gallery', 'testimonials', 'payments', 'blog', 'embeds', 'map', 'hours', 'qr', 'enquiry'];
 const sanitizeHtml = require('sanitize-html');
@@ -234,6 +234,14 @@ r.put('/vcards/:id', vcardUpload, trackStorage, wrap(async (req, res) => {
     data.location_embed = src || null;
   }
   if (b.payment_links !== undefined && features.payment_links) data.payment_links = (Array.isArray(b.payment_links) ? b.payment_links : []).slice(0, 10).map((l) => ({ label: String(l.label || '').slice(0, 80), url: safeUrl(String(l.url || '').slice(0, 500)), type: String(l.type || 'link').slice(0, 20) })).filter((l) => l.label && l.url);
+  // bank / wallet accounts to receive money: as many as the owner wants, each with a copy button on the card
+  if (b.bank_accounts !== undefined) {
+    const cut = (x, n) => String(x ?? '').replace(/[\u0000-\u001f]/g, ' ').trim().slice(0, n);
+    data.bank_accounts = (Array.isArray(b.bank_accounts) ? b.bank_accounts : []).slice(0, 200).map((a) => ({
+      kind: a?.kind === 'wallet' ? 'wallet' : 'bank', name: cut(a?.name, 80), title: cut(a?.title, 120), account: cut(a?.account, 60),
+      iban: cut(a?.iban, 40).replace(/\s+/g, '').toUpperCase(), note: cut(a?.note, 200),
+    })).filter((a) => a.name && (a.account || a.iban));
+  }
   if (b.terms_conditions !== undefined) data.terms_conditions = legalHtml(b.terms_conditions) || null;
   if (b.privacy_policy !== undefined) data.privacy_policy = legalHtml(b.privacy_policy) || null;
   for (const k of ['sticky_bar', 'ask_before_contact', 'enquiry_attachment']) if (b[k] !== undefined) data[k] = toBool(b[k]);

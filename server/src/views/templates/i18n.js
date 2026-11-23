@@ -19,9 +19,9 @@ const RTL = new Set(['ar', 'ur', 'fa', 'he']);
 
 /* extra labels added with the redesigned layouts */
 const EXTRA = {
-  en: { directions: 'Directions', connect: 'Connect with me', mylinks: 'My links' }, ar: { directions: 'الاتجاهات', connect: 'تواصل معي', mylinks: 'روابطي' },
-  ur: { directions: 'راستہ', connect: 'مجھ سے جڑیں', mylinks: 'میرے لنکس' }, fr: { directions: 'Itinéraire', connect: 'Me contacter', mylinks: 'Mes liens' },
-  es: { directions: 'Cómo llegar', connect: 'Conecta conmigo', mylinks: 'Mis enlaces' }, de: { directions: 'Route', connect: 'Mit mir verbinden', mylinks: 'Meine Links' },
+  en: { directions: 'Directions', connect: 'Connect with me', mylinks: 'My links', copy: 'Copy', copied: 'Copied', accno: 'Account number', walletno: 'Mobile / account no.' }, ar: { directions: 'الاتجاهات', connect: 'تواصل معي', mylinks: 'روابطي', copy: 'نسخ', copied: 'تم النسخ', accno: 'رقم الحساب', walletno: 'الجوال / رقم الحساب' },
+  ur: { directions: 'راستہ', connect: 'مجھ سے جڑیں', mylinks: 'میرے لنکس', copy: 'کاپی', copied: 'کاپی ہو گیا', accno: 'اکاؤنٹ نمبر', walletno: 'موبائل / اکاؤنٹ نمبر' }, fr: { directions: 'Itinéraire', connect: 'Me contacter', mylinks: 'Mes liens', copy: 'Copier', copied: 'Copié', accno: 'Numéro de compte', walletno: 'Mobile / compte' },
+  es: { directions: 'Cómo llegar', connect: 'Conecta conmigo', mylinks: 'Mis enlaces', copy: 'Copiar', copied: 'Copiado', accno: 'Número de cuenta', walletno: 'Móvil / cuenta' }, de: { directions: 'Route', connect: 'Mit mir verbinden', mylinks: 'Meine Links', copy: 'Kopieren', copied: 'Kopiert', accno: 'Kontonummer', walletno: 'Handy / Konto' },
   pt: { directions: 'Direções', connect: 'Conecte-se comigo', mylinks: 'Meus links' }, tr: { directions: 'Yol tarifi', connect: 'Benimle bağlantı kur', mylinks: 'Bağlantılarım' },
   hi: { directions: 'दिशा-निर्देश', connect: 'मुझसे जुड़ें', mylinks: 'मेरे लिंक' }, fa: { directions: 'مسیریابی', connect: 'با من در ارتباط باشید', mylinks: 'لینک‌های من' },
   it: { directions: 'Indicazioni', connect: 'Contattami', mylinks: 'I miei link' }, vi: { directions: 'Chỉ đường', connect: 'Kết nối với tôi', mylinks: 'Liên kết của tôi' },

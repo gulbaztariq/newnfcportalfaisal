@@ -6,11 +6,12 @@ import { toast } from 'sonner';
 import { Youtube as YtIcon, Instagram as InstaIcon, Linkedin as LinkedIcon } from '@/components/BrandIcons';
 import {
   Film, Image as ImageIcon, Code2, MapPin, Plus, Trash2, Wallet, FileText, QrCode, Download,
-  CalendarClock, Package, Pencil, Newspaper, FileStack, X, Globe2, Upload, CheckCircle2, Clock3, ShieldCheck,
+  CalendarClock, Package, Copy, Landmark, Smartphone, Pencil, Newspaper, FileStack, X, Globe2, Upload, CheckCircle2, Clock3, ShieldCheck,
 } from 'lucide-react';
 import api, { toFormData } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { cn } from '@/lib/cn';
+import { PK_BANKS, PK_WALLETS, kindOf } from '@/lib/pkBanks';
 import { Card, CardHeader, CardBody, Button, ButtonLink, Field, Input, Textarea, Select, Switch, SwitchRow, ImageUpload, ColorInput, Dialog, EmptyState, Skeleton, Badge, Segmented, run, confirm, useForm } from '@/components/ui';
 import AiButton from '@/components/AiButton';
 
@@ -90,10 +91,56 @@ export function MediaTab({ v, form, locked, Upgrade, vcardId, onVideo }) {
 
 /* ------------------------------------------------------ payment links */
 const PAY_TYPES = [{ value: 'link', label: 'Payment link' }, { value: 'paypal', label: 'PayPal' }, { value: 'upi', label: 'UPI / wallet' }, { value: 'bank', label: 'Bank' }, { value: 'crypto', label: 'Crypto' }];
+/** bank & wallet accounts: as many as wanted; the card shows each with Copy buttons so the number can be pasted into a banking app */
+function BankAccountsCard({ v, form }) {
+  const list = v.bank_accounts || [];
+  const upd = (i, patch) => form.set('bank_accounts', list.map((x, j) => (j === i ? { ...x, ...patch } : x)));
+  return (
+    <Card>
+      <CardHeader icon={Landmark} title="Bank & wallet accounts" description="Add as many accounts as you like. Visitors get a Copy button for each number, ready to paste into their banking app."
+        actions={<Button size="sm" onClick={() => form.set('bank_accounts', [...list, { kind: 'bank', name: '', title: '', account: '', iban: '', note: '' }])}><Plus />Add account</Button>} />
+      <CardBody>
+        <datalist id="pk-bank-names">{[...PK_BANKS, ...PK_WALLETS].map((n) => <option key={n} value={n} />)}</datalist>
+        {!list.length ? <EmptyState icon={Landmark} title="No accounts yet" description="Add a bank account, Easypaisa, JazzCash or any other wallet." /> : (
+          <div className="space-y-3">
+            {list.map((a, i) => (
+              <motion.div layout key={i} className="space-y-3 rounded-2xl border border-border p-3.5">
+                <div className="flex flex-wrap items-end gap-3">
+                  <Field label="Bank or wallet" className="min-w-52 flex-[2]" hint="Pick from the list or type your own">
+                    <Input list="pk-bank-names" placeholder="Choose or type a name" value={a.name || ''} autoComplete="off"
+                      onChange={(e) => upd(i, { name: e.target.value, kind: kindOf(e.target.value) })} />
+                  </Field>
+                  <Segmented size="sm" id={`bk-${i}`} value={a.kind || 'bank'} onChange={(x) => upd(i, { kind: x })} options={[{ value: 'bank', label: 'Bank', icon: Landmark }, { value: 'wallet', label: 'Wallet', icon: Smartphone }]} />
+                  <Button variant="danger-soft" size="icon" onClick={() => form.set('bank_accounts', list.filter((_, j) => j !== i))} aria-label="Remove account"><Trash2 /></Button>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <Field label="Account title"><Input placeholder="Name on the account" value={a.title || ''} onChange={(e) => upd(i, { title: e.target.value })} /></Field>
+                  <Field label={a.kind === 'wallet' ? 'Mobile / account number' : 'Account number'}><Input inputMode="text" placeholder={a.kind === 'wallet' ? '03XX XXXXXXX' : 'Account number'} value={a.account || ''} onChange={(e) => upd(i, { account: e.target.value })} /></Field>
+                  <Field label="IBAN (optional)"><Input placeholder="PK00 XXXX 0000 0000 0000 0000" value={a.iban || ''} onChange={(e) => upd(i, { iban: e.target.value })} /></Field>
+                  <Field label="Note (optional)"><Input placeholder="Branch, purpose, e.g. for invoices" value={a.note || ''} onChange={(e) => upd(i, { note: e.target.value })} /></Field>
+                </div>
+                {(a.account || a.iban) && (
+                  <div className="flex flex-wrap gap-2">
+                    {a.account && <Button size="sm" variant="outline" onClick={() => { navigator.clipboard?.writeText(a.account); toast.success('Number copied'); }}><Copy />Copy number</Button>}
+                    {a.iban && <Button size="sm" variant="outline" onClick={() => { navigator.clipboard?.writeText(String(a.iban).replace(/\s+/g, '')); toast.success('IBAN copied'); }}><Copy />Copy IBAN</Button>}
+                  </div>
+                )}
+              </motion.div>
+            ))}
+          </div>
+        )}
+        <p className="mt-3 text-xs text-muted-foreground">Accounts appear in the "Pay Me" section of your card. An account needs a name and an account number or IBAN to be shown.</p>
+      </CardBody>
+    </Card>
+  );
+}
+
 export function PaymentLinksTab({ v, form, locked, Upgrade }) {
   const list = v.payment_links || [];
   const upd = (i, patch) => form.set('payment_links', list.map((x, j) => (j === i ? { ...x, ...patch } : x)));
   return (
+    <>
+    <BankAccountsCard v={v} form={form} />
     <Card>
       <CardHeader icon={Wallet} title="Payment links" description="Let people pay you straight from your card (PayPal.me, Stripe links, UPI...)"
         actions={!locked('payment_links') && <Button size="sm" onClick={() => form.set('payment_links', [...list, { label: '', url: '', type: 'link' }])}><Plus />Add</Button>} />
@@ -112,6 +159,7 @@ export function PaymentLinksTab({ v, form, locked, Upgrade }) {
         )}
       </CardBody>
     </Card>
+    </>
   );
 }
 

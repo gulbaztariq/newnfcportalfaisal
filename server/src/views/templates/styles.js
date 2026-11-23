@@ -144,6 +144,15 @@ form.enq label{font-size:13px;color:var(--muted)}
 .pays a{display:flex;align-items:center;gap:12px;padding:12px 16px 12px 12px;border-radius:var(--r);background:var(--card);border:1px solid var(--line);font-weight:600;box-shadow:var(--sh);transition:transform .3s var(--ease),border-color .25s}
 .pays a:hover{transform:translateY(-2px);border-color:color-mix(in srgb,var(--p) 50%,transparent)}
 .pays a i{width:40px;height:40px;border-radius:14px;display:grid;place-items:center;background:var(--chip);color:var(--p);font-size:19px}
+.bks{display:grid;gap:12px}.pays+.bks{margin-top:12px}
+.bk{padding:14px 16px;border-radius:var(--r);background:var(--card);border:1px solid var(--line);display:grid;gap:10px}
+.bk-h{display:flex;align-items:center;gap:12px}.bk-h>i{width:40px;height:40px;border-radius:14px;display:grid;place-items:center;background:var(--chip);color:var(--p);font-size:19px;flex:none}
+.bk-h b{display:block;font-weight:700;line-height:1.25}.bk-h small{display:block;color:var(--muted);font-size:12.5px;margin-top:2px}
+.bk-r{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;border-radius:calc(var(--r)*.7);background:color-mix(in srgb,var(--tx) 5%,transparent)}
+.bk-r div{min-width:0}.bk-r small{display:block;color:var(--muted);font-size:11.5px;letter-spacing:.03em}.bk-r b{display:block;font-size:15px;font-weight:700;letter-spacing:.02em;overflow-wrap:anywhere;margin-top:1px}
+.bk-cp{flex:none;display:inline-flex;align-items:center;gap:6px;min-height:40px;padding:0 14px;border-radius:999px;border:1px solid var(--line);background:var(--p);color:var(--onp);font:inherit;font-size:13px;font-weight:700;cursor:pointer}
+.bk-cp:active{transform:scale(.96)}.bk-cp.done{background:#16a34a;color:#fff;border-color:transparent}
+.bk-n{margin:0;color:var(--muted);font-size:12.5px}
 .posts{display:grid;gap:12px}
 .post{display:flex;gap:14px;align-items:center;background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:10px;box-shadow:var(--sh);transition:transform .3s var(--ease)}
 .post:hover{transform:translateY(-2px)}

@@ -253,6 +253,7 @@ const Vcard = sequelize.define('vcard', {
   terms_conditions: T.TEXT,
   privacy_policy: T.TEXT,
   payment_links: json('payment_links', []), // [{label,url}]
+  bank_accounts: json('bank_accounts', []), // [{kind:'bank'|'wallet',name,title,account,iban,note}] shown with copy buttons
   // behaviour
   sticky_bar: { type: T.BOOLEAN, defaultValue: true },
   newsletter_popup: { type: T.BOOLEAN, defaultValue: false },
