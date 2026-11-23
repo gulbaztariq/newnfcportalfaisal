@@ -153,6 +153,7 @@ form.enq label{font-size:13px;color:var(--muted)}
 .bk-cp{flex:none;display:inline-flex;align-items:center;gap:6px;min-height:40px;padding:0 14px;border-radius:999px;border:1px solid var(--line);background:var(--p);color:var(--onp);font:inherit;font-size:13px;font-weight:700;cursor:pointer}
 .bk-cp:active{transform:scale(.96)}.bk-cp.done{background:#16a34a;color:#fff;border-color:transparent}
 .bk-n{margin:0;color:var(--muted);font-size:12.5px}
+.wlts{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}.wlts .btn{flex:1 1 180px;justify-content:center}
 .posts{display:grid;gap:12px}
 .post{display:flex;gap:14px;align-items:center;background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:10px;box-shadow:var(--sh);transition:transform .3s var(--ease)}
 .post:hover{transform:translateY(-2px)}

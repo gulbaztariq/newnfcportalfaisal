@@ -14,6 +14,7 @@ const extras = require('../services/extras');
 const mail = require('../services/mail');
 const webhooks = require('../services/webhooks');
 const googlecontacts = require('../services/googlecontacts');
+const wallet = require('../services/wallet');
 const qrstyle = require('../services/qrstyle');
 const usersettings = require('../services/usersettings');
 const userpay = require('../services/userpay');
@@ -616,6 +617,21 @@ pages.get('/:alias/contact.vcf', wrap(async (req, res, next) => {
   if (!v || locked(req, v)) return next();
   countEvent(req, v, 'save');
   res.set('Content-Type', 'text/vcard; charset=utf-8').set('Content-Disposition', `attachment; filename="${v.url_alias}.vcf"`).send(vcardFile(v, { appUrl }));
+}));
+
+pages.get('/:alias/wallet.pkpass', wrap(async (req, res, next) => {
+  const v = await findVcard(req.params.alias);
+  if (!v || locked(req, v)) return next();
+  let buf; try { buf = await wallet.applePass(v, appUrl); } catch (e) { if (e.status === 404) return next(); console.error('[wallet] apple:', e.message); return res.status(502).type('text').send('The Apple Wallet pass could not be created. Please try again later.'); }
+  countEvent(req, v, 'save');
+  res.set('Content-Type', 'application/vnd.apple.pkpass').set('Content-Disposition', `attachment; filename="${v.url_alias}.pkpass"`).set('Cache-Control', 'no-store').send(buf);
+}));
+pages.get('/:alias/wallet-google', wrap(async (req, res, next) => {
+  const v = await findVcard(req.params.alias);
+  if (!v || locked(req, v)) return next();
+  let url; try { url = await wallet.googleSaveUrl(v, appUrl); } catch (e) { if (e.status === 404) return next(); console.error('[wallet] google:', e.message); return res.status(502).type('text').send('The Google Wallet link could not be created. Please try again later.'); }
+  countEvent(req, v, 'save');
+  res.set('Cache-Control', 'no-store').redirect(302, url);
 }));
 
 pages.get('/:alias/qr.svg', wrap(async (req, res, next) => {

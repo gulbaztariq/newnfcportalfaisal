@@ -26,6 +26,7 @@ Gaps found: weak `.vcf`, no lead follow-up fields, no outbound integrations, no 
 | Campaign (utm_*) analytics, QR vs NFC channel split, campaign link builder | Analytics page | `server/src/services/analytics.js`, `server/src/routes/redirects.js`, `client/src/pages/user/Analytics.jsx` |
 | Email signature generator (4 styles) | User menu > Email signature | `server/src/services/signature.js`, `client/src/pages/user/Signatures.jsx` |
 | Team: CSV check before import, extra CSV columns, team card design applied to new and existing cards, team export, team signature file | Organisation page | `server/src/services/organisation.js`, `server/src/routes/user/content.js`, `client/src/pages/user/Organisation.jsx` |
+| Wallet passes: signed Apple `.pkpass` and Google Wallet save link, buttons under the QR code | Admin > Settings > Integrations (credentials); card page; `/{alias}/wallet.pkpass`, `/{alias}/wallet-google` | `server/src/services/wallet.js`, `server/src/routes/public.js` |
 | WhatsApp button with a prepared opening message | Editor > Advanced | `server/src/views/templates/render.js`, `EditorExtras.jsx` |
 
 ## 5. Partly implemented or not built, and why
@@ -33,7 +34,7 @@ Gaps found: weak `.vcf`, no lead follow-up fields, no outbound integrations, no 
 | Item | Status | Reason |
 |---|---|---|
 | Google Contacts sync | Built, inactive | Needs your Google OAuth client ID and secret; tested only against a mocked Google; Google app verification needed beyond test users |
-| Apple / Google Wallet passes | Not built | Needs Apple Developer certificate and Google Wallet issuer account |
+| Apple / Google Wallet passes | Built, inactive | Code, admin settings and card buttons are done and tested with throwaway certificates/keys; they switch on once you paste a real Apple Pass Type ID certificate + WWDR certificate and a Google Wallet issuer ID + service-account key (Admin > Settings > Integrations > Wallet passes). Not yet seen on a real iPhone or Android |
 | Paper-card / badge scanner | Not built | Needs a paid OCR/vision API key |
 | HubSpot, Salesforce, Outlook native sync | Not built | Needs their OAuth apps; webhooks (Zapier/Make) cover them meanwhile |
 | SSO, SCIM, directory sync | Not built | Enterprise-customer feature; no demand yet |
@@ -65,7 +66,17 @@ New: `Leads.jsx` (leads, integrations, webhooks, Google), `Signatures.jsx`. Chan
 
 ## 10. Testing
 
-Server suite: 337 of 338 pass. The one failure is the long-standing "LOAD: 300 concurrent page + API requests" test, which is timing-sensitive on this machine and passes on some runs. New test files: `leads-webhooks.test.js`, `team-brand.test.js`, `campaigns.test.js`, `signature.test.js`, `googlecontacts.test.js`, plus additions to `content.test.js` and `templates.test.js`. New screens were checked in the browser against a throwaway local database. **Not done:** a logged-in click-through of the new screens on production (no production login was used), and testing signatures pasted into real Gmail/Outlook or `.vcf` import on a real iPhone/Android.
+`npm test` in `server/` now runs the files one after another (`--test-concurrency=1`). Run in parallel, the machine's CPU was shared between files and the 300-request load test sometimes crossed its 3-second limit (3.02 s once); serially it always passes (p95 about 0.7 s).
+
+Result of the last full run: **363 of 363 pass** (about 84 s).
+
+- **Unit tests** (pure helpers, no server): `units-new.test.js` (phone formatting, vCard escaping and folding with multi-byte text, unsafe URL dropping, signature escaping and styles, webhook signing and address rules, Google person body and OAuth state, brand cleaning, CSV parsing, tag cleaning, source detection, private-IP boundaries).
+- **Feature tests** (real HTTP, throwaway database): `leads-webhooks`, `team-brand`, `campaigns`, `signature`, `googlecontacts` (Google mocked), plus additions to `content`, `templates` and `analytics`.
+- **Scenario test** `scenario.test.js`: one company story in 12 steps that adds and then changes data: company setup and update, team design, CSV check and import with a full-seats case, invited member sets a password, member fills in and then edits bank accounts and WhatsApp message, public card and `.vcf` checked, webhook and Google connected, visitors scan the QR, tap the NFC link, follow campaign links, send a form lead, subscribe and message on WhatsApp, lead status/tags/notes updated twice and searched and exported, analytics by channel and campaign, company analytics includes the member, owner changes the design and applies it to every card, lock/unlock/block/remove, and a second company that cannot see or change any of it.
+- **Browser walk-through on the throwaway database** (not production): a visitor sent a lead from the public card form; in the dashboard a webhook was added and a signed test delivery was received by a local listener; the lead was changed to Qualified with tags and a note, and the status counts updated.
+- **Phone width (375 px)**: Leads, Integrations, Email signature and Organisation have no sideways overflow.
+
+Not covered: production click-through with a real login, real Gmail/Outlook pasting, `.vcf` import on a real phone, real Google, a penetration test.
 
 ## 11. Known limitations
 
@@ -77,7 +88,7 @@ Server suite: 337 of 338 pass. The one failure is the long-standing "LOAD: 300 c
 
 ## 12. Credentials and services needed
 
-Google OAuth client (ID + secret, People API enabled, redirect `https://app.smartvisitingcards.com/api/public/integrations/google/callback`); later, optionally: Apple Developer certificate and Google Wallet issuer account, an OCR/vision API key, HubSpot/Salesforce OAuth apps.
+Apple Developer account (Pass Type ID certificate + private key, Team ID, Apple WWDR certificate) and Google Wallet issuer ID + service-account key for wallet passes; Google OAuth client (ID + secret, People API enabled, redirect `https://app.smartvisitingcards.com/api/public/integrations/google/callback`); later, optionally: Apple Developer certificate and Google Wallet issuer account, an OCR/vision API key, HubSpot/Salesforce OAuth apps.
 
 ## 13. Deployment
 
