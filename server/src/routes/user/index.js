@@ -516,6 +516,16 @@ r.delete('/enquiries/:id', wrap(async (req, res) => {
 }));
 
 
+/* ============================================================ Google Contacts */
+const gcontacts = require('../../services/googlecontacts');
+r.get('/integrations/google', wrap(async (req, res) => res.json(await gcontacts.status(req.user.id))));
+r.post('/integrations/google/connect', wrap(async (req, res) => { try { res.json({ url: await gcontacts.authUrl(req.user.id) }); } catch (e) { fail(e.status || 500, e.message); } }));
+r.put('/integrations/google', wrap(async (req, res) => { if (!(await gcontacts.status(req.user.id)).connected) fail(422, 'Connect your Google account first'); await gcontacts.setAuto(req.user.id, toBool(req.body.auto)); res.json(await gcontacts.status(req.user.id)); }));
+r.post('/integrations/google/disconnect', wrap(async (req, res) => { await gcontacts.disconnect(req.user.id); res.json({ message: 'Google disconnected', ...(await gcontacts.status(req.user.id)) }); }));
+r.post('/integrations/google/sync-all', wrap(async (req, res) => {
+  try { const out = await gcontacts.syncAll(req.user.id); res.json({ ...out, message: `${out.sent} lead(s) added to Google Contacts${out.remaining ? `, ${out.remaining} more to send` : ''}` }); } catch (e) { fail(e.status || 502, e.message); }
+}));
+
 /* ================================================================ webhooks */
 const hookOut = (h) => ({ id: h.id, name: h.name, url: h.url, secret: h.secret, events: h.events || [], active: h.active, last_status: h.last_status, last_at: h.last_at, failures: h.failures });
 const hookFields = async (b) => {

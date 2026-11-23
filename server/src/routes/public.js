@@ -13,6 +13,7 @@ const subs = require('../services/subscription');
 const extras = require('../services/extras');
 const mail = require('../services/mail');
 const webhooks = require('../services/webhooks');
+const googlecontacts = require('../services/googlecontacts');
 const qrstyle = require('../services/qrstyle');
 const usersettings = require('../services/usersettings');
 const userpay = require('../services/userpay');
@@ -156,10 +157,21 @@ api.post('/vcards/:alias/enquiry', formLimiter, enquiryUpload, wrap(async (req, 
     product_name: req.body.product_name || null, attachment: v.enquiry_attachment && req.file ? fileUrl('enquiries', req.file) : null,
   });
   webhooks.emit(v.user_id, 'lead.created', webhooks.leadPayload(v, e));
+  googlecontacts.onLead(v.user_id, e, v);
   if (req.body.message !== 'Downloaded the contact card') {
     mail.sendTemplate('enquiry_received', v.user.email, { vcard: v.name, customer: e.name, contact: [e.email, e.phone].filter(Boolean).join(' · '), message: e.message }).catch(() => {});
   }
   res.json({ message: 'Your message has been sent. Thank you!' });
+}));
+
+
+/* Google Contacts: Google sends the user back here after they allow access */
+api.get('/integrations/google/callback', wrap(async (req, res) => {
+  const back = (q) => res.redirect(302, `${clientUrl}/user/webhooks?${q}`);
+  const userId = googlecontacts.readState(req.query.state);
+  if (!userId) return res.status(400).send('This link has expired. Go back to NFC Profile and press Connect again.');
+  if (req.query.error || !req.query.code) return back('google=denied');
+  try { await googlecontacts.connect(userId, String(req.query.code)); return back('google=connected'); } catch (e) { console.error('[google contacts] connect:', e.message); return back(`google=failed&reason=${encodeURIComponent(String(e.message).slice(0, 120))}`); }
 }));
 
 api.post('/vcards/:alias/subscribe', formLimiter, wrap(async (req, res) => {
