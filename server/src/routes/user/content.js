@@ -12,6 +12,8 @@ const ai = require('../../services/ai');
 const subs = require('../../services/subscription');
 const perms = require('../../services/permissions');
 const org = require('../../services/organisation');
+const docs = require('../../services/documents');
+const { appUrl } = require('../../config');
 const COMPANY_STAFF = ['manager', 'supervisor', 'member'];
 const listOf = (v) => { if (Array.isArray(v)) return v; try { return JSON.parse(v); } catch { return []; } };
 
@@ -282,11 +284,48 @@ r.post('/organisation/members/import', wrap(async (req, res) => {
   if (!csv.trim()) fail(422, 'Choose a CSV file');
   if (csv.length > 900 * 1024) fail(422, 'The file is too large (max 900 KB, about 10,000 rows)');
   const role = ['member', 'supervisor'].includes(req.body.default_role) || (!req.actor && req.body.default_role === 'manager') ? req.body.default_role : 'member';
-  const result = await org.importMembers(owner, csv, { notify: req.body.notify === undefined ? true : toBool(req.body.notify), defaultRole: role });
+  const dryRun = toBool(req.body.dry_run);
+  const result = await org.importMembers(owner, csv, { notify: req.body.notify === undefined ? true : toBool(req.body.notify), defaultRole: role, dryRun });
+  if (dryRun) return res.json({ ...result, dry_run: true, message: `${result.created.length} row(s) are ready to import${result.errors.length ? `, ${result.errors.length} need fixing` : ''}` });
   // managers cannot create other managers, even from a file
   if (req.actor) for (const c of result.created.filter((x) => x.role === 'manager')) { await M.User.update({ company_role: 'member' }, { where: { id: c.id } }); c.role = 'member'; }
   if (result.created.length) org.logEvent(owner.id, req.actor || req.user, 'members_imported', `Imported ${result.created.length} user(s) from a CSV file: ${result.created.slice(0, 5).map((c) => c.name).join(', ')}${result.created.length > 5 ? '...' : ''}`, { member_ids: result.created.map((c) => c.id) });
   res.json({ ...result, message: `${result.created.length} user(s) imported${result.errors.length ? `, ${result.errors.length} row(s) skipped` : ''}` });
+}));
+
+/* team card design: one template + colours for the whole team, applied to new members automatically and to existing cards on request */
+r.put('/organisation/brand', wrap(async (req, res) => {
+  const owner = await orgOwner(req);
+  if (req.actor) fail(403, 'Only the organisation owner can change the team design');
+  const brand = org.cleanBrand(req.body || {});
+  if (brand.template && !(await M.Template.findOne({ where: { slug: brand.template, status: true }, attributes: ['id'] }))) fail(422, 'Choose an available template', { template: 'Choose an available template' });
+  let row = await M.Organisation.findOne({ where: { owner_id: owner.id } });
+  row = row ? await row.update({ brand }) : await M.Organisation.create({ owner_id: owner.id, name: owner.fullName(), brand });
+  org.logEvent(owner.id, req.user, 'brand_updated', 'Updated the team card design');
+  res.json({ message: 'Team design saved. New users get it automatically.', data: row });
+}));
+r.post('/organisation/brand/apply', wrap(async (req, res) => {
+  const owner = await orgOwner(req);
+  if (req.actor) fail(403, 'Only the organisation owner can change every card');
+  const what = { template: toBool(req.body.template), colours: toBool(req.body.colours), company: toBool(req.body.company) };
+  if (!what.template && !what.colours && !what.company) fail(422, 'Choose what to apply');
+  const n = await org.applyBrand(owner, what);
+  org.logEvent(owner.id, req.user, 'brand_applied', `Applied the team design to ${n} card(s)`, what);
+  res.json({ message: `Updated ${n} card(s)`, updated: n });
+}));
+r.get('/organisation/members/export', wrap(async (req, res) => {
+  const owner = await orgOwner(req);
+  const members = await M.User.findAll({ where: { organisation_id: owner.id }, order: [['id', 'ASC']] });
+  const cards = await M.Vcard.findAll({ where: { user_id: members.map((m) => m.id) }, attributes: ['id', 'user_id', 'url_alias', 'views', 'job_title'], raw: true });
+  const leads = await M.VcardEnquiry.count({ where: { vcard_id: cards.map((c) => c.id) }, group: ['vcard_id'] });
+  const leadOf = Object.fromEntries(leads.map((l) => [l.vcard_id, l.count]));
+  const rows = members.map((m) => {
+    const cs = cards.filter((c) => c.user_id === m.id);
+    return { name: m.fullName(), email: m.email, role: m.company_role || 'member', status: m.org_status || 'active', job_title: cs[0]?.job_title || '', cards: cs.length, card_link: cs[0] ? `${appUrl}/${cs[0].url_alias}` : '', views: cs.reduce((a, c) => a + (c.views || 0), 0), leads: cs.reduce((a, c) => a + (leadOf[c.id] || 0), 0) };
+  });
+  const cols = [['name', 'Name'], ['email', 'E-mail'], ['role', 'Role'], ['status', 'Status'], ['job_title', 'Job title'], ['cards', 'Cards'], ['card_link', 'Card link'], ['views', 'Views'], ['leads', 'Leads']].map(([key, label]) => ({ key, label }));
+  const out = await docs.exportRows(String(req.query.format || 'csv'), 'Team', cols, rows);
+  res.type(out.type).set('Content-Disposition', `attachment; filename="team.${out.ext}"`).send(out.body);
 }));
 r.patch('/organisation/members/:mid', wrap(async (req, res) => {
   const m = await memberOf(req, { secrets: true });

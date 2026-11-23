@@ -82,6 +82,7 @@ const Organisation = sequelize.define('organisation', {
   city: T.STRING(120),
   country: T.STRING(120),
   seats: { type: T.INTEGER, defaultValue: 0 }, // number of users allowed, 0 = the plan's organisation-user limit
+  brand: json('brand', {}), // team card design: { template: slug, primary, secondary, background, text, font }
 });
 User.hasOne(Organisation, { foreignKey: 'owner_id', onDelete: 'CASCADE' }); Organisation.belongsTo(User, { as: 'owner', foreignKey: 'owner_id' });
 
