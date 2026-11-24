@@ -130,9 +130,8 @@ r.post('/login-code', authLimiter, wrap(async (req, res) => {
   const user = await User.scope('withSecrets').findOne({ where: { email } });
   const usable = !!user && user.is_active && org.canSignIn(user) && !(await security.lockoutState(user));
   if (usable) {
-    try { await security.sendLoginCode(user, { resend: true }); } catch (e) {
-      if (!(e instanceof HttpError && e.status === 429)) { console.error('[login code]', e.message); fail(502, 'We could not e-mail your sign-in code. Please try again in a moment.'); } // 429: a code was just sent, reuse it
-    }
+    // every request issues a brand-new code and the previous one stops working at once (only the newest hash is stored)
+    try { await security.sendLoginCode(user); } catch (e) { console.error('[login code]', e.message); fail(502, 'We could not e-mail your sign-in code. Please try again in a moment.'); }
   } else security.strike(req.ip, 1);
   const challenge = jwt.sign({ sub: usable ? user.id : 0, v: usable ? user.token_version || 0 : 0, p: '2fa', m: 'email', via: 'code' }, jwtSecret, { expiresIn: '10m' });
   const [n, d] = email.split('@');
