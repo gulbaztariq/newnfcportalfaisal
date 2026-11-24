@@ -136,6 +136,26 @@ r.get('/vcards', wrap(async (req, res) => {
   const avail = await availability.forCards(rows);
   res.json(paged(rows.map((v) => ({ ...v.toJSON(), availability: avail[v.id] })), count, p));
 }));
+/* a super admin or staff member creates a card and assigns it to a user: one person can own several cards under one e-mail (e.g. 5 ordered NFC cards).
+   The card link is generated; the owner's plan limit is not applied because the admin is explicitly assigning it. */
+r.post('/vcards', wrap(async (req, res) => {
+  validate(req.body, { user_id: 'required' });
+  const user = await M.User.findOne({ where: { id: req.body.user_id, role: 'user' } });
+  if (!user) fail(422, 'Validation failed', { user_id: 'User not found' });
+  const s = await settings.all();
+  const tpl = (req.body.template_id && (await M.Template.findOne({ where: { id: req.body.template_id, status: true } })))
+    || (await M.Template.findOne({ where: { slug: s.default_vcard_template || 'vcard1', status: true } })) || (await M.Template.findOne({ where: { status: true }, order: [['id', 'ASC']] }));
+  if (!tpl) fail(422, 'Validation failed', { template_id: 'No template is available' });
+  const fullName = `${user.first_name} ${user.last_name}`.trim();
+  const name = String(req.body.name || '').trim().slice(0, 120) || fullName;
+  const v = await M.Vcard.create({
+    name, url_alias: await require('../../services/onboarding').freeAlias(name), template_id: tpl.id, user_id: user.id,
+    first_name: user.first_name, last_name: user.last_name, email: user.email, phone: user.contact || null, region_code: user.region_code || null,
+    theme: tpl.defaults || {}, sections: { contact: true, social: true, services: true, gallery: true, testimonials: true, hours: true, qr: true, enquiry: true },
+  });
+  await require('../../services/shortlinks').forVcard(v);
+  res.status(201).json({ data: v, message: `vCard created and assigned to ${fullName}` });
+}));
 r.patch('/vcards/:id', wrap(async (req, res) => {
   const v = await M.Vcard.findByPk(req.params.id);
   if (!v) fail(404, 'Not found');

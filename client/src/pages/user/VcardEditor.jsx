@@ -11,11 +11,13 @@ import { useAuth } from '@/lib/auth';
 import { cn } from '@/lib/cn';
 import { PageHeader, Card, CardHeader, CardBody, Button, ButtonLink, Field, Input, Textarea, Select, Switch, SwitchRow, ImageUpload, ColorInput, Dialog, EmptyState, Skeleton, Badge, Tip, useForm, run, confirm } from '@/components/ui';
 import TemplateGallery from './TemplateGallery';
+import CopyToCards from './CopyToCards';
 import DesignStudio, { LivePreview, useDesignHistory, designOf, themePayload } from './DesignStudio';
 import { toast } from 'sonner';
 import AiButton from '@/components/AiButton';
 import { MediaTab, PaymentLinksTab, LegalTab, QrTab, AppointmentsTab, ProductsTab, BlogTab, PagesTab, AdvancedExtras } from './EditorExtras';
 import { GripVertical, Eye, EyeOff, BookOpen, Upload } from 'lucide-react';
+import { Copy } from 'lucide-react';
 import { Film, Package, CalendarClock, Newspaper, FileStack, Wallet as WalletIcon, QrCode as QrIcon, Scale, BarChart3 } from 'lucide-react';
 
 const SOCIAL = [
@@ -71,6 +73,15 @@ export default function VcardEditor() {
   const form = useForm({});
   // undo / redo over the design (template, theme, sections); must run on every render, before the loading return
   const history = useDesignHistory(form.values, (d) => form.setValues((x) => ({ ...x, ...d })), !!data);
+  // unsaved text, links and accounts, sent to the live preview while typing
+  const pvContent = useMemo(() => {
+    const x = form.values;
+    const pick = ['first_name', 'last_name', 'occupation', 'job_title', 'company', 'description', 'email', 'region_code', 'phone', 'alternative_email', 'alternative_phone', 'location', 'location_url', 'name', 'social_links', 'custom_links', 'bank_accounts', 'payment_links', 'business_hours'];
+    return data ? Object.fromEntries(pick.filter((k) => x[k] !== undefined).map((k) => [k, x[k]])) : null;
+  }, [form.values, data]);
+  const [pvSection, setPvSection] = useState('top');
+  const [copying, setCopying] = useState(null);
+  useEffect(() => { setPvSection({ basic: 'top', social: 'social', links: 'links', services: 'services', products: 'products', gallery: 'gallery', testimonials: 'testimonials', appointments: 'appointments', blog: 'blog', payments: 'payments', hours: 'hours', qr: 'qr', menu: 'menu', media: 'embeds' }[tab] || null); }, [tab]);
 
   const load = async () => {
     const [{ data: d }, { data: t }] = await Promise.all([api.get(`/user/vcards/${id}`), api.get('/user/vcards/templates')]);
@@ -128,12 +139,14 @@ export default function VcardEditor() {
     <>
       <Link to="/user/vcards" className="mb-4 inline-flex min-h-6 items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" />My vCards</Link>
       <PageHeader title={data.name} description={<a href={link} target="_blank" rel="noreferrer" className="text-primary hover:underline">{link.replace(/^https?:\/\//, '')}</a>}>
+        {!orgLocks.has('manage_cards') && <Button variant="outline" onClick={() => setCopying({ id: Number(id), name: data.name })}><Copy />Copy to my other cards</Button>}
         <ButtonLink as={Link} to={`/user/vcards/${id}/analytics`} variant="outline"><BarChart3 />Analytics</ButtonLink>
         <ButtonLink href={`/api/user/vcards/${id}/qrcode`} variant="outline"><QrCode />QR code</ButtonLink>
         <ButtonLink href={link} target="_blank" rel="noreferrer" variant="outline"><ExternalLink />Open</ButtonLink>
         <Button onClick={save} loading={saving} disabled={!dirty && !saving}><Save />Save</Button>
       </PageHeader>
 
+      <CopyToCards card={copying} onClose={() => setCopying(null)} />
       {orgLocks.size > 0 && (
         <div className="mb-4 flex items-center gap-3 rounded-2xl border border-warning/30 bg-warning-soft p-4 text-sm">
           <Lock className="size-5 shrink-0 text-warning" />
@@ -154,10 +167,10 @@ export default function VcardEditor() {
         </Card>
 
         <AnimatePresence mode="wait">
-          <motion.div key={tab} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.22 }} className="min-w-0 space-y-6">
+          <motion.div key={tab} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.22 }} className="min-w-0 space-y-6" onFocusCapture={(e) => { const el = e.target.closest?.('[data-pv]'); if (el) setPvSection(el.dataset.pv); }}>
             {tab === 'basic' && (
               <>
-                <Card>
+                <Card data-pv="top">
                   <CardHeader icon={IdCard} title="Profile" description="Who you are and what you do" />
                   <CardBody className="grid gap-4 sm:grid-cols-2">
                     {lk('profile_image', <Field label={ll('Profile photo', 'profile_image')}><ImageUpload value={v.profile_image} onChange={(x) => form.set('profile_image', x)} round /></Field>)}
@@ -167,10 +180,10 @@ export default function VcardEditor() {
                     {lk('occupation', <Field label={ll('Occupation', 'occupation')}><Input {...form.input('occupation')} /></Field>)}
                     {lk('job_title', <Field label={ll('Job title', 'job_title')}><Input {...form.input('job_title')} /></Field>)}
                     {lk('company', <Field label={ll('Company', 'company')} className="sm:col-span-2"><Input {...form.input('company')} /></Field>)}
-                    {lk('description', <Field label={<span className="flex w-full items-center justify-between">{ll('About you', 'description')} <AiButton kind="vcard" title={`${v.first_name || ''} ${v.last_name || ''}, ${v.occupation || v.job_title || ''}`.trim()} details={[v.company, v.description].filter(Boolean).join('. ')} onResult={(t) => form.set('description', t)} /></span>} className="sm:col-span-2"><Textarea {...form.input('description')} rows={4} /></Field>)}
+                    <div data-pv="about" className="sm:col-span-2">{lk('description', <Field label={<span className="flex w-full items-center justify-between">{ll('About you', 'description')} <AiButton kind="vcard" title={`${v.first_name || ''} ${v.last_name || ''}, ${v.occupation || v.job_title || ''}`.trim()} details={[v.company, v.description].filter(Boolean).join('. ')} onResult={(t) => form.set('description', t)} /></span>} className="sm:col-span-2"><Textarea {...form.input('description')} rows={4} /></Field>)}</div>
                   </CardBody>
                 </Card>
-                <Card>
+                <Card data-pv="contact">
                   <CardHeader title="Contact details" />
                   <CardBody className="grid gap-4 sm:grid-cols-2">
                     {lk('email', <Field label={ll('E-mail', 'email')} error={form.errors.email}><Input {...form.input('email')} type="email" /></Field>)}
@@ -186,7 +199,10 @@ export default function VcardEditor() {
                   <CardHeader title="Card settings" />
                   <CardBody className="grid gap-4 sm:grid-cols-2">
                     {lk('name', <Field label={ll('Card name', 'name')} required error={form.errors.name}><Input {...form.input('name')} /></Field>)}
-                    {lk('url_alias', <Field label={ll('Card link', 'url_alias')} error={form.errors.url_alias} hint="Changing this changes the link on printed QR/NFC cards"><Input prefix="/" value={v.url_alias || ''} onChange={(e) => form.set('url_alias', e.target.value.toLowerCase().replace(/[^a-z0-9-_]/g, ''))} /></Field>)}
+                    <Field label="Card link" hint="Fixed for the life of the card: it may already be printed on QR codes or written into NFC cards.">
+                      <div className="flex items-center gap-2 rounded-xl border border-border bg-muted/50 px-3.5 py-2.5 text-sm"><Lock className="size-4 shrink-0 text-muted-foreground" /><span className="min-w-0 flex-1 truncate font-medium">{link.replace(/^https?:\/\//, '')}</span>
+                        <button type="button" className="shrink-0 cursor-pointer text-xs font-medium text-primary hover:underline" onClick={() => { navigator.clipboard?.writeText(link); toast.success('Link copied'); }}>Copy</button></div>
+                    </Field>
                     <SwitchRow className="sm:col-span-2" title="Published" description="Visitors can open this card" checked={v.status} onChange={(x) => form.set('status', x)} id="st" />
                   </CardBody>
                 </Card>
@@ -366,8 +382,8 @@ export default function VcardEditor() {
         {/* live preview: the real card with the unsaved design */}
         <div className="hidden xl:block">
           <div className="sticky top-24">
-            <LivePreview vcardId={id} design={designOf(v)} keys={schema?.keys} rev={rev} />
-            <p className="mt-3 text-center text-xs text-muted-foreground">{dirty ? 'Design changes show here straight away. Text and photos update after you save.' : 'This is how visitors see your card.'}</p>
+            <LivePreview vcardId={id} design={designOf(v)} content={pvContent} section={pvSection} keys={schema?.keys} rev={rev} />
+            <p className="mt-3 text-center text-xs text-muted-foreground">{dirty ? 'Changes show here as you type. Photos update after you save.' : 'This is how visitors see your card.'}</p>
           </div>
         </div>
       </div>
@@ -380,7 +396,7 @@ export default function VcardEditor() {
             <motion.div initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }} transition={{ type: 'spring', stiffness: 320, damping: 34 }} onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label="Live preview"
               className="max-h-[92vh] w-full overflow-y-auto rounded-t-3xl bg-card p-4 pb-6 shadow-2xl">
               <div className="mx-auto mb-3 h-1.5 w-10 rounded-full bg-border" />
-              <LivePreview vcardId={id} design={designOf(v)} keys={schema?.keys} rev={rev} tall />
+              <LivePreview vcardId={id} design={designOf(v)} content={pvContent} section={pvSection} keys={schema?.keys} rev={rev} tall />
               <div className="mt-4 flex justify-center gap-2"><Button variant="outline" onClick={() => setMobilePv(false)}>Back to editing</Button>{dirty && <Button onClick={save} loading={saving}><Save />Save</Button>}</div>
             </motion.div>
           </motion.div>

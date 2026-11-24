@@ -192,7 +192,7 @@ module.exports = function usersRouter(role) {
     if (role === 'user') {
       const plan = req.body.plan_id ? await Plan.findByPk(req.body.plan_id) : null;
       if (plan) await subs.activate(user.id, plan, { paymentType: 'admin' }); else await subs.assignDefaultPlan(user.id);
-      await onboarding.defaultVcard(user);
+      await onboarding.defaultVcard(user, { force: true }); // every new user gets a card with a generated link, whatever the default-card setting says
     }
     audit(req, 'user.create', 'user', user.id, { role: user.role, organisation: isOrg || undefined });
     if (invited) {
