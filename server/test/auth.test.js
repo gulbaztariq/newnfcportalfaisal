@@ -173,13 +173,21 @@ test('e-mail login: unknown, deactivated and locked accounts get the same answer
   }
   assert.equal((await client(ctx.base).post('/api/auth/login-code', { email: 'nope' })).status, 422);
 });
-test('e-mail login: five wrong codes burn it; asking again right away does not send a second mail', async () => {
+test('e-mail login: five wrong codes burn it', async () => {
   const u = await makeUser(); const c = client(ctx.base);
   const a = await c.post('/api/auth/login-code', { email: u.email }); const code = codeFromMail();
-  const again = await c.post('/api/auth/login-code', { email: u.email }); assert.equal(again.status, 200);
-  assert.equal(outbox.filter((m) => m.key === 'login_code').length, 1, 'cooldown: one mail');
   for (let i = 0; i < 5; i += 1) await c.post('/api/auth/two-factor', { challenge: a.body.challenge, code: '999999' === code ? '888888' : '999999' });
   assert.ok([422, 429].includes((await c.post('/api/auth/two-factor', { challenge: a.body.challenge, code })).status), 'burned after 5 wrong tries (and locked)');
+});
+test('e-mail login: asking again (2nd, 3rd, 4th time) sends a fresh code and every earlier code stops working', async () => {
+  const u = await makeUser(); const codes = []; let last;
+  outbox.length = 0;
+  for (let i = 0; i < 4; i += 1) { last = await client(ctx.base).post('/api/auth/login-code', { email: u.email }); assert.equal(last.status, 200); codes.push(codeFromMail()); }
+  assert.equal(outbox.filter((m) => m.key === 'login_code').length, 4, 'a mail for every request');
+  const distinct = codes.slice(0, 3).filter((x) => x !== codes[3]);
+  for (const old of distinct) assert.equal((await client(ctx.base).post('/api/auth/two-factor', { challenge: last.body.challenge, code: old })).status, 422, 'older code is expired');
+  const ok = await client(ctx.base).post('/api/auth/two-factor', { challenge: last.body.challenge, code: codes[3] });
+  assert.equal(ok.status, 200, ok.text); assert.equal(ok.body.user.email, u.email);
 });
 test('e-mail login: needs mail; an authenticator user still gives the app code; a new invitee is verified by the code', async () => {
   const u = await makeUser({ email_verified_at: null }); const c = client(ctx.base);

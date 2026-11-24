@@ -258,7 +258,9 @@ export function Login() {
   const [unverified, setUnverified] = useState(false);
   const [setup, setSetup] = useState(null);
   const [pwFallback, setPwFallback] = useState(false); // only when the server cannot e-mail codes (mail not set up yet)
-  const emailMode = settings.email_login !== false && !pwFallback; // the normal way in: e-mail, then the code we send
+  const [usePw, setUsePw] = useState(false); // the person chose to sign in with a password instead of an e-mailed code
+  const canCode = settings.email_login !== false && !pwFallback;
+  const emailMode = canCode && !usePw; // default: e-mail, then the code we send; both ways stay available
   useEffect(() => { if (!loading && user) navigate(afterLogin(user), { replace: true }); }, [user, loading]); // eslint-disable-line
   const submit = async (e) => {
     e.preventDefault(); setUnverified(false);
@@ -292,6 +294,7 @@ export function Login() {
           <PasswordInput id="pw" value={f.password} onChange={(v) => setF({ ...f, password: v })} invalid={!!err.errors.password} />
         </Field>}
         <Button type="submit" size="lg" className="w-full" loading={busy}>{emailMode ? 'Send me a code' : 'Sign in'} <ArrowRight /></Button>
+        {canCode && <button type="button" onClick={() => { setUsePw(!usePw); setErr({ message: '', errors: {} }); }} className="block w-full cursor-pointer text-center text-sm font-medium text-primary hover:underline">{usePw ? 'Sign in with an e-mailed code instead' : 'Sign in with my password instead'}</button>}
       </form>
       <GoogleSignIn onError={(m) => setErr({ message: m, errors: {} })} />
     </Shell>
