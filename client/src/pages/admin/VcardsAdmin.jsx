@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react';
 import { motion } from 'motion/react';
 import { toast } from 'sonner';
-import { Eye, Copy, Trash2, BadgeCheck, IdCard, LayoutTemplate, ExternalLink, CopyPlus } from 'lucide-react';
+import { Eye, Copy, Trash2, BadgeCheck, IdCard, LayoutTemplate, ExternalLink, CopyPlus, Plus } from 'lucide-react';
 import api from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { cn } from '@/lib/cn';
 import { fmtDate } from '@/lib/format';
-import { PageHeader, TableCard, DataTable, SearchInput, FilterSelect, Action, Actions, Switch, Badge, UserCell, EmptyState, Skeleton, Card, Segmented, Dialog, Button, Field, Select, useList, run, confirm } from '@/components/ui';
+import { PageHeader, TableCard, DataTable, SearchInput, FilterSelect, Action, Actions, Switch, Badge, UserCell, EmptyState, Skeleton, Card, Segmented, Dialog, Button, Field, Input, Select, useList, run, confirm } from '@/components/ui';
 
 /** Live, scaled preview of a template or vCard */
 export function Preview({ src, title, scale = 0.62, className }) {
@@ -74,6 +74,10 @@ export function Vcards() {
   const [cloneTo, setCloneTo] = useState('');
   const [users, setUsers] = useState([]);
   const [busy, setBusy] = useState(false);
+  const [adding, setAdding] = useState(false);
+  const [addForm, setAddForm] = useState({ user_id: '', name: '', template_id: '' });
+  const openAdd = () => { setAddForm({ user_id: '', name: '', template_id: '' }); setAdding(true); if (!users.length) api.get('/admin/users', { params: { per_page: 100, role: 'user' } }).then(({ data }) => setUsers(data.data.map((u) => ({ value: u.id, label: `${u.first_name} ${u.last_name} (${u.email})` })))); };
+  const addCard = async () => { setBusy(true); try { await run(api.post('/admin/vcards', addForm)); setAdding(false); list.reload(); } catch { /* toast */ } finally { setBusy(false); } };
   const removeMany = async () => {
     if (!(await confirm({ title: `Delete ${selected.length} vCards?`, description: 'Their public links stop working immediately.' }))) return;
     await run(api.post('/admin/vcards/bulk-delete', { ids: selected })).catch(() => {}); setSelected([]); list.reload();
@@ -82,7 +86,7 @@ export function Vcards() {
   const clone = async () => { setBusy(true); try { await run(api.post(`/admin/vcards/${cloning.id}/clone`, { user_id: cloneTo })); setCloning(null); list.reload(); } catch { /* toast */ } finally { setBusy(false); } };
   return (
     <>
-      <PageHeader title="vCards" description="Every digital card created on the platform." />
+      <PageHeader title="vCards" description="Every digital card created on the platform."><Button onClick={openAdd}><Plus />Add vCard</Button></PageHeader>
       <TableCard title="All vCards" list={list} toolbar={<>
         {selected.length > 0 && <Button size="sm" variant="danger-soft" onClick={removeMany}><Trash2 />Delete {selected.length}</Button>}
         <FilterSelect value={list.params.template_id} onChange={(v) => list.set({ template_id: v })} placeholder="All templates" options={templates.map((t) => ({ value: t.id, label: t.name }))} />
@@ -118,6 +122,14 @@ export function Vcards() {
           },
         ]} />
       </TableCard>
+      <Dialog open={adding} onOpenChange={setAdding} size="sm" icon={Plus} title="Add a vCard" description="Creates a new card and assigns it to a user. The card link is generated automatically and cannot be changed later. One user can own many cards under one login."
+        footer={<><Button variant="outline" onClick={() => setAdding(false)}>Cancel</Button><Button onClick={addCard} loading={busy} disabled={!addForm.user_id}>Create and assign</Button></>}>
+        <div className="grid gap-4">
+          <Field label="Assign to" required><Select value={addForm.user_id} onChange={(x) => setAddForm((f) => ({ ...f, user_id: x }))} options={users} placeholder="Choose a user" /></Field>
+          <Field label="Card name" hint="Optional. Defaults to the user's name."><Input value={addForm.name} onChange={(e) => setAddForm((f) => ({ ...f, name: e.target.value }))} placeholder="e.g. Sales team card" /></Field>
+          <Field label="Template" hint="Optional. The default template is used if left empty."><Select value={addForm.template_id} onChange={(x) => setAddForm((f) => ({ ...f, template_id: x }))} allowEmpty placeholder="Default template" options={templates.map((t) => ({ value: t.id, label: t.name }))} /></Field>
+        </div>
+      </Dialog>
       <Dialog open={!!cloning} onOpenChange={(o) => !o && setCloning(null)} size="sm" icon={CopyPlus} title={`Clone ${cloning?.name || ''}`} description="Creates a copy with all sections. Pick who should own the copy."
         footer={<><Button variant="outline" onClick={() => setCloning(null)}>Cancel</Button><Button onClick={clone} loading={busy}>Clone vCard</Button></>}>
         <Field label="Owner"><Select value={cloneTo} onChange={setCloneTo} options={users.length ? users : cloning?.user ? [{ value: cloning.user.id, label: `${cloning.user.first_name} ${cloning.user.last_name}` }] : []} /></Field>

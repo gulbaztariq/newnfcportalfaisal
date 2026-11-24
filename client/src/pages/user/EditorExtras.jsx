@@ -129,6 +129,7 @@ function BankAccountsCard({ v, form }) {
             ))}
           </div>
         )}
+        {list.some((a) => !(a.name && (a.account || a.iban))) && <p className="mt-3 rounded-xl bg-warning-soft px-3.5 py-2.5 text-sm text-warning">Some accounts are not shown on your card yet: each one needs a bank or wallet name and an account number or IBAN.</p>}
         <p className="mt-3 text-xs text-muted-foreground">Accounts appear in the "Pay Me" section of your card. An account needs a name and an account number or IBAN to be shown.</p>
       </CardBody>
     </Card>
@@ -140,6 +141,7 @@ export function PaymentLinksTab({ v, form, locked, Upgrade }) {
   const upd = (i, patch) => form.set('payment_links', list.map((x, j) => (j === i ? { ...x, ...patch } : x)));
   return (
     <>
+    {v.sections?.payments === false && <div className="rounded-2xl border border-warning/30 bg-warning-soft p-4 text-sm">The <b>Pay Me</b> section is switched off, so nothing here is shown on your card. Turn it on under <b>Design &rsaquo; Sections</b>.</div>}
     <BankAccountsCard v={v} form={form} />
     <Card>
       <CardHeader icon={Wallet} title="Payment links" description="Let people pay you straight from your card (PayPal.me, Stripe links, UPI...)"

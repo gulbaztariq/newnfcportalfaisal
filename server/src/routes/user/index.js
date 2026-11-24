@@ -85,11 +85,11 @@ r.get('/vcards/check-alias', wrap(async (req, res) => {
 }));
 
 r.post('/vcards', cardsUnlocked, wrap(async (req, res) => {
-  validate(req.body, { name: 'required|max:120', url_alias: 'required|alias', template_id: 'required' });
+  validate(req.body, { name: 'required|max:120', template_id: 'required' });
   const check = await subs.canCreateVcard(req.user.id);
   if (!check.ok) fail(422, check.reason);
-  const alias = String(req.body.url_alias).toLowerCase();
-  if (RESERVED.has(alias) || (await M.Vcard.findOne({ where: { url_alias: alias } }))) fail(422, 'Validation failed', { url_alias: 'This URL alias is already taken' });
+  // the card link is generated, never typed: it stays fixed for the life of the card
+  const alias = await require('../../services/onboarding').freeAlias(req.body.name);
   const allowed = check.sub.plan.templates.map((t) => t.id);
   if (!allowed.includes(Number(req.body.template_id))) fail(422, 'Validation failed', { template_id: 'This template is not included in your plan' });
   const tpl = await M.Template.findByPk(req.body.template_id);
@@ -116,6 +116,32 @@ const sectionsOf = (x) => Object.fromEntries(Object.entries(x || {}).filter(([k]
 const orderOf = (x) => [...new Set((Array.isArray(x) ? x : []).filter((k) => SECTION_KEYS.includes(k)))];
 const titlesOf = (x) => Object.fromEntries(Object.entries(x && typeof x === 'object' ? x : {}).filter(([k, val]) => SECTION_KEYS.includes(k) && typeof val === 'string' && val.trim()).map(([k, val]) => [k, val.trim().slice(0, 60)]));
 
+/* unsaved text from the editor, kept in memory for the live preview only (never written to the database) */
+const DRAFTS = new Map(); const DRAFT_TTL = 30 * 60 * 1000;
+const DRAFT_TEXT = { first_name: 100, last_name: 100, occupation: 150, job_title: 150, company: 150, description: 5000, email: 191, region_code: 8, phone: 30, alternative_email: 191, alternative_phone: 30, location: 255, location_url: 500, name: 120, menu_title: 120, menu_desc: 500 };
+function draftContent(b, features) {
+  const out = {};
+  for (const [k, n] of Object.entries(DRAFT_TEXT)) if (b[k] !== undefined) out[k] = k === 'description' ? String(b[k] ?? '').slice(0, n) : cutStr(b[k], n) || null;
+  if (b.location_url) out.location_url = /^https?:\/\//i.test(String(b.location_url)) ? cutStr(b.location_url, 500) : null;
+  if (b.social_links && typeof b.social_links === 'object') out.social_links = cleanSocial(b.social_links);
+  if (features.custom_links && Array.isArray(b.custom_links)) out.custom_links = cleanCustomLinks(b.custom_links);
+  if (Array.isArray(b.bank_accounts)) out.bank_accounts = cleanBanks(b.bank_accounts);
+  if (features.payment_links && Array.isArray(b.payment_links)) out.payment_links = cleanPayLinks(b.payment_links);
+  if (b.business_hours && typeof b.business_hours === 'object' && !Array.isArray(b.business_hours)) {
+    out.business_hours = Object.fromEntries(['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'].filter((d) => b.business_hours[d]).map((d) => [d, { open: toBool(b.business_hours[d].open), from: hhmm(b.business_hours[d].from) || '09:00', to: hhmm(b.business_hours[d].to) || '17:00' }]));
+  }
+  return out;
+}
+r.post('/vcards/:id/preview-draft', wrap(async (req, res) => {
+  const v = await ownVcard(req);
+  const sub = await subs.current(req.user.id);
+  const content = draftContent(req.body && typeof req.body === 'object' ? req.body : {}, sub?.plan?.features || {});
+  const key = `${req.user.id}:${v.id}`;
+  DRAFTS.delete(key); DRAFTS.set(key, { content, at: Date.now() });
+  for (const [k, x] of DRAFTS) if (Date.now() - x.at > DRAFT_TTL || DRAFTS.size > 500) DRAFTS.delete(k); // oldest first
+  res.json({ ok: true });
+}));
+
 /**
  * Live preview for the design editor: the owner's real card rendered with an unsaved design (template, theme, sections).
  * Read-only: nothing is stored, no view is counted. The draft travels base64url-encoded in ?d= and is validated like a save.
@@ -135,6 +161,8 @@ r.get('/vcards/:id/preview', wrap(async (req, res) => {
     if (allowed.includes(Number(d.template_id))) template = (await M.Template.findByPk(Number(d.template_id))) || template;
   }
   const card = { ...v.toJSON(), theme: d.theme && typeof d.theme === 'object' ? custom.sanitizeTheme(d.theme, v.theme) : custom.sanitizeTheme({}, v.theme) };
+  const draft = DRAFTS.get(`${req.user.id}:${v.id}`);
+  if (draft && Date.now() - draft.at < DRAFT_TTL) Object.assign(card, draft.content); // unsaved text, links and accounts typed in the editor
   if (d.sections) card.sections = sectionsOf(d.sections);
   if (Array.isArray(d.section_order)) card.section_order = orderOf(d.section_order);
   if (d.section_titles) card.section_titles = titlesOf(d.section_titles);
@@ -162,6 +190,15 @@ const sanitizeHtml = require('sanitize-html');
 const legalHtml = (h) => sanitizeHtml(String(h || ''), { allowedTags: sanitizeHtml.defaults.allowedTags.concat(['h1', 'h2', 'u', 's']), allowedSchemes: ['http', 'https', 'mailto', 'tel'] });
 const hhmm = (t) => (/^\d{2}:\d{2}$/.test(String(t)) ? t : null);
 const safeUrl = (u) => (!u || /^(https?:|mailto:|tel:)/i.test(String(u).trim()) ? u : `https://${u}`);
+const cutStr = (x, n) => String(x ?? '').replace(/[\u0000-\u001f]/g, ' ').trim().slice(0, n);
+// the same cleaning is used when saving a card and when building the live preview of unsaved text
+const cleanBanks = (list) => (Array.isArray(list) ? list : []).slice(0, 200).map((a) => ({
+  kind: a?.kind === 'wallet' ? 'wallet' : 'bank', name: cutStr(a?.name, 80), title: cutStr(a?.title, 120), account: cutStr(a?.account, 60),
+  iban: cutStr(a?.iban, 40).replace(/\s+/g, '').toUpperCase(), note: cutStr(a?.note, 200),
+})).filter((a) => a.name && (a.account || a.iban));
+const cleanPayLinks = (list) => (Array.isArray(list) ? list : []).slice(0, 10).map((l) => ({ label: String(l?.label || '').slice(0, 80), url: safeUrl(String(l?.url || '').slice(0, 500)), type: String(l?.type || 'link').slice(0, 20) })).filter((l) => l.label && l.url);
+const cleanSocial = (o) => Object.fromEntries(Object.entries(o && typeof o === 'object' && !Array.isArray(o) ? o : {}).filter(([, u]) => u).map(([k, u]) => [k, safeUrl(String(u).slice(0, 500))]));
+const cleanCustomLinks = (list) => (Array.isArray(list) ? list : []).slice(0, 20).map((l) => ({ label: String(l?.label || '').slice(0, 80), url: safeUrl(String(l?.url || '').slice(0, 500)), desc: String(l?.desc || '').slice(0, 90), badge: String(l?.badge || '').slice(0, 20), featured: l?.featured === true || l?.featured === 'true', icon: /^ri-[a-z0-9-]{2,40}$/.test(l?.icon || '') ? l.icon : '' })).filter((l) => l.label && l.url);
 
 r.put('/vcards/:id', vcardUpload, trackStorage, wrap(async (req, res) => {
   const v = await ownVcard(req);
@@ -181,11 +218,8 @@ r.put('/vcards/:id', vcardUpload, trackStorage, wrap(async (req, res) => {
   if (!features.seo) for (const k of ['site_title', 'meta_keyword', 'meta_description', 'google_analytics']) delete data[k];
   if (data.google_analytics && !/^(G|UA|GT)-[A-Z0-9-]+$/i.test(data.google_analytics)) fail(422, 'Validation failed', { google_analytics: 'Use the measurement ID, e.g. G-XXXXXXX' });
 
-  if (b.url_alias && b.url_alias.toLowerCase() !== v.url_alias) {
-    const alias = b.url_alias.toLowerCase();
-    if (RESERVED.has(alias) || (await M.Vcard.findOne({ where: { url_alias: alias } }))) fail(422, 'Validation failed', { url_alias: 'This URL alias is already taken' });
-    data.url_alias = alias;
-  }
+  // the card link is printed on QR codes and written into NFC cards, so it never changes after the card is created
+  if (b.url_alias && String(b.url_alias).toLowerCase() !== v.url_alias) fail(422, 'Validation failed', { url_alias: 'The card link cannot be changed because it may already be printed on QR codes or written into NFC cards.' });
   if (b.template_id && Number(b.template_id) !== v.template_id) {
     const allowed = sub?.plan?.templates?.map((t) => t.id) || [];
     if (!allowed.includes(Number(b.template_id))) fail(422, 'Validation failed', { template_id: 'This template is not included in your plan' });
@@ -198,8 +232,8 @@ r.put('/vcards/:id', vcardUpload, trackStorage, wrap(async (req, res) => {
     if (v.theme?.bg_image && v.theme.bg_image !== theme.bg_image) removeOwned(req, v.theme.bg_image);
     data.theme = theme;
   }
-  if (b.social_links) data.social_links = Object.fromEntries(Object.entries(b.social_links).filter(([, u]) => u).map(([k, u]) => [k, safeUrl(String(u).slice(0, 500))]));
-  if (b.custom_links && features.custom_links) data.custom_links = (Array.isArray(b.custom_links) ? b.custom_links : []).slice(0, 20).map((l) => ({ label: String(l.label || '').slice(0, 80), url: safeUrl(String(l.url || '').slice(0, 500)), desc: String(l.desc || '').slice(0, 90), badge: String(l.badge || '').slice(0, 20), featured: l.featured === true || l.featured === 'true', icon: /^ri-[a-z0-9-]{2,40}$/.test(l.icon || '') ? l.icon : '' })).filter((l) => l.label && l.url);
+  if (b.social_links) data.social_links = cleanSocial(b.social_links);
+  if (b.custom_links && features.custom_links) data.custom_links = cleanCustomLinks(b.custom_links);
   if (b.business_hours) data.business_hours = b.business_hours;
   if (b.sections) data.sections = sectionsOf(b.sections);
   if (Array.isArray(b.section_order)) data.section_order = orderOf(b.section_order);
@@ -234,15 +268,14 @@ r.put('/vcards/:id', vcardUpload, trackStorage, wrap(async (req, res) => {
     if (src && !/^https:\/\/(www\.)?google\.[a-z.]+\/maps\/embed/.test(src)) fail(422, 'Validation failed', { location_embed: 'Paste the Google Maps "Embed a map" code or URL' });
     data.location_embed = src || null;
   }
-  if (b.payment_links !== undefined && features.payment_links) data.payment_links = (Array.isArray(b.payment_links) ? b.payment_links : []).slice(0, 10).map((l) => ({ label: String(l.label || '').slice(0, 80), url: safeUrl(String(l.url || '').slice(0, 500)), type: String(l.type || 'link').slice(0, 20) })).filter((l) => l.label && l.url);
-  // bank / wallet accounts to receive money: as many as the owner wants, each with a copy button on the card
-  if (b.bank_accounts !== undefined) {
-    const cut = (x, n) => String(x ?? '').replace(/[\u0000-\u001f]/g, ' ').trim().slice(0, n);
-    data.bank_accounts = (Array.isArray(b.bank_accounts) ? b.bank_accounts : []).slice(0, 200).map((a) => ({
-      kind: a?.kind === 'wallet' ? 'wallet' : 'bank', name: cut(a?.name, 80), title: cut(a?.title, 120), account: cut(a?.account, 60),
-      iban: cut(a?.iban, 40).replace(/\s+/g, '').toUpperCase(), note: cut(a?.note, 200),
-    })).filter((a) => a.name && (a.account || a.iban));
+  if (b.payment_links !== undefined) {
+    const links = cleanPayLinks(b.payment_links);
+    // never drop typed links silently: tell the owner when the plan does not include them
+    if (!features.payment_links && links.length && JSON.stringify(links) !== JSON.stringify(v.payment_links || [])) fail(422, 'Payment links are not included in your plan. Bank and wallet accounts do not need a plan feature: add those instead, or upgrade your plan.');
+    if (features.payment_links) data.payment_links = links;
   }
+  // bank / wallet accounts to receive money: as many as the owner wants, each with a copy button on the card
+  if (b.bank_accounts !== undefined) data.bank_accounts = cleanBanks(b.bank_accounts);
   if (b.terms_conditions !== undefined) data.terms_conditions = legalHtml(b.terms_conditions) || null;
   if (b.privacy_policy !== undefined) data.privacy_policy = legalHtml(b.privacy_policy) || null;
   for (const k of ['sticky_bar', 'ask_before_contact', 'enquiry_attachment']) if (b[k] !== undefined) data[k] = toBool(b[k]);
@@ -291,6 +324,35 @@ r.put('/vcards/:id', vcardUpload, trackStorage, wrap(async (req, res) => {
   }
   await v.update(data);
   res.json({ data: hideSecret(v), message: 'vCard updated successfully' });
+}));
+
+/* copy parts of one card onto the owner's other cards: one person often manages several cards under one e-mail */
+const COPY_GROUPS = {
+  contact: ['email', 'region_code', 'phone', 'alternative_email', 'alternative_phone', 'location', 'location_url'],
+  business: ['company', 'job_title', 'occupation', 'description'],
+  social: ['social_links'], links: ['custom_links'], payments: ['bank_accounts', 'payment_links'], hours: ['business_hours'],
+  design: ['template_id', 'theme', 'sections', 'section_order', 'section_titles'],
+};
+r.post('/vcards/:id/copy-to', cardsUnlocked, wrap(async (req, res) => {
+  const src = await ownVcard(req);
+  const groups = [...new Set((Array.isArray(req.body.groups) ? req.body.groups : []).filter((g) => Object.hasOwn(COPY_GROUPS, g)))];
+  if (!groups.length) fail(422, 'Validation failed', { groups: 'Choose what to copy' });
+  const ids = [...new Set((Array.isArray(req.body.target_ids) ? req.body.target_ids : []).map(Number).filter((n) => Number.isInteger(n) && n > 0 && n !== src.id))].slice(0, 100);
+  const targets = ids.length ? await M.Vcard.findAll({ where: { id: ids, user_id: req.user.id } }) : [];
+  if (!targets.length) fail(422, 'Validation failed', { target_ids: 'Choose at least one of your other cards' });
+  const sub = await subs.current(req.user.id);
+  const features = sub?.plan?.features || {};
+  const body = {};
+  for (const f of groups.flatMap((g) => COPY_GROUPS[g])) body[f] = src[f] === undefined ? null : JSON.parse(JSON.stringify(src[f] ?? null));
+  org.stripCardLocks(req.user, body); // fields locked by the organisation are never overwritten
+  if (!features.custom_links) delete body.custom_links;
+  if (!features.payment_links) delete body.payment_links;
+  if (body.template_id && !(sub?.plan?.templates || []).some((t) => t.id === body.template_id)) { delete body.template_id; delete body.theme; }
+  if (body.theme && typeof body.theme === 'object') delete body.theme.bg_image; // an uploaded background belongs to one card
+  const fields = Object.keys(body);
+  if (!fields.length) fail(422, 'Validation failed', { groups: 'Nothing to copy: these details are managed by your organisation or not in your plan' });
+  for (const t of targets) await t.update(body);
+  res.json({ copied: fields, cards: targets.length, message: `Copied to ${targets.length} card${targets.length === 1 ? '' : 's'}` });
 }));
 
 r.post('/vcards/:id/duplicate', cardsUnlocked, wrap(async (req, res) => {

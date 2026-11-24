@@ -11,6 +11,7 @@ import { fmtDate, fmtDateTime } from '@/lib/format';
 import { PageHeader, Card, Button, ButtonLink, Field, Input, Textarea, Badge, StatusBadge, EmptyState, Skeleton, Menu, MenuTrigger, MenuContent, MenuItem, MenuSeparator, TableCard, DataTable, Action, Actions, useList, useForm, run, confirm } from '@/components/ui';
 import { Preview } from '../admin/VcardsAdmin';
 import TemplateGallery from './TemplateGallery';
+import CopyToCards from './CopyToCards';
 
 export function VcardList() {
   const [rows, setRows] = useState(null);
@@ -22,6 +23,7 @@ export function VcardList() {
   const copy = async (v) => { try { await navigator.clipboard.writeText(url(v)); toast.success('Link copied to clipboard'); } catch { toast.info(url(v)); } };
   const share = (v) => (navigator.share ? navigator.share({ title: v.name, url: url(v) }).catch(() => {}) : copy(v));
   const remove = async (v) => { if (await confirm({ title: `Delete ${v.name}?`, description: 'The link, QR code and NFC cards pointing to it will stop working.' })) { await run(api.delete(`/user/vcards/${v.id}`)).catch(() => {}); load(); } };
+  const [copying, setCopying] = useState(null);
   const dup = async (v) => { await run(api.post(`/user/vcards/${v.id}/duplicate`)).catch(() => {}); load(); };
   return (
     <>
@@ -50,6 +52,7 @@ export function VcardList() {
                         <MenuItem icon={Copy} onSelect={() => copy(v)}>Copy link</MenuItem>
                         <MenuItem icon={QrCode} onSelect={() => { window.location.href = `/api/user/vcards/${v.id}/qrcode`; }}>Download QR code</MenuItem>
                         {!cardsLocked && <MenuItem icon={Plus} onSelect={() => dup(v)}>Duplicate</MenuItem>}
+                        {rows.length > 1 && !cardsLocked && <MenuItem icon={Copy} onSelect={() => setCopying(v)}>Copy details to my other cards</MenuItem>}
                         {!cardsLocked && <MenuSeparator />}
                         {!cardsLocked && <MenuItem icon={Trash2} danger onSelect={() => remove(v)}>Delete</MenuItem>}
                       </MenuContent>
@@ -66,6 +69,7 @@ export function VcardList() {
           ))}
         </div>
       )}
+      <CopyToCards card={copying} onClose={() => setCopying(null)} />
     </>
   );
 }
@@ -73,15 +77,12 @@ export function VcardList() {
 /** Template gallery (search, categories, favourites, full-screen preview) */
 export const TemplatePicker = TemplateGallery;
 
-const randomAlias = () => { const w = ['card', 'hello', 'meet', 'tap', 'link', 'go', 'hi', 'my']; return `${w[Math.floor(Math.random() * w.length)]}-${Math.random().toString(36).slice(2, 8)}`; };
 export function VcardCreate() {
   const navigate = useNavigate();
   const { settings } = useAuth();
   const [templates, setTemplates] = useState(null);
   const [step, setStep] = useState(0);
-  const [alias, setAlias] = useState(null);
   const [busy, setBusy] = useState(false);
-  const touched = useRef(false);
   const form = useForm({ name: '', url_alias: '', occupation: '', description: '', template_id: null });
   const [draft, setDraft] = useState(null);
   const [aiBusy, setAiBusy] = useState(false);
@@ -95,16 +96,8 @@ export function VcardCreate() {
     } catch (e) { toast.error(e.message); } finally { setAiBusy(false); }
   };
   useEffect(() => { api.get('/user/vcards/templates').then(({ data }) => { setTemplates(data.data); const first = data.data.find((t) => t.allowed); if (first) form.set('template_id', first.id); }); }, []); // eslint-disable-line
-  useEffect(() => { if (!touched.current) form.set('url_alias', form.values.name.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60)); }, [form.values.name]); // eslint-disable-line
-  useEffect(() => {
-    const a = form.values.url_alias;
-    if (!a) { setAlias(null); return undefined; }
-    setAlias('checking');
-    const t = setTimeout(() => api.get('/user/vcards/check-alias', { params: { alias: a } }).then(({ data }) => setAlias(data.available)), 350);
-    return () => clearTimeout(t);
-  }, [form.values.url_alias]);
   const save = async () => {
-    const bad = check(form.values, { name: 'required|max:120', url_alias: 'required|min:2|max:80', template_id: 'required' }, { name: 'Card name', url_alias: 'Card link' });
+    const bad = check(form.values, { name: 'required|max:120', template_id: 'required' }, { name: 'Card name' });
     if (Object.keys(bad).length) { form.setErrors(bad); toast.error(Object.values(bad)[0]); return; }
     setBusy(true);
     try {
@@ -114,10 +107,10 @@ export function VcardCreate() {
         for (const sv of (draft.services || []).slice(0, 4)) await api.post(`/user/vcards/${d.data.id}/services`, toFormData(sv)).catch(() => {});
       }
       navigate(`/user/vcards/${d.data.id}/edit`);
-    } catch (e) { form.setErrors(e.errors); if (e.errors?.name || e.errors?.url_alias) setStep(0); } finally { setBusy(false); }
+    } catch (e) { form.setErrors(e.errors); if (e.errors?.name) setStep(0); } finally { setBusy(false); }
   };
   const steps = ['Basics', 'Template'];
-  const canNext = form.values.name && form.values.url_alias && alias === true;
+  const canNext = !!form.values.name;
   return (
     <>
       <Link to="/user/vcards" className="mb-4 inline-flex min-h-6 items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" />My vCards</Link>
@@ -137,10 +130,7 @@ export function VcardCreate() {
             <Card className="max-w-2xl p-6">
               <div className="grid gap-5">
                 <Field label="Card name" required error={form.errors.name} hint="For you only, e.g. 'Work card'"><Input {...form.input('name')} autoFocus placeholder="My business card" /></Field>
-                <Field label="Your card link" required hint={<button type="button" className="cursor-pointer text-primary hover:underline" onClick={() => { touched.current = true; form.set('url_alias', randomAlias()); }}>Give me a random link</button>} error={form.errors.url_alias || (alias === false ? 'This link is already taken' : null)}>
-                  <Input prefix={`${(settings.app_url || '').replace(/^https?:\/\//, '')}/`} value={form.values.url_alias} onChange={(e) => { touched.current = true; form.set('url_alias', e.target.value.toLowerCase().replace(/[^a-z0-9-_]/g, '')); }}
-                    suffix={<span className="px-2">{alias === 'checking' ? <Loader2 className="size-4 animate-spin text-muted-foreground" /> : alias === true ? <CheckCircle2 className="size-4 text-success" /> : alias === false ? <XCircle className="size-4 text-danger" /> : null}</span>} />
-                </Field>
+                <p className="rounded-xl bg-muted/60 px-4 py-3 text-sm text-muted-foreground">Your card link is created for you when you save, and it stays the same for the life of the card, so printed QR codes and NFC cards keep working.</p>
                 <Field label="Occupation"><Input {...form.input('occupation')} placeholder="e.g. Product Designer" /></Field>
                 <Field label="Short bio"><Textarea {...form.input('description')} rows={3} placeholder="A sentence or two about you" /></Field>
                 {settings.ai_enable === '1' && (

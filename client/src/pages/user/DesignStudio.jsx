@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Palette, Type, LayoutTemplate, Image as ImageIcon, MousePointerClick, Sparkles, RotateCcw, Undo2, Redo2, X, AlertTriangle, Smartphone, Monitor, RefreshCw, Lock } from 'lucide-react';
+import api from '@/lib/api';
 import { cn } from '@/lib/cn';
 import { Card, CardBody, Button, Field, Select, Segmented, SwitchRow, ColorInput, ImageUpload, Tip } from '@/components/ui';
 
@@ -258,23 +259,47 @@ export function useDesignHistory(values, apply, ready = true) {
  * The owner's real card, rendered by the server with the unsaved design (GET /api/user/vcards/:id/preview?d=...).
  * Nothing is stored. Entrance motion is skipped while options change, and replayed when an animation option changes.
  */
-export function LivePreview({ vcardId, design, keys, rev = 0, className, tall }) {
+const hash = (str) => { let h = 0; for (let i = 0; i < str.length; i += 1) h = (h * 31 + str.charCodeAt(i)) | 0; return (h >>> 0).toString(36); };
+export function LivePreview({ vcardId, design, content, section, keys, rev = 0, className, tall }) {
   const [device, setDevice] = useState('phone');
   const [src, setSrc] = useState('');
   const [busy, setBusy] = useState(true);
   const [tick, setTick] = useState(0);
   const lastAnim = useRef('');
+  const frame = useRef(null);
+  const sectionRef = useRef(section);
   const json = useMemo(() => JSON.stringify({ ...design, theme: themePayload(design.theme, keys) }), [design, keys]);
+  const cjson = useMemo(() => JSON.stringify(content || {}), [content]);
+  // bring the part of the card being edited into view and flash it, so the effect of what is typed is easy to find
+  const jump = (key) => {
+    try {
+      const doc = frame.current?.contentDocument;
+      if (!doc || !key) return;
+      if (key === 'top') { doc.scrollingElement?.scrollTo({ top: 0, behavior: 'smooth' }); return; }
+      const el = doc.querySelector(`.s-${key}`);
+      if (!el) return;
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      const old = el.style.boxShadow; const tr = el.style.transition;
+      el.style.transition = 'box-shadow .25s'; el.style.boxShadow = '0 0 0 3px rgba(109,93,252,.85)';
+      setTimeout(() => { el.style.boxShadow = old; el.style.transition = tr; }, 1100);
+    } catch { /* the preview is not ready yet */ }
+  };
+  useEffect(() => { sectionRef.current = section; jump(section); }, [section]); // eslint-disable-line
   useEffect(() => {
     const anim = JSON.stringify(ANIM_KEYS.map((k) => design.theme?.[k] ?? ''));
-    const t = setTimeout(() => {
+    let off = false;
+    const t = setTimeout(async () => {
       const still = lastAnim.current !== '' && anim === lastAnim.current;
       lastAnim.current = anim;
       setBusy(true);
-      setSrc(`/api/user/vcards/${vcardId}/preview?d=${b64url(JSON.stringify({ ...JSON.parse(json), still }))}&r=${rev}-${tick}`);
-    }, src ? 260 : 0);
-    return () => clearTimeout(t);
-  }, [json, vcardId, rev, tick]); // eslint-disable-line react-hooks/exhaustive-deps
+      // unsaved text, links and accounts are stored server-side for a moment so the preview can show them
+      if (content) { try { await api.post(`/user/vcards/${vcardId}/preview-draft`, JSON.parse(cjson)); } catch { /* the preview still works with the saved text */ } }
+      if (off) return;
+      setSrc(`/api/user/vcards/${vcardId}/preview?d=${b64url(JSON.stringify({ ...JSON.parse(json), still }))}&r=${rev}-${tick}-${cjson.length}-${hash(cjson)}`);
+    }, src ? 450 : 0);
+    return () => { off = true; clearTimeout(t); };
+  }, [json, cjson, vcardId, rev, tick]); // eslint-disable-line react-hooks/exhaustive-deps
+  const loaded = () => { setBusy(false); setTimeout(() => jump(sectionRef.current), 120); };
   const phone = device === 'phone';
   return (
     <div className={className}>
@@ -289,14 +314,14 @@ export function LivePreview({ vcardId, design, keys, rev = 0, className, tall })
         <div className="relative mx-auto w-fit rounded-[3rem] bg-zinc-900 p-3 shadow-[0_30px_80px_-30px_rgba(76,29,149,.55)] ring-1 ring-white/10">
           <div className="absolute top-5 left-1/2 z-10 h-6 w-24 -translate-x-1/2 rounded-full bg-zinc-900" />
           <div className={cn('relative w-[310px] overflow-hidden rounded-[2.4rem] bg-white', tall ? 'h-[min(640px,62vh)]' : 'h-[640px]')}>
-            {src && <iframe src={src} title="Live preview" onLoad={() => setBusy(false)} className="absolute top-0 left-0 w-[400px] origin-top-left scale-[0.775] border-0" style={{ height: `${100 / 0.775}%` }} />}
+            {src && <iframe ref={frame} src={src} title="Live preview" onLoad={loaded} className="absolute top-0 left-0 w-[400px] origin-top-left scale-[0.775] border-0" style={{ height: `${100 / 0.775}%` }} />}
           </div>
         </div>
       ) : (
         <div className="overflow-hidden rounded-2xl bg-zinc-900 p-2 shadow-lift ring-1 ring-white/10">
           <div className="mb-2 flex gap-1.5 px-1"><i className="size-2.5 rounded-full bg-red-400" /><i className="size-2.5 rounded-full bg-amber-400" /><i className="size-2.5 rounded-full bg-emerald-400" /></div>
           <div className="relative h-[520px] overflow-hidden rounded-xl bg-white">
-            {src && <iframe src={src} title="Live preview" onLoad={() => setBusy(false)} className="absolute top-0 left-0 h-[200%] w-[200%] origin-top-left scale-50 border-0" />}
+            {src && <iframe ref={frame} src={src} title="Live preview" onLoad={loaded} className="absolute top-0 left-0 h-[200%] w-[200%] origin-top-left scale-50 border-0" />}
           </div>
         </div>
       )}
