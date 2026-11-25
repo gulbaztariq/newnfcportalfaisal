@@ -258,7 +258,7 @@ export function Login() {
   const [unverified, setUnverified] = useState(false);
   const [setup, setSetup] = useState(null);
   const [pwFallback, setPwFallback] = useState(false); // only when the server cannot e-mail codes (mail not set up yet)
-  const [usePw, setUsePw] = useState(false); // the person chose to sign in with a password instead of an e-mailed code
+  const [usePw, setUsePw] = useState(true); // the person chose to sign in with a password instead of an e-mailed code
   const canCode = settings.email_login !== false && !pwFallback;
   const emailMode = canCode && !usePw; // default: e-mail, then the code we send; both ways stay available
   useEffect(() => { if (!loading && user) navigate(afterLogin(user), { replace: true }); }, [user, loading]); // eslint-disable-line
@@ -287,6 +287,14 @@ export function Login() {
       <Alert tone="success">{ok}</Alert>
       <Alert>{err.message !== 'Validation failed' && err.message && <>{err.message}{unverified && f.email && <button type="button" onClick={resend} className="ml-1 cursor-pointer font-semibold underline">Resend link</button>}</>}</Alert>
       <form onSubmit={submit} noValidate className="space-y-5">
+        {canCode && (
+          <div role="tablist" aria-label="Sign-in method" className="grid grid-cols-2 gap-1 rounded-xl bg-muted p-1 text-sm font-medium">
+            {[[true, 'Password', KeyRound], [false, 'E-mail code', Mail]].map(([pw, label, Ico]) => (
+              <button key={label} type="button" role="tab" aria-selected={usePw === pw} onClick={() => { setUsePw(pw); setErr({ message: '', errors: {} }); }}
+                className={`inline-flex cursor-pointer items-center justify-center gap-1.5 rounded-lg px-3 py-2 transition-colors ${usePw === pw ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}><Ico className="size-4" />{label}</button>
+            ))}
+          </div>
+        )}
         <Field label="E-mail" htmlFor="email" error={err.errors.email}>
           <Input id="email" icon={Mail} type="email" autoComplete="username" autoFocus placeholder="you@company.com" value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} aria-invalid={!!err.errors.email || undefined} />
         </Field>
@@ -294,7 +302,6 @@ export function Login() {
           <PasswordInput id="pw" value={f.password} onChange={(v) => setF({ ...f, password: v })} invalid={!!err.errors.password} />
         </Field>}
         <Button type="submit" size="lg" className="w-full" loading={busy}>{emailMode ? 'Send me a code' : 'Sign in'} <ArrowRight /></Button>
-        {canCode && <button type="button" onClick={() => { setUsePw(!usePw); setErr({ message: '', errors: {} }); }} className="block w-full cursor-pointer text-center text-sm font-medium text-primary hover:underline">{usePw ? 'Sign in with an e-mailed code instead' : 'Sign in with my password instead'}</button>}
       </form>
       <GoogleSignIn onError={(m) => setErr({ message: m, errors: {} })} />
     </Shell>
