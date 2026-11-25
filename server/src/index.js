@@ -51,6 +51,7 @@ app.use(express.json({ limit: '1mb', verify: (req, _res, buf) => { if (req.url.s
 app.use(express.urlencoded({ extended: false, limit: '1mb' }));
 
 /* ---------------------------------------------------------------- static */
+if (config.homeIsLogin) app.get('/', (_req, res) => res.redirect(302, '/login'));
 app.use(express.static(config.publicDir, { index: false, maxAge: config.isProd ? '30d' : 0 }));
 app.use('/uploads', (_req, res, next) => { res.set('X-Content-Type-Options', 'nosniff').set('Content-Security-Policy', "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; sandbox"); next(); },
   express.static(config.uploadDir, { maxAge: config.isProd ? '7d' : 0, fallthrough: false }));

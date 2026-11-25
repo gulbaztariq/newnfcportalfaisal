@@ -18,6 +18,8 @@ module.exports = {
   port: Number(env.PORT || 5000),
   appUrl: (env.APP_URL || railwayUrl || 'http://localhost:5000').replace(/\/$/, ''),
   clientUrl: (env.CLIENT_URL || env.APP_URL || railwayUrl || 'http://localhost:5173').replace(/\/$/, ''),
+  // set HOME_IS_LOGIN=true to open the sign-in page directly at the site's root address
+  homeIsLogin: env.HOME_IS_LOGIN === 'true',
   jwtSecret: env.JWT_SECRET || 'dev-secret',
   impersonateSecret: env.IMPERSONATE_SECRET || 'dev-impersonate-secret',
   db: {
