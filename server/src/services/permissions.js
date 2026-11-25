@@ -75,7 +75,7 @@ const clean = (list, company) => {
 
 /* admin API path prefix -> module */
 const ADMIN_PATHS = [
-  [/^\/dashboard/, 'dashboard'], [/^\/(users|admins)/, 'users'], [/^\/(vcards|templates)/, 'vcards'], [/^\/short-links/, 'shortlinks'],
+  [/^\/dashboard/, 'dashboard'], [/^\/(users|admins)/, 'users'], [/^\/(vcards|templates)/, 'vcards'], [/^\/(short-links|links)/, 'shortlinks'],
   [/^\/custom-domains/, 'domains'], [/^\/whatsapp-stores/, 'stores'], [/^\/(nfc-cards|nfc-orders|orders|orders-meta|order-sources|products|customers|organisations|guest-customers|contact-tags)/, 'orders'],
   [/^\/invoices/, 'invoices'], [/^\/(finance|expenses|partners|accounts|courier-settlements)/, 'finance'],
   [/^\/(inventory|vendors|purchases|stock)/, 'inventory'], [/^\/analytics/, 'analytics'],
@@ -87,7 +87,7 @@ const ADMIN_PATHS = [
 ];
 const COMPANY_PATHS = [
   [/^\/(vcards|features)/, 'vcards'], [/^\/(enquiries|appointments|subscribers|product-orders)/, 'leads'], [/^\/(stores|store-orders)/, 'stores'],
-  [/^\/short-links/, 'shortlinks'], [/^\/(nfc-cards|nfc-orders|orders)/, 'orders'], [/^\/invoices/, 'billing'], [/^\/dashboard/, 'vcards'], [/^\/export/, 'analytics'], [/^\/analytics/, 'analytics'],
+  [/^\/(short-links|links)/, 'shortlinks'], [/^\/(nfc-cards|nfc-orders|orders)/, 'orders'], [/^\/invoices/, 'billing'], [/^\/dashboard/, 'vcards'], [/^\/export/, 'analytics'], [/^\/analytics/, 'analytics'],
   [/^\/(plans|subscribe|coupon|payment|transactions|affiliation|withdrawals)/, 'billing'], [/^\/organisation/, 'members'], [/^\/ai\//, 'vcards'],
   [/^\/announcements/, null],
 ];

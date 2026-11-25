@@ -9,6 +9,8 @@ import { Card, CardHeader, CardBody, ButtonLink, EmptyState, Skeleton, Reveal, R
 import { AnalyticsDashboard } from './Analytics';
 import WelcomeGuide from '@/components/WelcomeGuide';
 
+import { LinkCards } from './MyLinks';
+
 export default function UserDashboard() {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -49,6 +51,7 @@ export default function UserDashboard() {
           <div className="relative hidden size-40 md:block"><Ripples color="bg-white/10" /><span className="absolute inset-0 m-auto grid size-20 place-items-center rounded-full bg-linear-to-br from-violet-500 to-fuchsia-500 shadow-2xl"><Nfc className="size-9" /></span></div>
         </div>
       </motion.div>
+      <div className="mb-8"><LinkCards limit={6} title="My links & cards" /></div>
 
       {/* the dashboard is the analytics dashboard: headline numbers, traffic, sources, heatmap, top cards */}
       {isCompany && <div className="mb-5 flex justify-end"><Segmented id="dash-scope" size="sm" value={scope} onChange={setScope} options={[{ value: 'mine', label: 'My cards' }, { value: 'company', label: 'Whole company' }]} /></div>}

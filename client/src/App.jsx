@@ -89,6 +89,8 @@ const Directory = lazy(() => import('@/pages/site/Directory'));
 const BlogList = lazyNamed(() => import('@/pages/site/Blog'), 'BlogList');
 const BlogPost = lazyNamed(() => import('@/pages/site/Blog'), 'BlogPost');
 const Profile = lazy(() => import('@/pages/Profile'));
+const MyLinksPage = lazy(() => import('@/pages/user/MyLinks'));
+const ClaimLink = lazy(() => import('@/pages/auth/ClaimLink'));
 const AuthPage = (name) => lazyNamed(() => import('@/pages/auth/AuthPages'), name);
 const Login = AuthPage('Login'); const Register = AuthPage('Register'); const Forgot = AuthPage('ForgotPassword'); const Reset = AuthPage('ResetPassword'); const Verify = AuthPage('VerifyEmail');
 
@@ -130,6 +132,7 @@ export default function App() {
               <Route path="/terms-conditions" element={<Legal slug="terms-conditions" />} />
               <Route path="/privacy-policy" element={<Legal slug="privacy-policy" />} />
               <Route path="/login" element={<Login />} />
+              <Route path="/claim/:code" element={<ClaimLink />} />
               <Route path="/register" element={<Register />} />
               <Route path="/forgot-password" element={<Forgot />} />
               <Route path="/reset-password" element={<Reset />} />
@@ -234,6 +237,7 @@ export default function App() {
                 <Route path="signatures" element={<U.Signatures />} />
                 <Route path="settings" element={<U.Settings />} />
                 <Route path="product-orders" element={<U.ProductOrders />} />
+                <Route path="links" element={<MyLinksPage />} />
                 <Route path="nfc-orders" element={<UB.Orders />} />
                 <Route path="orders/:id" element={<UB.OrderDetail />} />
                 <Route path="short-links" element={<UB.ShortLinks />} />

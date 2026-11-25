@@ -10,6 +10,7 @@ const { HttpError, wrap, fail, validate, pick, toBool, paginate, paged } = requi
 const { requireRole, companyWorkspace } = require('../../middleware/auth');
 const { makeUpload, fileUrl, removeFile, DOC_TYPES } = require('../../middleware/upload');
 const subs = require('../../services/subscription');
+const links = require('../../services/links');
 const payments = require('../../services/payments');
 const settings = require('../../services/settings');
 const { appUrl } = require('../../config');
@@ -108,8 +109,8 @@ r.get('/vcards/:id', wrap(async (req, res) => {
     M.VcardGallery.findAll({ where: { vcard_id: v.id } }),
     M.VcardTestimonial.findAll({ where: { vcard_id: v.id } }),
   ]);
-  const sub = await subs.current(req.user.id);
-  res.json({ data: { ...hideSecret(v), services, gallery, testimonials }, features: sub?.plan?.features || {}, app_url: appUrl });
+  const sub = await links.subFor(v, req.user.id);
+  res.json({ data: { ...hideSecret(v), services, gallery, testimonials }, features: sub?.plan?.features || {}, link_plan: sub?.linked ? { name: sub.plan?.name, ends_at: sub.ends_at } : null, app_url: appUrl });
 }));
 
 const sectionsOf = (x) => Object.fromEntries(Object.entries(x || {}).filter(([k]) => SECTION_KEYS.includes(k)).map(([k, val]) => [k, toBool(val)]));
@@ -134,7 +135,7 @@ function draftContent(b, features) {
 }
 r.post('/vcards/:id/preview-draft', wrap(async (req, res) => {
   const v = await ownVcard(req);
-  const sub = await subs.current(req.user.id);
+  const sub = await links.subFor(v, req.user.id);
   const content = draftContent(req.body && typeof req.body === 'object' ? req.body : {}, sub?.plan?.features || {});
   const key = `${req.user.id}:${v.id}`;
   DRAFTS.delete(key); DRAFTS.set(key, { content, at: Date.now() });
@@ -156,7 +157,7 @@ r.get('/vcards/:id/preview', wrap(async (req, res) => {
   if (!d || typeof d !== 'object' || Array.isArray(d)) d = {};
   let template = await M.Template.findByPk(v.template_id);
   if (d.template_id && Number(d.template_id) !== v.template_id) {
-    const sub = await subs.current(req.user.id);
+    const sub = await links.subFor(v, req.user.id);
     const allowed = sub?.plan?.templates?.map((t) => t.id) || [];
     if (allowed.includes(Number(d.template_id))) template = (await M.Template.findByPk(Number(d.template_id))) || template;
   }
@@ -207,7 +208,7 @@ r.put('/vcards/:id', vcardUpload, trackStorage, wrap(async (req, res) => {
   if (org.isLocked(req.user, 'theme') && req.files) delete req.files.bg_image;
   for (const k of JSON_FIELDS) if (typeof b[k] === 'string') { try { b[k] = JSON.parse(b[k]); } catch { delete b[k]; } }
   validate({ ...v.toJSON(), ...b }, { name: 'required|max:120', url_alias: 'required|alias', first_name: 'max:100', last_name: 'max:100', occupation: 'max:150', company: 'max:150', job_title: 'max:150', email: 'email|max:191', alternative_email: 'email|max:191', phone: 'phone', alternative_phone: 'phone', location: 'max:300', location_url: 'url|max:1000', dob: 'date' });
-  const sub = await subs.current(req.user.id);
+  const sub = await links.subFor(v, req.user.id);
   const features = sub?.plan?.features || {};
   const data = pick(b, VCARD_FIELDS);
   for (const [k, val] of Object.entries(data)) if (val === '') data[k] = null;
@@ -340,7 +341,7 @@ r.post('/vcards/:id/copy-to', cardsUnlocked, wrap(async (req, res) => {
   const ids = [...new Set((Array.isArray(req.body.target_ids) ? req.body.target_ids : []).map(Number).filter((n) => Number.isInteger(n) && n > 0 && n !== src.id))].slice(0, 100);
   const targets = ids.length ? await M.Vcard.findAll({ where: { id: ids, user_id: req.user.id } }) : [];
   if (!targets.length) fail(422, 'Validation failed', { target_ids: 'Choose at least one of your other cards' });
-  const sub = await subs.current(req.user.id);
+  const sub = await links.subFor(src, req.user.id);
   const features = sub?.plan?.features || {};
   const body = {};
   for (const f of groups.flatMap((g) => COPY_GROUPS[g])) body[f] = src[f] === undefined ? null : JSON.parse(JSON.stringify(src[f] ?? null));
@@ -765,5 +766,6 @@ r.use(require('./selling'));
 r.use(require('./content'));
 r.use(require('./store'));
 r.use(require('./business'));
+r.use(require('./links'));
 
 module.exports = r;

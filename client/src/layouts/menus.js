@@ -97,6 +97,7 @@ export const userMenu = (user) => filterMenu([
   { group: 'Overview', items: [{ label: 'Dashboard', icon: LayoutDashboard, to: '/user/dashboard', perm: 'vcards' }, { label: 'Analytics', icon: BarChart3, to: '/user/analytics', perm: 'vcards' }, ...(user?.is_organisation || ['manager', 'supervisor'].includes(user?.company_role) ? [{ label: 'Company analytics', icon: Building2, to: '/user/company-analytics', perm: 'analytics' }] : [])] },
   {
     group: 'My Cards', items: [
+      { label: 'My links & cards', icon: Link2, to: '/user/links', perm: 'vcards' },
       { label: 'vCards', icon: IdCard, to: '/user/vcards', perm: 'vcards' },
       { label: 'Dynamic links & QR', icon: QrCode, to: '/user/short-links', perm: 'shortlinks' },
       { label: 'NFC orders', icon: Nfc, to: '/user/nfc-orders', perm: 'orders' },
