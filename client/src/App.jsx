@@ -1,4 +1,5 @@
 import { lazy, Suspense } from 'react';
+import { MODULES } from '@/lib/modules';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { Toaster } from 'sonner';
 import { AuthProvider, useAuth, homeFor } from '@/lib/auth';
@@ -228,7 +229,7 @@ export default function App() {
                 <Route path="appointments" element={<U.Appointments />} />
                 <Route path="subscribers" element={<U.Subscribers />} />
                 <Route path="virtual-background" element={<U.VirtualBg />} />
-                <Route path="organisation" element={<U.Organisation />} />
+                <Route path="organisation" element={MODULES.organisation ? <U.Organisation /> : <Navigate to="/user/dashboard" replace />} />
                 <Route path="stores" element={<U.Stores />} />
                 <Route path="stores/:sid" element={<U.StoreEditor />} />
                 <Route path="store-orders" element={<U.StoreOrders />} />
