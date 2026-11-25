@@ -27,7 +27,7 @@ const SOURCE = { shop: ['Website', 'primary'], portal: ['Portal', 'info'], admin
 /** who created the order: the staff member, otherwise the customer (website / portal) */
 const createdBy = (o) => (o.creator ? `${o.creator.first_name} ${o.creator.last_name}`.trim() : o.source === 'admin' ? 'Staff' : 'Customer');
 const discountLabel = (o) => `Discount${o.discount_type === 'percent' ? ` (${Number(o.discount_value)}%)` : ''}`;
-const paymentLabel = (o) => (o.is_cod ? 'Cash on delivery' : o.payment_type === 'collection' ? 'Pay at collection' : label(o.payment_type || 'manual'));
+const paymentLabel = (o) => (o.is_cod ? 'Cash on delivery' : o.payment_type === 'advance' ? `Advance ${Number(o.advance_amount || 0).toLocaleString('en-US')} · balance ${Math.max(0, Number(o.amount) - Number(o.advance_amount || 0)).toLocaleString('en-US')}` : o.payment_type === 'collection' ? 'Pay at collection' : label(o.payment_type || 'manual'));
 
 /* ================================================================ list */
 export function Orders() {

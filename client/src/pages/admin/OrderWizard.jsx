@@ -1,362 +1,110 @@
-/* Admin: new order wizard (phone / WhatsApp / walk-in / other websites). Staff only - the website checkout is separate. */
-import { useEffect, useMemo, useRef, useState } from 'react';
+/* Admin: new order on ONE page (phone / WhatsApp / walk-in / other websites). Staff only - the website checkout is separate. */
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion } from 'motion/react';
 import { toast } from 'sonner';
-import {
-  ArrowLeft, ArrowRight, Check, User, Package, Truck, ClipboardCheck, Plus, Trash2, Store, Wand2, IdCard, Copy, ExternalLink,
-  Banknote, ShoppingBag, Sparkles, UserCheck, UserPlus, UserRound, Building2, Repeat,
-  Share2, Link2, Boxes, FlaskConical, Printer, Smartphone, Layers, CreditCard, CalendarClock, TrendingUp, ShieldCheck, Plane,
-} from 'lucide-react';
+import { ArrowLeft, ArrowRight, Check, Plus, Trash2, Copy, ShoppingBag, ShieldCheck, Link2, IdCard, Boxes, UserRound, Repeat } from 'lucide-react';
 import api from '@/lib/api';
-import { MODULES } from '@/lib/modules';
-import { LinkRows, MadeLinks, newRow, rowsValid, rowsPayload } from './LinkGenerator';
+import { MadeLinks } from './LinkGenerator';
 import SearchSelect from '@/components/SearchSelect';
 import { cn } from '@/lib/cn';
-import {
-  Card, CardHeader, CardBody, Button, Field, Input, Textarea, Select, Segmented, Checkbox, Switch, Badge, Tip, Skeleton, Avatar, run,
-} from '@/components/ui';
+import { Card, CardHeader, CardBody, Button, Field, Input, Textarea, Select, Segmented, Badge, Tip, Skeleton, run } from '@/components/ui';
 
-const STEP_META = { type: ['Order', Layers], customer: ['Customer', User], products: ['Products', Package], delivery: ['Delivery & payment', Truck], review: ['Review', ClipboardCheck] };
-/** Order type, website and products are chosen on the first screen. Renewals and upgrades need the customer first: their plan decides which plans are offered. */
-const flowFor = (type) => (['renewal', 'upgrade'].includes(type) ? ['type', 'customer', 'products', 'delivery', 'review'] : ['type', 'customer', 'delivery', 'review']);
-let lineId = 0;
-/* order types: what the customer wants decides the products, the pricing rules and whether anything ships */
+/* order types: what the customer wants decides the pricing rules and whether anything ships */
 const ORDER_TYPES = [
-  { key: 'nfc_profile', title: 'NFC Business Card', text: 'Business card linked to a profile on our portal', icon: IdCard },
-  { key: 'social', title: 'Social / review card', text: 'Static link, dynamic link or all-in-one social profile', icon: Share2 },
-  { key: 'wholesale', title: 'Wholesale', text: 'Bulk quantities with quantity discounts', icon: Boxes },
-  { key: 'sample', title: 'Samples first', text: 'Paid samples, credited to the bulk order later', icon: FlaskConical },
-  { key: 'card_printing', title: 'Card + printing', text: 'NFC card with your print, no profile or plan', icon: CreditCard },
-  { key: 'printing', title: 'Printing only', text: 'Printing service on cards the client already has', icon: Printer },
-  { key: 'reprint', title: 'Card reprinting', text: 'Same design again on a new card: metal, wood, PVC and more', icon: Repeat },
-  { key: 'digital', title: 'Digital profile only', text: 'Profile and plan, nothing shipped', icon: Smartphone },
-  { key: 'renewal', title: 'Renewal', text: 'Extend an existing customer\'s plan', icon: CalendarClock },
-  { key: 'upgrade', title: 'Upgrade plan', text: 'Move a customer to a higher plan, unused time credited', icon: TrendingUp },
-  { key: 'contact_tag', title: 'Car contact tag', text: 'Tag for a car: anyone can reach the owner, number hidden', icon: ShieldCheck },
-  { key: 'airport_tag', title: 'Airport tag', text: 'Luggage tag: a finder can reach the owner, number hidden', icon: Plane },
+  { key: 'nfc_profile', title: 'NFC Business Card', text: 'Business card linked to a profile on our portal' },
+  { key: 'social', title: 'Social / review card', text: 'Static link, dynamic link or all-in-one social profile' },
+  { key: 'wholesale', title: 'Wholesale', text: 'Bulk quantities with quantity discounts' },
+  { key: 'sample', title: 'Samples first', text: 'Paid samples, credited to the bulk order later' },
+  { key: 'card_printing', title: 'Card + printing', text: 'NFC card with your print, no profile or plan' },
+  { key: 'printing', title: 'Printing only', text: 'Printing service on cards the client already has' },
+  { key: 'reprint', title: 'Card reprinting', text: 'Same design again on a new card: metal, wood, PVC and more' },
+  { key: 'digital', title: 'Digital profile only', text: 'Profile and plan, nothing shipped' },
+  { key: 'renewal', title: 'Renewal', text: 'Extend an existing customer\'s plan' },
+  { key: 'upgrade', title: 'Upgrade plan', text: 'Move a customer to a higher plan, unused time credited' },
+  { key: 'contact_tag', title: 'Car contact tag', text: 'Tag for a car: anyone can reach the owner, number hidden' },
+  { key: 'airport_tag', title: 'Airport tag', text: 'Luggage tag: a finder can reach the owner, number hidden' },
 ];
 const TAG_TYPES = ['contact_tag', 'airport_tag'];
 const NO_SHIP = ['digital', 'renewal', 'upgrade'];
-const PLAN_CHANGE = ['renewal', 'upgrade']; // nothing is delivered
-const noShip = (t) => NO_SHIP.includes(t);
-const TYPE_TITLE = Object.fromEntries(ORDER_TYPES.map((t) => [t.key, t.title]));
-const SOCIAL_VARIANTS = [{ value: 'static', label: 'Static link', kind: 'social_static' }, { value: 'dynamic', label: 'Dynamic link', kind: 'social_dynamic' }, { value: 'profile', label: 'All-in-one social profile', kind: 'social_profile' }];
-/** which product kinds an order type offers (an untagged product counts as a normal NFC product) */
-const kindsFor = (type, variant) => ({
-  nfc_profile: ['nfc_profile', null, 'plan'], printing: ['printing', null], reprint: ['reprint'], card_printing: ['blank_card', 'printing', null], digital: ['digital', null], renewal: ['__plan'], upgrade: ['__plan'], contact_tag: ['contact_tag'], airport_tag: ['airport_tag'],
-  social: [SOCIAL_VARIANTS.find((v) => v.value === variant)?.kind].filter(Boolean).concat(variant ? [] : ['social_static', 'social_dynamic', 'social_profile']),
-}[type] || null); // null = every product (wholesale, samples)
+const PLAN_CHANGE = ['renewal', 'upgrade']; // an existing customer's plan changes: nothing is delivered
+const SOCIAL_KIND = { social_static: 'static', social_dynamic: 'dynamic', social_profile: 'profile' };
+const LINK_KINDS = [{ value: 'vcard', label: 'Business card (vCard)' }, { value: 'review', label: 'Review link' }, { value: 'redirect', label: 'Redirect link' }];
 const afterDisc = (price, t, v) => Math.max(0, t === 'percent' ? price * (1 - Math.min(100, Number(v) || 0) / 100) : t === 'fixed' ? price - (Number(v) || 0) : price);
-const newLine = () => ({ key: ++lineId, product_id: '', variant: '', quantity: 1, unit_price: '', customization: false });
+let lineId = 0;
+const newLine = () => ({ key: ++lineId, product_id: '', variant: '', quantity: 1, unit_price: '' });
 const money = (cur, v) => `${cur} ${Number(v || 0).toLocaleString('en-US', { maximumFractionDigits: 2 })}`;
-const slug = (s) => String(s || '').toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, '.').replace(/^\.+|\.+$/g, '').slice(0, 30);
-const dummyEmail = (name, domain) => `${slug(name) || 'customer'}.${Math.random().toString(36).slice(2, 6)}@${domain}`;
-
-function Stepper({ screens, step, done, onGo }) {
-  return (
-    <div className="flex items-center gap-1">
-      {screens.map((k, i) => {
-        const [l, I] = STEP_META[k];
-        const active = i === step; const ok = done[i] && i < step;
-        return (
-          <div key={k} className="flex flex-1 items-center gap-1 last:flex-none">
-            <button type="button" onClick={() => onGo(i)} disabled={i > step && !done.slice(0, i).every(Boolean)}
-              className={cn('flex cursor-pointer items-center gap-2.5 rounded-2xl px-2 py-1.5 text-left transition disabled:cursor-not-allowed', active ? 'text-foreground' : 'text-muted-foreground hover:text-foreground')}>
-              <motion.span initial={false} animate={{ scale: active ? 1.08 : 1 }} className={cn('grid size-9 shrink-0 place-items-center rounded-xl border-2 transition', active ? 'border-primary bg-primary text-primary-foreground shadow-glow' : ok ? 'border-primary/40 bg-primary-soft text-primary' : 'border-border bg-card')}>
-                {ok ? <Check className="size-4" /> : <I className="size-4" />}
-              </motion.span>
-              <span className="hidden text-sm font-medium md:block">{l}</span>
-            </button>
-            {i < screens.length - 1 && <span className={cn('h-0.5 flex-1 rounded-full', i < step ? 'bg-primary' : 'bg-border')} />}
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-/* the summary box on the right: lines, discount, editable delivery charges, total */
-function Summary({ meta, quote, lines, form, setForm, loading }) {
-  const cur = meta.currency;
-  const products = Object.fromEntries(meta.products.map((p) => [p.id, p]));
-  const collection = form.fulfilment === 'collection';
-  const digital = noShip(form.order_type);
-  return (
-    <Card className="overflow-hidden lg:sticky lg:top-24">
-      <CardHeader icon={ShoppingBag} title="Order summary" />
-      <CardBody className="space-y-3 text-sm">
-        <Badge tone="primary">{TYPE_TITLE[form.order_type]}</Badge>
-        {!lines.some((l) => l.product_id) ? <p className="text-muted-foreground">No products yet.</p> : (
-          <ul className="space-y-1.5">
-            {lines.filter((l) => l.product_id).map((l, i) => {
-              const q = quote?.lines?.[i]; // quote lines follow the order of the chosen products
-              return (
-                <li key={l.key} className="flex justify-between gap-3">
-                  <span className="min-w-0 truncate">{products[l.product_id]?.name}{l.variant ? ` · ${l.variant}` : ''} <span className="text-muted-foreground">× {l.quantity || 1}</span></span>
-                  <span className="shrink-0">{q ? money(cur, q.total) : '…'}</span>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-        <div className="space-y-1.5 border-t border-border pt-3">
-          <Row label="Subtotal" value={money(cur, quote?.subtotal)} />
-          {quote?.discount > 0 && <Row label={`Discount${quote.discount_type === 'percent' ? ` (${quote.discount_value}%)` : ''}`} value={`- ${money(cur, quote.discount)}`} className="font-medium text-success" />}
-          {quote?.plan_credit > 0 && <Row label="Credit for unused time" value={`- ${money(cur, quote.plan_credit)}`} className="font-medium text-success" />}
-          {quote?.sample_credit > 0 && <Row label="Sample credit" value={`- ${money(cur, quote.sample_credit)}`} className="font-medium text-success" />}
-          {quote?.tax > 0 && <Row label={`${quote.tax_name} (${quote.tax_rate}%)`} value={money(cur, quote.tax)} />}
-          <div className="flex items-center justify-between gap-3">
-            <span className="text-muted-foreground">Delivery</span>
-            {digital ? <span className="text-muted-foreground">No shipping</span> : collection ? <span className="text-muted-foreground">Office collection</span> : (
-              <Tip content={`Leave empty for the default (${money(cur, quote?.delivery_default ?? meta.delivery_charges)})`}>
-                <Input type="number" min="0" aria-label="Delivery charges" value={form.delivery_charges} onChange={(e) => setForm('delivery_charges', e.target.value)} placeholder={String(quote?.delivery_default ?? meta.delivery_charges)} className="h-8 w-28 text-right" />
-              </Tip>
-            )}
-          </div>
-          {quote?.cod > 0 && <Row label="COD charges" value={money(cur, quote.cod)} />}
-        </div>
-        <div className={cn('flex items-center justify-between rounded-2xl bg-primary-soft px-4 py-3 text-primary transition-opacity', loading && 'opacity-60')}>
-          <span className="font-semibold">Total</span><span className="font-display text-xl font-bold">{money(cur, quote?.total)}</span>
-        </div>
-        {quote?.error && <p className="text-xs text-danger">{quote.error}</p>}
-        {(quote?.warnings || []).map((w) => <p key={w} className="rounded-xl bg-warning-soft px-3 py-2 text-xs text-warning">{w}</p>)}
-      </CardBody>
-    </Card>
-  );
-}
-const Row = ({ label, value, className }) => <div className={cn('flex justify-between gap-3', className)}><span className="text-muted-foreground">{label}</span><span>{value}</span></div>;
-
-const TYPES = [
-  ['existing', 'Existing customer', 'Registered (plan) customer', UserCheck],
-  ['new', 'New customer', 'Creates an account + vCard', UserPlus],
-  ['organisation', 'Organisation', 'Order for a company', Building2],
-  ['guest', 'Guest', 'No account · non-plan products', UserRound],
-];
-const TYPE_LABEL = Object.fromEntries(TYPES.map(([k, l]) => [k, l]));
-const CUSTOMER_TYPES = TYPES.filter(([k]) => k !== 'organisation' || MODULES.organisation);
 const fetchList = (url) => (q) => api.get(url, { params: { q, search: q, per_page: 15 } }).then(({ data }) => data.data);
-const PersonLine = ({ p, sub }) => (
-  <div className="flex min-w-0 items-center gap-3">
-    <Avatar name={p.name} size={32} />
-    <div className="min-w-0"><p className="truncate font-medium">{p.name}</p><p className="truncate text-xs text-muted-foreground">{sub}</p></div>
-  </div>
-);
+const PersonLine = ({ p, sub }) => <div className="min-w-0"><p className="truncate font-medium">{p.name}</p><p className="truncate text-xs text-muted-foreground">{sub}</p></div>;
+const decimal = (v) => v.replace(/[^\d.]/g, '').replace(/(\..*)\./g, '$1');
 
-function ChoiceCard({ active, onClick, icon: Icon, title, text }) {
-  return (
-    <button type="button" onClick={onClick} className={cn('flex cursor-pointer items-start gap-3 rounded-2xl border-2 p-4 text-left transition', active ? 'border-primary bg-primary-soft/50' : 'border-border hover:border-primary/40')}>
-      <span className={cn('grid size-10 shrink-0 place-items-center rounded-xl', active ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground')}><Icon className="size-5" /></span>
-      <span><span className="block font-semibold">{title}</span><span className="text-xs text-muted-foreground">{text}</span></span>
-    </button>
-  );
-}
-
-/** estimate of the price per piece before the server quotes it (type, tier, product discount) */
+/** price per piece shown before the server quotes it (type, tier, product discount) */
 function estimate(meta, p, variant, qty, type) {
-  const base = Number(p.price || 0) + Number((p.variants || []).find((v) => v.name === variant)?.price_delta || 0);
+  const delta = Number((p.variants || []).find((v) => v.name === variant)?.price_delta || 0);
+  const base = Number(p.price || 0) + delta;
   const disc = afterDisc(base, p.discount_type, p.discount_value);
-  if (type === 'sample') return Number(p.sample_price) > 0 ? Number(p.sample_price) + Number((p.variants || []).find((v) => v.name === variant)?.price_delta || 0) : base * (1 + Number(meta.sample_markup_percent || 0) / 100);
+  if (type === 'sample') return Number(p.sample_price) > 0 ? Number(p.sample_price) + delta : base * (1 + Number(meta.sample_markup_percent || 0) / 100);
   if (type === 'wholesale') {
-    if (p.no_wholesale_tiers) return disc; // already a wholesale price
-    const tiers = (Array.isArray(p.wholesale_tiers) && p.wholesale_tiers.length ? p.wholesale_tiers : meta.wholesale_tiers || []).filter((t) => Number(t.min) <= Number(qty || 1)).at(-1);
-    return disc * (1 - (tiers?.percent || 0) / 100);
+    if (p.no_wholesale_tiers) return disc;
+    const tier = (Array.isArray(p.wholesale_tiers) && p.wholesale_tiers.length ? p.wholesale_tiers : meta.wholesale_tiers || []).filter((t) => Number(t.min) <= Number(qty || 1)).at(-1);
+    return disc * (1 - (tier?.percent || 0) / 100);
   }
   return disc;
 }
 
-/** every product of every website in one searchable dropdown; each product you pick becomes a line with its option, price and quantity */
-function ProductPicker({ meta, pool, suggested, lines, setLines, quote, valid, form, cur, sampleMax, error }) {
-  const sourceName = (id) => meta.sources.find((x) => x.id === id)?.name;
-  const lineOf = (p) => lines.find((l) => String(l.product_id) === String(p.id));
-  const firstQty = form.order_type === 'wholesale' ? Number(meta.wholesale_tiers?.[0]?.min) || 1 : 1;
-  const clamp = (n) => (form.order_type === 'sample' ? Math.min(sampleMax, n) : n);
-  const add = (p) => { if (p && !lineOf(p)) setLines((ls) => [...ls.filter((l) => l.product_id), { key: ++lineId, product_id: p.id, variant: p.variants?.[0]?.name ?? '', quantity: firstQty, unit_price: '', customization: false }]); };
-  const upd = (p, patch) => setLines((ls) => ls.map((l) => (String(l.product_id) === String(p.id) ? { ...l, ...patch } : l)));
-  const remove = (p) => setLines((ls) => ls.filter((l) => String(l.product_id) !== String(p.id)));
-  const setQty = (p, raw) => { const n = clamp(Math.max(0, parseInt(raw, 10) || 0)); if (n <= 0) remove(p); else upd(p, { quantity: n }); };
-  const search = (q) => {
-    const t = q.trim().toLowerCase(); const taken = new Set(valid.map((l) => String(l.product_id)));
-    const list = pool.filter((p) => !taken.has(String(p.id)) && (!t || `${p.name} ${p.sku || ''} ${p.category || ''} ${sourceName(p.order_source_id) || ''}`.toLowerCase().includes(t)));
-    list.sort((x, y) => (suggested.has(y.id) ? 1 : 0) - (suggested.has(x.id) ? 1 : 0)); // products made for this order type first
-    return Promise.resolve(list.slice(0, 400));
-  };
-  return (
-    <div className="space-y-3">
-      <SearchSelect value={null} onChange={add} search={search} invalid={!!error} placeholder={`Select a product (${pool.length} available)...`} empty="No product found"
-        renderItem={(p) => (
-          <div className="flex items-center justify-between gap-3">
-            <div className="min-w-0"><p className="truncate font-medium">{p.name}</p><p className="truncate text-xs text-muted-foreground">{[sourceName(p.order_source_id) || 'Own products', p.category].filter(Boolean).join(' · ')}</p></div>
-            <span className="shrink-0 text-xs text-muted-foreground tabular-nums">{money(cur, p.price)}</span>
-          </div>
-        )} />
-      {error && <p className="text-sm text-danger">{error}</p>}
-      <div className="space-y-2">
-        {valid.length === 0 && <p className="rounded-2xl border border-dashed border-border py-6 text-center text-sm text-muted-foreground">No product selected yet. Choose one from the list above.</p>}
-        {valid.map((line) => {
-          const p = pool.find((x) => String(x.id) === String(line.product_id)) || meta.products.find((x) => String(x.id) === String(line.product_id));
-          if (!p) return null;
-          const variant = line.variant ?? '';
-          const qty = Number(line.quantity) || 0;
-          const ql = quote?.lines?.[valid.findIndex((x) => x.key === line.key)];
-          const est = estimate(meta, p, variant, qty || firstQty, form.order_type);
-          const unit = line.unit_price !== '' ? Number(line.unit_price) : ql ? Number(ql.unit_price) : est;
-          const site = p.source_price === null || p.source_price === undefined ? null : Number(p.source_price) + Number((p.variants || []).find((v) => v.name === variant)?.price_delta || 0);
-          const img = p.front_image || p.images?.[0];
-          return (
-            <div key={line.key} className="rounded-2xl border border-primary bg-primary-soft/30 p-2.5">
-              <div className="flex flex-wrap items-center gap-3">
-                <span className="size-12 shrink-0 overflow-hidden rounded-xl bg-muted">{img && <img src={img} alt="" loading="lazy" className="size-full object-cover" />}</span>
-                <div className="min-w-44 flex-1">
-                  <p className="text-sm leading-snug font-medium">{p.name}</p>
-                  <p className="text-xs text-muted-foreground">{[sourceName(p.order_source_id) || 'Own products', p.category].filter(Boolean).join(' · ')}</p>
-                </div>
-                {p.variants?.length > 0 && (
-                  <Select className="h-9 w-52" value={variant} onChange={(v) => upd(p, { variant: v, unit_price: '' })} options={p.variants.map((v) => ({ value: v.name, label: `${v.name}${Number(v.price_delta) ? ` (+${v.price_delta})` : ''}` }))} />
-                )}
-                <div className="text-right">
-                  <p className="text-[11px] text-muted-foreground">Website</p>
-                  <p className="text-sm tabular-nums">{site === null ? '-' : money(cur, site)}</p>
-                </div>
-                <div className="w-28">
-                  <p className="text-[11px] text-muted-foreground">Your price</p>
-                  <Input className="h-9" type="text" inputMode="decimal" autoComplete="off" aria-label={`Price of ${p.name}`} value={line.unit_price ?? ''} placeholder={String(Math.round(unit * 100) / 100)}
-                    onChange={(e) => upd(p, { unit_price: e.target.value.replace(/[^\d.]/g, '').replace(/(\..*)\./g, '$1') })} />
-                </div>
-                <div className="flex items-center gap-1">
-                  <Button size="icon-sm" variant="outline" onClick={() => setQty(p, qty - 1)} aria-label="Less">-</Button>
-                  <Input className="h-9 w-16 text-center" type="text" inputMode="numeric" autoComplete="off" value={qty || ''} placeholder="0" aria-label={`Quantity of ${p.name}`} onChange={(e) => setQty(p, e.target.value)} />
-                  <Button size="icon-sm" variant="outline" onClick={() => setQty(p, qty + 1)} aria-label="More">+</Button>
-                </div>
-                <Button size="icon-sm" variant="ghost" onClick={() => remove(p)} aria-label={`Remove ${p.name}`}><Trash2 /></Button>
-              </div>
-              <div className="mt-2 flex flex-wrap items-center gap-2 px-1 text-xs">
-                <span className="font-semibold">{money(cur, ql && line.unit_price === '' ? ql.total : unit * qty)}</span>
-                {ql?.tier_percent > 0 && <Badge tone="success">Wholesale tier {ql.tier_percent}% off</Badge>}
-                {form.order_type === 'sample' && <Badge tone="warning">Sample price</Badge>}
-                {p.plan && <Badge tone="primary"><IdCard className="size-3" />Plan: {p.plan.name}</Badge>}
-                {Number(p.tags_per_unit) > 1 && <Badge tone="info">{Number(p.tags_per_unit) * qty} tags</Badge>}
-                {Number(p.discount_value) > 0 && form.order_type !== 'sample' && <Badge tone="success">Discount {p.discount_type === 'percent' ? `${Number(p.discount_value)}%` : money(cur, p.discount_value)}</Badge>}
-                {line.unit_price !== '' && ql && Number(line.unit_price) !== Number(ql.list_price) && <span className="text-muted-foreground">Edited from {money(cur, ql.list_price)}</span>}
-                {Number(p.customization_price) > 0 && <Checkbox id={`cz-${p.id}`} checked={!!line.customization} onChange={(v) => upd(p, { customization: v })} label={`Customisation +${money(cur, p.customization_price)} / pc`} />}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
 export default function OrderWizard() {
   const navigate = useNavigate();
-  const [meta, setMeta] = useState(null);
-  const [step, setStep] = useState(0);
-  const [lines, setLines] = useState([newLine()]);
   const [params] = useSearchParams();
+  const [meta, setMeta] = useState(null);
+  const [lines, setLines] = useState([newLine()]);
   const [form, setValues] = useState({
-    customer_type: 'guest', customer: null, organisation: null, contact_id: '', guest: null,
-    name: '', phone: '', email: '', dummy: false, company_name: '', city: '', address: '', order_source_id: '',
-    fulfilment: 'delivery', payment: 'cod', payment_account_id: '', delivery_charges: '', discount_type: 'fixed', discount_value: '', admin_note: '',
-    order_type: 'nfc_profile', social_variant: '', sample_order: null, plan_credit: '',
+    order_type: 'nfc_profile', order_source_id: '', name: '', phone: '', city: '', address: '', email: '', customer: null, guest: null,
+    discount_type: 'fixed', discount_value: '', payment: 'cod', advance_amount: '', payment_account_id: '', ship: false, admin_note: '', sample_order: null, plan_credit: '',
+    make_links: false, link_kind: 'vcard', link_plan_id: '', link_qty: '',
   });
-  const [addingMethod, setAddingMethod] = useState(false); const [newMethod, setNewMethod] = useState('');
-  const refreshedKey = useRef('');
-  const [subInfo, setSubInfo] = useState(undefined); // current plan of the customer being renewed
   const [errors, setErrors] = useState({});
-  const screens = flowFor(form.order_type);
-  const screen = screens[step];
-  const goTo = (k) => setStep(screens.indexOf(k));
   const [quote, setQuote] = useState(null);
   const [quoting, setQuoting] = useState(false);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState(null);
-  const [genLinks, setGenLinks] = useState(false); // optional: generate managed links together with the order
-  const [linkRows, setLinkRows] = useState([newRow()]);
-  const nameRef = useRef(null);
-  const set = (k, v) => { setValues((f) => ({ ...f, [k]: v })); setErrors((e) => ({ ...e, [k]: undefined })); };
-  useEffect(() => { setErrors((e) => (e.products ? { ...e, products: undefined } : e)); }, [lines]); // a stale "add a product" message must go as soon as the cart changes
-  const [people, setPeople] = useState([]);
   const [reorderOf, setReorderOf] = useState(null);
+  const [subInfo, setSubInfo] = useState(undefined); // current plan of the customer being renewed
+  const set = (k, v) => { setValues((f) => ({ ...f, [k]: v })); setErrors((e) => ({ ...e, [k]: undefined })); };
   useEffect(() => { api.get('/admin/orders-meta').then(({ data }) => setMeta(data)); }, []);
-  // contact people of the chosen organisation
-  useEffect(() => { if (form.organisation) api.get(`/admin/organisations/${form.organisation.id}/people`).then(({ data }) => setPeople(data.data)); else setPeople([]); }, [form.organisation?.id]); // eslint-disable-line
-  // prefill: ?reorder=<order id>[&edit=1], ?guest=<id>, ?organisation=<owner id>, ?customer=<user id>
-  useEffect(() => {
-    if (!meta) return;
-    const fill = (patch) => setValues((f) => ({ ...f, ...patch }));
-    if (params.get('reorder')) {
-      api.get(`/admin/orders/${params.get('reorder')}`).then(({ data }) => {
-        const o = data.data;
-        const base = { name: o.name, phone: o.phone || '', email: o.email || '', company_name: o.company_name || '', city: o.city || '', address: o.address || '', order_source_id: o.order_source_id || '',
-          fulfilment: o.fulfilment || 'delivery', payment: o.is_cod ? 'cod' : o.payment_type === 'collection' ? 'collection' : 'pending',
-          discount_type: o.discount_type || 'fixed', discount_value: Number(o.discount) ? String(Number(o.discount_value) || Number(o.discount)) : '',
-          delivery_charges: o.fulfilment === 'collection' ? '' : String(Number(o.delivery_charges)) };
-        if (o.guest_customer_id) fill({ ...base, customer_type: 'guest', guest: { id: o.guest_customer_id, name: o.guest?.name || o.name, phone: o.phone } });
-        else if (o.organisation_id) fill({ ...base, customer_type: 'organisation', organisation: { id: o.organisation_id, name: o.organisation?.organisation?.name || o.name }, contact_id: o.user_id || '' });
-        else if (o.user_id) fill({ ...base, customer_type: 'existing', customer: { id: o.user_id, name: `${o.user?.first_name || ''} ${o.user?.last_name || ''}`.trim() || o.name, email: o.user?.email } });
-        else fill({ ...base, customer_type: 'guest' });
-        const items = o.items?.length ? o.items : [];
-        setLines(items.length ? items.map((it) => ({ key: ++lineId, product_id: it.nfc_card_id, variant: it.variant || '', quantity: it.quantity, unit_price: String(Number(it.unit_price)), customization: !!it.customization })) : [newLine()]);
-        setReorderOf(o.order_number);
-        setStep(params.get('edit') ? 0 : 3);
-      }).catch(() => toast.error('Could not load the order to reorder'));
-    } else if (params.get('bulk') || params.get('sample')) {
-      // bulk order from any order: same customer and products at wholesale pricing; a sample order's charge is credited
-      api.get(`/admin/orders/${params.get('bulk') || params.get('sample')}`).then(({ data }) => {
-        const o = data.data; const minQty = meta.wholesale_tiers?.[0]?.min || 25;
-        const base = { name: o.name, phone: o.phone || '', email: o.email || '', company_name: o.company_name || '', city: o.city || '', address: o.address || '', order_source_id: o.order_source_id || '', order_type: 'wholesale',
-          sample_order: o.order_type === 'sample' ? { id: o.id, order_number: o.order_number, credit: (o.items || []).reduce((a, i) => a + Number(i.total), 0) } : null };
-        if (o.guest_customer_id) fill({ ...base, customer_type: 'guest', guest: { id: o.guest_customer_id, name: o.guest?.name || o.name, phone: o.phone } });
-        else if (o.organisation_id) fill({ ...base, customer_type: 'organisation', organisation: { id: o.organisation_id, name: o.organisation?.organisation?.name || o.name }, contact_id: o.user_id || '' });
-        else if (o.user_id) fill({ ...base, customer_type: 'existing', customer: { id: o.user_id, name: `${o.user?.first_name || ''} ${o.user?.last_name || ''}`.trim() || o.name, email: o.user?.email } });
-        else fill({ ...base, customer_type: 'guest' });
-        setLines((o.items?.length ? o.items : []).map((it) => ({ key: ++lineId, product_id: it.nfc_card_id, variant: it.variant || '', quantity: minQty, unit_price: '', customization: !!it.customization })));
-        setReorderOf(`bulk from ${o.order_number}`); setStep(0);
-      }).catch(() => toast.error('Could not load the order'));
-    } else if (params.get('guest')) {
-      api.get(`/admin/guest-customers/${params.get('guest')}`).then(({ data }) => { const g = data.data; fill({ customer_type: 'guest', guest: g, name: g.name, phone: g.phone || '', email: g.email || '', company_name: g.company_name || '', city: g.city || '', address: g.address || '' }); });
-    } else if (params.get('organisation')) {
-      api.get('/admin/organisations/search', { params: { q: '' } }).then(({ data }) => { const o = data.data.find((x) => String(x.id) === params.get('organisation')); if (o) pickOrganisation(o); });
-    }
-  }, [meta]); // eslint-disable-line
-  useEffect(() => { if (meta && screen === 'customer') nameRef.current?.focus(); }, [meta, screen]);
+  useEffect(() => { setErrors((e) => (e.products ? { ...e, products: undefined } : e)); }, [lines]);
 
-  const products = useMemo(() => Object.fromEntries((meta?.products || []).map((p) => [p.id, p])), [meta]);
-  const sampleMax = meta?.sample_max_qty || 5;
-  // the website prices are read again quietly in the background; the saved prices show meanwhile and nothing needs to be clicked
-  const doRefresh = async () => {
-    try {
-      await api.post('/admin/order-sources/refresh', { ids: form.order_source_id ? [Number(form.order_source_id)] : undefined, force: false });
-      const { data: m } = await api.get('/admin/orders-meta');
-      setMeta((x) => ({ ...x, products: m.products, sources: m.sources }));
-    } catch { /* saved prices stay */ }
-  };
-  useEffect(() => {
-    if (!meta) return;
-    const key = String(form.order_source_id || 'all');
-    if (refreshedKey.current === key) return;
-    refreshedKey.current = key; doRefresh();
-  }, [!!meta, form.order_source_id]); // eslint-disable-line
-  const renewFor = form.customer?.id || form.organisation?.id;
-  useEffect(() => {
-    if (!PLAN_CHANGE.includes(form.order_type) || !renewFor) { setSubInfo(undefined); return; }
-    api.get(`/admin/customers/${renewFor}/subscription`).then(({ data }) => setSubInfo(data.data)).catch(() => setSubInfo(null));
-  }, [form.order_type, renewFor]);
-  const kinds = kindsFor(form.order_type, form.social_variant);
-  const fromSource = useMemo(() => (meta?.products || []).filter((p) => !form.order_source_id || !p.order_source_id || String(p.order_source_id) === String(form.order_source_id)), [meta, form.order_source_id]);
-  // renewals and upgrades sell plans only (an upgrade only offers a dearer plan than the current one); every other order type offers every product
-  const planProducts = useMemo(() => fromSource.filter((p) => p.plan_id && (form.order_type !== 'upgrade' || !subInfo || (p.plan_id !== subInfo.plan_id && Number(p.plan?.price) > Number(subInfo.plan_price)))), [fromSource, subInfo, form.order_type]);
-  const pool = PLAN_CHANGE.includes(form.order_type) ? planProducts : fromSource;
-  const suggested = useMemo(() => new Set(fromSource.filter((p) => kinds && kinds.includes(p.product_kind || null)).map((p) => p.id)), [fromSource, form.order_type, form.social_variant]); // eslint-disable-line
+  const type = form.order_type;
+  const planChange = PLAN_CHANGE.includes(type);
+  const noShip = NO_SHIP.includes(type);
+  const tagType = TAG_TYPES.includes(type);
+  const cod = form.payment === 'cod' && !noShip;
+  const courier = !noShip && (cod || form.ship);
   const valid = lines.filter((l) => l.product_id);
+  const products = useMemo(() => Object.fromEntries((meta?.products || []).map((p) => [p.id, p])), [meta]);
+  const cur = meta?.currency;
+  const sampleMax = meta?.sample_max_qty || 5;
+
+  // no cash on delivery for plan orders: a stale choice is corrected
+  useEffect(() => { if (noShip && form.payment === 'cod') setValues((f) => ({ ...f, payment: 'online' })); }, [noShip]); // eslint-disable-line
+  // online payment: the money went into one of your payment methods; the first one is chosen until told otherwise
+  useEffect(() => { if (meta?.accounts?.length) setValues((f) => (f.payment_account_id ? f : { ...f, payment_account_id: String(meta.accounts[0].id) })); }, [meta]);
+
+  // every product added on the Products page is in the list; renewals and upgrades sell plans only (an upgrade only offers a dearer one)
+  const renewFor = form.customer?.id;
+  useEffect(() => {
+    if (!planChange || !renewFor) { setSubInfo(undefined); return; }
+    api.get(`/admin/customers/${renewFor}/subscription`).then(({ data }) => setSubInfo(data.data)).catch(() => setSubInfo(null));
+  }, [planChange, renewFor]);
+  const pool = useMemo(() => (meta?.products || []).filter((p) => !planChange || (p.plan_id && (type !== 'upgrade' || !subInfo || (p.plan_id !== subInfo.plan_id && Number(p.plan?.price) > Number(subInfo.plan_price))))), [meta, planChange, type, subInfo]);
+
   const payload = () => ({
-    items: valid.map(({ product_id, variant, quantity, unit_price, customization }) => ({ product_id, variant, quantity, unit_price, customization })),
-    order_type: form.order_type, social_variant: form.order_type === 'social' ? form.social_variant : undefined, sample_order_id: form.order_type === 'wholesale' ? form.sample_order?.id : undefined, plan_credit: form.order_type === 'upgrade' && form.plan_credit !== '' ? form.plan_credit : undefined,
-    fulfilment: noShip(form.order_type) ? 'digital' : form.fulfilment, is_cod: !noShip(form.order_type) && form.fulfilment === 'delivery' && form.payment === 'cod', delivery_charges: form.delivery_charges,
-    discount_type: 'fixed', discount_value: 0,
+    items: valid.map(({ product_id, variant, quantity, unit_price }) => ({ product_id, variant, quantity, unit_price, customization: false })),
+    order_type: type, social_variant: type === 'social' ? SOCIAL_KIND[products[valid[0]?.product_id]?.product_kind] : undefined,
+    sample_order_id: type === 'wholesale' ? form.sample_order?.id : undefined, plan_credit: type === 'upgrade' && form.plan_credit !== '' ? form.plan_credit : undefined,
+    fulfilment: noShip ? 'digital' : courier ? 'delivery' : 'collection', is_cod: cod, delivery_charges: '',
+    discount_type: form.discount_type, discount_value: form.discount_value === '' ? 0 : form.discount_value,
   });
-  // live price from the server (same rules as the saved order)
+  // live price from the server (the same rules as the saved order)
   useEffect(() => {
     if (!valid.length || valid.some((l) => products[l.product_id]?.variants?.length && !l.variant)) { setQuote(null); return undefined; }
     setQuoting(true);
@@ -364,70 +112,90 @@ export default function OrderWizard() {
     return () => clearTimeout(t);
   }, [JSON.stringify(payload()), products]); // eslint-disable-line
 
+  // prefill: ?reorder=<order id>, ?bulk=<order id> / ?sample=<order id>, ?guest=<id>
+  useEffect(() => {
+    if (!meta) return;
+    const fill = (patch) => setValues((f) => ({ ...f, ...patch }));
+    const person = (o) => (o.guest_customer_id ? { guest: { id: o.guest_customer_id, name: o.guest?.name || o.name, phone: o.phone } } : o.user_id ? { customer: { id: o.user_id, name: `${o.user?.first_name || ''} ${o.user?.last_name || ''}`.trim() || o.name, email: o.user?.email } } : {});
+    const base = (o) => ({ name: o.name, phone: o.phone || '', email: o.email || '', city: o.city || '', address: o.address || '', order_source_id: o.order_source_id ? String(o.order_source_id) : '', ...person(o) });
+    if (params.get('reorder')) {
+      api.get(`/admin/orders/${params.get('reorder')}`).then(({ data }) => {
+        const o = data.data;
+        fill({ ...base(o), payment: o.is_cod ? 'cod' : 'online', discount_type: o.discount_type || 'fixed', discount_value: Number(o.discount) ? String(Number(o.discount_value) || Number(o.discount)) : '' });
+        setLines(o.items?.length ? o.items.map((it) => ({ key: ++lineId, product_id: it.nfc_card_id, variant: it.variant || '', quantity: it.quantity, unit_price: String(Number(it.unit_price)) })) : [newLine()]);
+        setReorderOf(o.order_number);
+      }).catch(() => toast.error('Could not load the order to reorder'));
+    } else if (params.get('bulk') || params.get('sample')) {
+      api.get(`/admin/orders/${params.get('bulk') || params.get('sample')}`).then(({ data }) => {
+        const o = data.data; const minQty = meta.wholesale_tiers?.[0]?.min || 25;
+        fill({ ...base(o), order_type: 'wholesale', sample_order: o.order_type === 'sample' ? { id: o.id, order_number: o.order_number, credit: (o.items || []).reduce((a, i) => a + Number(i.total), 0) } : null });
+        setLines((o.items?.length ? o.items : []).map((it) => ({ key: ++lineId, product_id: it.nfc_card_id, variant: it.variant || '', quantity: minQty, unit_price: '' })));
+        setReorderOf(`bulk from ${o.order_number}`);
+      }).catch(() => toast.error('Could not load the order'));
+    } else if (params.get('guest')) {
+      api.get(`/admin/guest-customers/${params.get('guest')}`).then(({ data }) => { const g = data.data; fill({ guest: g, name: g.name, phone: g.phone || '', email: g.email || '', city: g.city || '', address: g.address || '' }); });
+    }
+  }, [meta]); // eslint-disable-line
+
+  const pickType = (key) => {
+    if (PLAN_CHANGE.includes(key) !== planChange) setLines([newLine()]); // plans and physical products never share one order
+    setValues((f) => ({ ...f, order_type: key, sample_order: key === 'wholesale' ? f.sample_order : null, customer: PLAN_CHANGE.includes(key) ? f.customer : null }));
+  };
   const setLine = (key, patch) => setLines((ls) => ls.map((l) => (l.key === key ? { ...l, ...patch } : l)));
-  const listPrice = (p, variant) => afterDisc(Number(p?.price || 0) + Number((p?.variants || []).find((v) => v.name === variant)?.price_delta || 0), p?.discount_type, p?.discount_value);
-  // the price per piece is worked out by the server (type, tier, discount); typing one here overrides it
-  const pickProduct = (key, id) => setLine(key, { product_id: id, variant: '', customization: false, unit_price: '', quantity: form.order_type === 'sample' ? 1 : undefined });
-  const pickVariant = (key, p, variant) => setLine(key, { variant, unit_price: '' });
-  const pickType = (key) => { if (PLAN_CHANGE.includes(key) !== PLAN_CHANGE.includes(form.order_type)) setLines([newLine()]); applyType(key); }; // plans and physical products never share one order
-  const applyType = (key) => setValues((f) => {
-    const untouched = !f.name && !f.customer && !f.organisation && !f.guest;
-    const account = ['nfc_profile', 'digital'].includes(key) || (key === 'social' && f.social_variant === 'profile');
-    const customerType = PLAN_CHANGE.includes(key) ? 'existing' : account ? 'new' : 'guest';
-    return { ...f, order_type: key, social_variant: key === 'social' ? f.social_variant : '', sample_order: key === 'wholesale' ? f.sample_order : null,
-      fulfilment: noShip(key) ? 'digital' : f.fulfilment === 'digital' ? 'delivery' : f.fulfilment, payment: noShip(key) ? 'pending' : f.payment === 'pending' && f.fulfilment === 'digital' ? 'cod' : f.payment,
-      ...(untouched ? { customer_type: customerType } : {}) };
-  });
-  const toggleDummy = (on) => { set('dummy', on); set('email', on ? dummyEmail(form.name, meta.dummy_domain) : ''); };
-  const setType = (t) => { setValues((f) => ({ ...f, customer_type: t, customer: null, organisation: null, contact_id: '', guest: null, dummy: false, ...(t === f.customer_type ? {} : { name: '', phone: '', email: '', company_name: '', city: '', address: '' }) })); setErrors({}); };
-  const pickCustomer = (u) => setValues((f) => ({ ...f, customer: u, name: u?.name || '', email: u?.email || '', phone: u?.contact || '', company_name: u?.organisation_name || f.company_name }));
-  const pickOrganisation = (o) => setValues((f) => ({ ...f, organisation: o, contact_id: '', name: o?.owner || '', company_name: o?.name || '', phone: o?.phone || '', email: o?.email || '', address: o?.address || '', city: o?.city || '' }));
-  const pickContact = (id) => { const p = people.find((x) => String(x.id) === String(id)); setValues((f) => ({ ...f, contact_id: id, name: p ? `${p.first_name} ${p.last_name}`.trim() : f.name, email: p?.email || f.email, phone: p?.contact || f.phone })); };
-  const pickGuest = (g) => setValues((f) => ({ ...f, guest: g, ...(g ? { name: g.name, phone: g.phone || '', email: g.email || '', company_name: g.company_name || '', city: g.city || '', address: g.address || '' } : {}) }));
+  const pickProduct = (key, p) => setLine(key, { product_id: p ? p.id : '', variant: p?.variants?.[0]?.name ?? '', unit_price: '', quantity: type === 'sample' ? 1 : (type === 'wholesale' && p ? Number(meta.wholesale_tiers?.[0]?.min) || 1 : 1) });
+  const setQty = (l, raw) => { let n = Math.max(1, parseInt(raw, 10) || 1); if (type === 'sample') n = Math.min(sampleMax, n); setLine(l.key, { quantity: n }); };
+  const srcName = (id) => meta.sources.find((x) => x.id === id)?.name;
+  const searchProducts = (key) => (q) => {
+    const t = q.trim().toLowerCase(); const taken = new Set(valid.filter((l) => l.key !== key).map((l) => String(l.product_id)));
+    return Promise.resolve(pool.filter((p) => !taken.has(String(p.id)) && (!t || `${p.name} ${p.sku || ''} ${p.category || ''} ${srcName(p.order_source_id) || ''}`.toLowerCase().includes(t))).slice(0, 500));
+  };
+  const first = valid[0];
+  const linkCount = Math.max(1, parseInt(form.link_qty, 10) || Number(first?.quantity) || 1);
+  const linkNeedsPlan = form.link_kind !== 'review';
 
-  // delivery details are needed when the order goes by courier; an office pick-up or a digital order needs none
-  const courier = form.fulfilment === 'delivery' && !noShip(form.order_type);
-  const checkList = [
-    () => { const e = {}; if (form.order_type === 'social' && !form.social_variant) e.social_variant = 'Choose static, dynamic or all-in-one'; return e; },
-    () => { const e = {}; if (form.phone && !/^\+?[\d\s().-]{7,20}$/.test(String(form.phone).trim())) e.phone = 'Phone number is not valid. Use digits only, like 03001234567'; if (TAG_TYPES.includes(form.order_type) && String(form.phone).replace(/\D/g, '').length < 7) e.phone = 'The tag owner\'s phone number is needed: messages are sent there'; if (PLAN_CHANGE.includes(form.order_type) && !['existing', 'organisation'].includes(form.customer_type)) e.name = 'A renewal or upgrade is for an existing customer or organisation'; if (form.customer_type === 'existing' && !form.customer) e.user_id = 'Search and choose the customer'; if (form.customer_type === 'organisation' && !form.organisation) e.organisation_id = 'Search and choose the organisation'; if (!form.name.trim()) e.name = 'Enter the customer name'; if (form.customer_type === 'new' && !form.email) e.email = 'An account needs an e-mail. Tick "Dummy e-mail" if the customer has none.'; if (form.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) e.email = 'Enter a valid e-mail address';
-      if (courier) { if (!String(form.phone || '').trim()) e.phone = 'Phone number is required for courier delivery'; if (!String(form.address || '').trim()) e.address = 'Delivery address is required for courier delivery'; if (!String(form.city || '').trim()) e.city = 'City is required for courier delivery'; }
-      return e; },
-    () => { const e = {}; if (!valid.length) e.products = 'Add at least one product'; else if (valid.some((l) => products[l.product_id]?.variants?.length && !l.variant)) e.products = 'Choose an option for every product'; else if (valid.some((l) => l.unit_price !== '' && Number(l.unit_price) < 0)) e.products = 'Prices cannot be negative'; else if (form.order_type === 'sample' && valid.some((l) => Number(l.quantity) > sampleMax)) e.products = `Samples are limited to ${sampleMax} pieces per product`; return e; },
-    () => { const e = {}; if (form.payment === 'paid' && !form.payment_account_id) e.payment_account_id = 'Choose the payment method the money was received in'; return e; },
-    () => ({}),
-  ];
-  const checks = Object.fromEntries(['type', 'customer', 'products', 'delivery', 'review'].map((k, i) => [k, checkList[i]]));
-  const typeCheck = checks.type; checks.type = () => ({ ...typeCheck(), ...(PLAN_CHANGE.includes(form.order_type) ? {} : checkList[2]()) });
-  const done = screens.map((k) => !Object.keys(checks[k]()).length);
-  const next = () => { const e = checks[screen](); setErrors(e); if (Object.keys(e).length) { toast.error(Object.values(e)[0]); return; } setStep((s) => Math.min(screens.length - 1, s + 1)); };
-  const go = (i) => { if (i <= step || done.slice(0, i).every(Boolean)) setStep(i); };
-
+  const validate = () => {
+    const e = {};
+    if (planChange) { if (!form.customer) e.customer = 'Search and choose the customer'; } else if (!form.name.trim()) e.name = 'Enter the name of the client';
+    if (!valid.length) e.products = 'Select a product';
+    else if (valid.some((l) => products[l.product_id]?.variants?.length && !l.variant)) e.products = 'Choose an option for every product';
+    else if (valid.some((l) => l.unit_price !== '' && Number(l.unit_price) < 0)) e.products = 'Prices cannot be negative';
+    else if (type === 'sample' && valid.some((l) => Number(l.quantity) > sampleMax)) e.products = `Samples are limited to ${sampleMax} pieces per product`;
+    if (form.phone && !/^\+?[\d\s().-]{7,20}$/.test(String(form.phone).trim())) e.phone = 'Phone number is not valid. Use digits only, like 03001234567';
+    if (tagType && String(form.phone).replace(/\D/g, '').length < 7) e.phone = 'The tag owner\'s phone number is needed: messages are sent there';
+    if (courier) { if (!String(form.phone || '').trim()) e.phone = 'Phone number is required for courier delivery'; if (!String(form.address || '').trim()) e.address = 'Delivery address is required'; if (!String(form.city || '').trim()) e.city = 'City is required'; }
+    if (form.discount_type === 'percent' && Number(form.discount_value) > 100) e.discount_value = 'A percentage cannot be more than 100';
+    if (form.payment === 'online' && !form.payment_account_id) e.payment_account_id = 'Choose where the money was received';
+    if (form.payment === 'advance') { const a = Number(form.advance_amount); if (!(a > 0)) e.advance_amount = 'Enter the advance received'; else if (quote && !quote.error && a > Number(quote.total)) e.advance_amount = 'The advance is more than the order total'; }
+    if (form.make_links && linkNeedsPlan && !form.link_plan_id) e.link_plan_id = 'Choose the plan of the link';
+    return e;
+  };
   const create = async () => {
+    const e = validate(); setErrors(e);
+    if (Object.keys(e).length) { toast.error(Object.values(e)[0]); return; }
     setBusy(true);
     try {
       const body = {
-        ...payload(), name: form.name, phone: form.phone, email: form.email, company_name: form.company_name, city: form.city, address: form.fulfilment === 'collection' && !form.address ? '' : form.address,
-        order_source_id: form.order_source_id || undefined, admin_note: form.admin_note, customer_type: form.customer_type,
-        user_id: form.customer?.id, organisation_id: form.organisation?.id, contact_id: form.contact_id || undefined, guest_customer_id: form.guest?.id,
-        payment_status: form.payment === 'paid' ? 'paid' : 'pending', payment_account_id: form.payment_account_id || undefined,
+        ...payload(), name: planChange ? form.customer.name : form.name, phone: form.phone, email: form.email, city: form.city, address: form.address,
+        order_source_id: form.order_source_id || undefined, admin_note: form.admin_note,
+        customer_type: planChange ? 'existing' : 'guest', user_id: planChange ? form.customer.id : undefined, guest_customer_id: planChange ? undefined : form.guest?.id,
+        payment_status: form.payment === 'online' ? 'paid' : 'pending', payment_type: form.payment === 'cod' ? undefined : form.payment, advance_amount: form.payment === 'advance' ? form.advance_amount : undefined,
+        payment_account_id: form.payment !== 'cod' && form.payment_account_id ? form.payment_account_id : undefined,
       };
       const d = await run(api.post('/admin/orders', body));
       let made = null;
-      if (genLinks && rowsValid(linkRows)) {
-        try { made = (await api.post('/admin/links/generate', { order_id: d.data.id, user_id: d.data.user_id || form.customer?.id || undefined, links: rowsPayload(linkRows) })).data.data; }
-        catch (e) { toast.error(`The order was created, but the links were not: ${e.errors ? Object.values(e.errors)[0] : e.message}. Add them from the order or the customer's page.`); }
+      if (form.make_links) {
+        try { made = (await api.post('/admin/links/generate', { order_id: d.data.id, user_id: d.data.user_id || form.customer?.id || undefined, links: [{ kind: form.link_kind, plan_id: linkNeedsPlan ? Number(form.link_plan_id) : undefined, qty: linkCount }] })).data.data; }
+        catch (err) { toast.error(`The order was created, but the links were not: ${err.errors ? Object.values(err.errors)[0] : err.message}. Add them from the Short links page.`); }
       }
       setResult({ ...d, links: made });
-    } catch (e) { setErrors(e.errors || {}); if (e.errors && Object.keys(e.errors).some((k) => ['name', 'email', 'phone', 'address', 'user_id', 'organisation_id', 'contact_id'].includes(k))) goTo('customer'); else if (e.errors?.payment_account_id) goTo('delivery'); } finally { setBusy(false); }
+    } catch (err) { setErrors(err.errors || {}); } finally { setBusy(false); }
   };
-  const restart = () => { setResult(null); setStep(0); setLines([newLine()]); setQuote(null); setReorderOf(null); setValues((f) => ({ ...f, customer: null, organisation: null, contact_id: '', guest: null, name: '', phone: '', email: '', dummy: false, company_name: '', city: '', address: '', delivery_charges: '', discount_value: '', admin_note: '' })); };
+  const restart = () => { setResult(null); setLines([newLine()]); setQuote(null); setReorderOf(null); setValues((f) => ({ ...f, customer: null, guest: null, name: '', phone: '', email: '', city: '', address: '', discount_value: '', advance_amount: '', admin_note: '', make_links: false, link_qty: '', sample_order: null })); };
 
   if (!meta) return <div className="grid gap-6 lg:grid-cols-[1fr_340px]"><Skeleton className="h-[520px] rounded-3xl" /><Skeleton className="h-80 rounded-3xl" /></div>;
-  const cur = meta.currency;
-  const srcName = meta.sources.find((s) => String(s.id) === String(form.order_source_id))?.name;
 
   if (result) {
-    const o = result.data; const acc = result.account;
+    const o = result.data;
     return (
       <motion.div initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} className="mx-auto max-w-xl">
         <Card className="relative overflow-hidden p-8 text-center">
@@ -443,23 +211,11 @@ export default function OrderWizard() {
                   <span className="flex gap-1"><Button size="sm" variant="ghost" onClick={() => { navigator.clipboard?.writeText(t.url); toast.success('Tag link copied'); }}><Copy />Tag link</Button><Button size="sm" variant="ghost" onClick={() => { navigator.clipboard?.writeText(t.manage_url); toast.success('Owner link copied'); }}><Copy />Owner link</Button></span>
                 </div>
               ))}
-              <p className="px-1 text-xs text-muted-foreground">{result.tags.length > 5 ? 'All tags are in ' : 'Find them again in '}<Link to="/admin/orders?view=tags" className="text-primary hover:underline">Contact tags</Link> (with a CSV of links for programming the chips). The owner link is private: send it only to the customer.</p>
+              <p className="px-1 text-xs text-muted-foreground">{result.tags.length > 5 ? 'All tags are in ' : 'Find them again in '}<Link to="/admin/orders?view=tags" className="text-primary hover:underline">Contact tags</Link>. The owner link is private: send it only to the customer.</p>
             </div>
           )}
           {result.renewed && <p className="relative mt-1 font-medium text-success">Plan {o.order_type === 'upgrade' ? 'upgraded, valid until' : 'renewed until'} {new Date(result.renewed.ends_at).toLocaleDateString()}</p>}
-          <p className="relative mt-1 text-muted-foreground">{form.name} · {money(cur, o.amount)} · {o.fulfilment === 'digital' ? 'Digital, no shipping' : o.fulfilment === 'collection' ? 'Office collection' : o.is_cod ? 'Cash on delivery' : 'Courier delivery'}</p>
-          {acc && (
-            <div className="relative mt-6 space-y-2 rounded-2xl border border-border bg-muted/40 p-4 text-left text-sm">
-              <p className="flex items-center gap-2 font-semibold"><IdCard className="size-4 text-primary" />{acc.created ? 'Customer account & vCard created' : 'Linked to the existing customer account'}</p>
-              {[['E-mail', acc.email], acc.created && ['Password', acc.password], acc.plan && ['Plan', acc.plan]].filter(Boolean).map(([k, v]) => (
-                <button key={k} type="button" onClick={() => { navigator.clipboard?.writeText(v); toast.success(`${k} copied`); }} className="flex w-full cursor-pointer items-center justify-between gap-2 rounded-xl bg-card px-3 py-2 text-left hover:ring-1 hover:ring-primary">
-                  <span className="text-muted-foreground">{k}</span><span className="flex min-w-0 items-center gap-2 font-mono"><span className="truncate">{v}</span><Copy className="size-3.5 shrink-0 text-muted-foreground" /></span>
-                </button>
-              ))}
-              {acc.vcard_url && <a href={acc.vcard_url} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 px-1 text-primary hover:underline"><ExternalLink className="size-3.5" />{acc.vcard_url.replace(/^https?:\/\//, '')}</a>}
-              {acc.created && <p className="px-1 text-xs text-muted-foreground">The password is shown only once.</p>}
-            </div>
-          )}
+          <p className="relative mt-1 text-muted-foreground">{planChange ? form.customer?.name : form.name} · {money(cur, o.amount)} · {o.fulfilment === 'digital' ? 'Digital, no shipping' : o.fulfilment === 'collection' ? 'No delivery' : o.is_cod ? 'Cash on delivery' : 'Courier delivery'}</p>
           {result.links?.length > 0 && <div className="relative mt-6 space-y-2 rounded-2xl border border-border bg-muted/40 p-4 text-left text-sm"><p className="flex items-center gap-2 font-semibold"><Link2 className="size-4 text-primary" />{result.links.length} link{result.links.length === 1 ? '' : 's'} generated</p><MadeLinks made={result.links} /></div>}
           <div className="relative mt-6 flex flex-wrap justify-center gap-2">
             {o.order_type === 'sample' && <Button variant="outline" onClick={() => navigate(`/admin/orders/new?sample=${o.id}`)}><Boxes />Bulk order from this sample</Button>}
@@ -472,240 +228,172 @@ export default function OrderWizard() {
     );
   }
 
+  const typeInfo = ORDER_TYPES.find((t) => t.key === type);
+  const advance = Number(form.advance_amount) || 0;
+  const total = quote && !quote.error ? Number(quote.total) : 0;
   return (
     <>
-      {/* compact header: the whole wizard fits on a laptop screen without scrolling */}
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <Tip content="All orders"><Link to="/admin/orders" className="grid size-9 place-items-center rounded-xl border border-border text-muted-foreground transition hover:border-primary hover:text-primary" aria-label="All orders"><ArrowLeft className="size-4" /></Link></Tip>
         <h1 className="font-display text-2xl font-bold">New order</h1>
         <span className="text-sm text-muted-foreground">Phone, WhatsApp, walk-in or other-website orders</span>
         {reorderOf && <Badge tone="primary"><Repeat className="size-3" />Reorder of {reorderOf}</Badge>}
       </div>
-      <div className="wz grid items-start gap-5 lg:grid-cols-[1fr_320px]">
-        <Card className="overflow-hidden">
-          <div className="border-b border-border px-4 py-3"><Stepper screens={screens} step={step} done={done} onGo={go} /></div>
-          <AnimatePresence mode="wait">
-            <motion.div key={screen} initial={{ opacity: 0, x: 16 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -16 }} transition={{ duration: 0.2 }}>
-              <CardBody className="min-h-[300px]">
-                {screen === 'type' && (
-                  <div className="space-y-5">
-                    <div className="grid gap-4 sm:grid-cols-2">
-                      <Field label="Order type" required hint={ORDER_TYPES.find((t) => t.key === form.order_type)?.text}>
-                        <Select value={form.order_type} onChange={pickType} options={ORDER_TYPES.map((t) => ({ value: t.key, label: t.title }))} />
-                      </Field>
-                      <Field label="Source" hint="The website or channel this order is for. Leave empty for every website, phone and walk-in.">
-                        <Select value={form.order_source_id} onChange={(v) => set('order_source_id', v)} allowEmpty placeholder="All websites, phone, walk-in" options={meta.sources.map((x) => ({ value: x.id, label: x.name }))} />
-                      </Field>
-                    </div>
-                    {form.order_type === 'social' && (
-                      <Field label="Which social card?" required error={errors.social_variant}>
-                        <Segmented id="sv" value={form.social_variant} onChange={(v) => set('social_variant', v)} options={SOCIAL_VARIANTS.map(({ value, label }) => ({ value, label }))} />
-                        {form.social_variant === 'profile' && <p className="mt-2 text-xs text-muted-foreground">The all-in-one card comes with a social profile account on the Social Profile plan: choose New customer in the next step.</p>}
-                      </Field>
-                    )}
-                    {form.order_type === 'wholesale' && (meta.wholesale_tiers || []).length > 0 && (
-                      <div className="rounded-2xl bg-primary-soft/40 p-3 text-sm"><p className="mb-1.5 font-semibold">Wholesale pricing (per product)</p>
-                        <div className="flex flex-wrap gap-2">{meta.wholesale_tiers.map((t) => <Badge key={t.min} tone="primary">{t.min}+ pcs: {t.percent}% off</Badge>)}</div>
-                      </div>
-                    )}
-                    {form.order_type === 'sample' && <p className="rounded-2xl bg-primary-soft/40 p-3 text-sm text-muted-foreground">Samples are charged at a higher price than normal pieces (up to <b>{sampleMax}</b> per product). When the customer orders in bulk, choose <b>Wholesale</b> and the sample charge is deducted.</p>}
-                    {form.order_type === 'card_printing' && <p className="rounded-2xl bg-primary-soft/40 p-3 text-sm text-muted-foreground">The client buys NFC cards and gets them printed with their design. No profile, no plan, no account needed: choose <b>Guest</b> in the next step.</p>}
-                    {form.order_type === 'reprint' && <p className="rounded-2xl bg-primary-soft/40 p-3 text-sm text-muted-foreground">For a client who wants their card made again (lost, damaged, or in a different material such as metal, wood or PVC). Pick the material below. No new plan is sold: their profile stays as it is. Write the card details in the order notes.</p>}
-                    {form.order_type === 'renewal' && <p className="rounded-2xl bg-primary-soft/40 p-3 text-sm text-muted-foreground">Extends an existing customer's plan. The new period starts where the current one ends, and is added as soon as the order is marked <b>Paid</b>. Nothing is shipped.</p>}
-                    {form.order_type === 'airport_tag' && <p className="rounded-2xl bg-primary-soft/40 p-3 text-sm text-muted-foreground">A luggage tag for travellers. Whoever finds the bag scans it and tells the owner where it is, <b>without ever seeing the owner's number</b>. One tag is made for every piece (a pack counts all its tags). Enter the owner's phone in the next step: that is where messages go. The owner can add trip details and a reward note from their private link.</p>}
-                    {form.order_type === 'contact_tag' && <p className="rounded-2xl bg-primary-soft/40 p-3 text-sm text-muted-foreground">One tag is made for every piece. Anyone who scans it can send the owner a message or ask for a call back, and <b>the owner's number is never shown</b>. Enter the owner's phone in the next step: that is where messages go. Each tag gets its own link and QR code, and the owner can edit their details from a private link.</p>}
-                    {form.order_type === 'upgrade' && <p className="rounded-2xl bg-primary-soft/40 p-3 text-sm text-muted-foreground">Moves an existing customer to a more expensive plan <b>now</b>. What they paid for the unused time of the current plan is deducted from the price (you can change that amount). The new plan starts when the order is marked <b>Paid</b>. Nothing is shipped.</p>}
-                    {form.order_type === 'digital' && <p className="rounded-2xl bg-primary-soft/40 p-3 text-sm text-muted-foreground">No delivery charge and no courier: only the profile and its plan are set up.</p>}
-                    {PLAN_CHANGE.includes(form.order_type)
-                      ? <p className="rounded-2xl border border-dashed border-border px-4 py-3 text-sm text-muted-foreground">Choose the customer on the next screen. Their current plan decides which plans you can pick.</p>
-                      : (
-                        <Field label="Products" required error={errors.products} hint="Every product of every website is in this list. Type to search by name, code, category or website.">
-                          <ProductPicker meta={meta} pool={pool} suggested={suggested} lines={lines} setLines={setLines} quote={quote} valid={valid} form={form} cur={cur} sampleMax={sampleMax} error={errors.products} />
-                        </Field>
-                      )}
-                  </div>
-                )}
+      <div className="grid items-start gap-5 lg:grid-cols-[1fr_330px]">
+        <Card>
+          <CardBody className="space-y-6">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label="Order type" required hint={typeInfo?.text}>
+                <Select value={type} onChange={pickType} options={ORDER_TYPES.map((t) => ({ value: t.key, label: t.title }))} />
+              </Field>
+              <Field label="Order source" hint="The website or channel this order came from">
+                <Select value={form.order_source_id} onChange={(v) => set('order_source_id', v)} allowEmpty placeholder="Choose the source" options={meta.sources.map((x) => ({ value: x.id, label: x.name }))} />
+              </Field>
+            </div>
+            {planChange ? (
+              <Field label="Client" required error={errors.customer} hint={subInfo === undefined ? 'The plan of this customer is renewed or upgraded' : subInfo === null ? 'This customer has no plan yet' : `${subInfo.plan}${subInfo.expired ? ' expired' : ' runs'} until ${new Date(subInfo.ends_at).toLocaleDateString()}`}>
+                <SearchSelect value={form.customer} onChange={(u) => set('customer', u)} search={fetchList('/admin/customers/search')} invalid={!!errors.customer} placeholder="Search by name, e-mail or phone..." empty="No customer found"
+                  renderItem={(u) => <PersonLine p={u} sub={[u.email, u.contact].filter(Boolean).join(' · ')} />} renderValue={(u) => <PersonLine p={u} sub={[u.email, u.contact].filter(Boolean).join(' · ')} />} />
+              </Field>
+            ) : (
+              <Field label="Name of client" required error={errors.name}><Input value={form.name} onChange={(e) => set('name', e.target.value)} placeholder="Client name" autoComplete="off" /></Field>
+            )}
 
-                {screen === 'customer' && (
-                  <div className="space-y-4">
-                    <div className="grid grid-cols-2 gap-2 xl:grid-cols-4">
-                      {CUSTOMER_TYPES.map(([k, l, text, I]) => (
-                        <button key={k} type="button" onClick={() => setType(k)} className={cn('flex cursor-pointer items-center gap-2.5 rounded-2xl border-2 p-2.5 text-left transition', form.customer_type === k ? 'border-primary bg-primary-soft/50' : 'border-border hover:border-primary/40')}>
-                          <span className={cn('grid size-9 shrink-0 place-items-center rounded-xl', form.customer_type === k ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground')}><I className="size-4" /></span>
-                          <span className="min-w-0"><span className="block text-sm leading-tight font-semibold">{l}</span><span className="block text-[11px] leading-tight text-muted-foreground">{text}</span></span>
-                        </button>
-                      ))}
+            {/* products: every product added on the Products page is in the list */}
+            <div className="space-y-3">
+              <p className="text-sm font-semibold">Product</p>
+              {lines.map((l, i) => {
+                const p = products[l.product_id];
+                const qty = Number(l.quantity) || 1;
+                const ql = p ? quote?.lines?.[valid.findIndex((x) => x.key === l.key)] : null;
+                const unit = ql ? Number(ql.unit_price) : p ? estimate(meta, p, l.variant, qty, type) : 0;
+                const where = (x) => [srcName(x.order_source_id) || 'Own products', x.category].filter(Boolean).join(' · ');
+                return (
+                  <div key={l.key} className="space-y-2 rounded-2xl border border-border p-3">
+                    <div className="flex items-start gap-2">
+                      <div className="min-w-0 flex-1">
+                        <SearchSelect value={p || null} onChange={(x) => pickProduct(l.key, x)} search={searchProducts(l.key)} invalid={!!errors.products && !p}
+                          placeholder={`Select a product (${pool.length} available)...`} empty="No product found"
+                          renderItem={(x) => <div className="flex items-center justify-between gap-3"><div className="min-w-0"><p className="truncate font-medium">{x.name}</p><p className="truncate text-xs text-muted-foreground">{where(x)}</p></div><span className="shrink-0 text-xs text-muted-foreground tabular-nums">{money(cur, x.price)}</span></div>}
+                          renderValue={(x) => <div className="min-w-0"><p className="truncate font-medium">{x.name}</p><p className="truncate text-xs text-muted-foreground">{where(x)}</p></div>} />
+                      </div>
+                      {lines.length > 1 && <Button size="icon" variant="ghost" onClick={() => setLines((ls) => ls.filter((x) => x.key !== l.key))} aria-label="Remove product"><Trash2 /></Button>}
                     </div>
-                    <div className="grid gap-x-4 gap-y-3 sm:grid-cols-2 xl:grid-cols-3">
-                      {form.customer_type === 'existing' && (
-                        <Field label="Customer" required error={errors.user_id} className="sm:col-span-2 xl:col-span-3">
-                          <SearchSelect value={form.customer} onChange={pickCustomer} search={fetchList('/admin/customers/search')} autoFocus invalid={!!errors.user_id}
-                            placeholder="Search by name, e-mail or phone..." empty="No customer found. Use New customer or Guest."
-                            renderItem={(u) => <div className="flex items-center justify-between gap-3"><PersonLine p={u} sub={[u.email, u.contact].filter(Boolean).join(' · ')} />{u.organisation_name && <Badge tone="info" className="shrink-0"><Building2 className="size-3" />{u.organisation_name}</Badge>}</div>}
-                            renderValue={(u) => <PersonLine p={u} sub={[u.email, u.contact, u.organisation_name].filter(Boolean).join(' · ')} />} />
-                        </Field>
-                      )}
-                      {form.customer_type === 'organisation' && (
-                        <>
-                          <Field label="Organisation" required error={errors.organisation_id} className="sm:col-span-2">
-                            <SearchSelect value={form.organisation} onChange={pickOrganisation} search={fetchList('/admin/organisations/search')} autoFocus invalid={!!errors.organisation_id}
-                              placeholder="Search company, owner, e-mail or phone..." empty="No organisation found"
-                              renderItem={(o) => <div className="flex items-center gap-3">{o.logo ? <img src={o.logo} alt="" className="size-8 rounded-lg border border-border object-contain" /> : <span className="grid size-8 place-items-center rounded-lg bg-primary-soft text-primary"><Building2 className="size-4" /></span>}<div className="min-w-0"><p className="truncate font-medium">{o.name}</p><p className="truncate text-xs text-muted-foreground">{o.owner} · {o.email}</p></div></div>}
-                              renderValue={(o) => <div className="flex items-center gap-3"><Building2 className="size-4 text-primary" /><span className="truncate font-medium">{o.name}</span></div>} />
-                          </Field>
-                          <Field label="Contact person" error={errors.contact_id} hint="Who asked for this order">
-                            <Select value={form.contact_id} onChange={pickContact} placeholder={form.organisation ? 'Owner (default)' : 'Choose the organisation first'} allowEmpty
-                              options={people.map((p) => ({ value: p.id, label: `${p.first_name} ${p.last_name} · ${p.company_role || 'member'}` }))} />
-                          </Field>
-                        </>
-                      )}
-                      {form.customer_type === 'guest' && (
-                        <Field label="Returning guest?" className="sm:col-span-2 xl:col-span-3" hint={form.guest ? 'Their details are filled in below and kept up to date' : 'Optional: find a guest who ordered before, or just fill in the details'}>
-                          <SearchSelect value={form.guest} onChange={pickGuest} search={fetchList('/admin/guest-customers')} placeholder="Search guests by name, phone or e-mail..." empty="No guest found - fill in the details below"
-                            renderItem={(g) => <PersonLine p={g} sub={[g.phone, g.email, g.orders ? `${g.orders} order(s)` : null].filter(Boolean).join(' · ')} />}
-                            renderValue={(g) => <PersonLine p={g} sub={[g.phone, g.email].filter(Boolean).join(' · ') || 'Guest customer'} />} />
-                        </Field>
-                      )}
-                      <Field label={form.customer_type === 'organisation' ? 'Contact name' : 'Customer name'} required error={errors.name}><Input ref={nameRef} value={form.name} onChange={(e) => set('name', e.target.value)} onKeyDown={(e) => e.key === 'Enter' && next()} /></Field>
-                      <Field label="Phone" required={courier || TAG_TYPES.includes(form.order_type)} error={errors.phone}><Input value={form.phone} onChange={(e) => set('phone', e.target.value)} placeholder={courier ? '03xx xxxxxxx' : 'Optional · 03xx xxxxxxx'} /></Field>
-                      <Field label={<span className="flex w-full items-center justify-between gap-2">E-mail{['new', 'guest'].includes(form.customer_type) && <Checkbox id="dummy" checked={form.dummy} onChange={toggleDummy} label="Dummy e-mail" className="text-xs font-normal" />}</span>} required={form.customer_type === 'new'} error={errors.email} hint={form.dummy ? `On ${meta.dummy_domain} · no e-mails are sent to it` : undefined}>
-                        <div className="flex gap-2">
-                          <Input value={form.email} onChange={(e) => set('email', e.target.value)} type="email" className="flex-1" readOnly={form.dummy} placeholder={form.customer_type === 'new' ? 'Login e-mail' : 'Optional'} />
-                          {form.dummy && <Tip content="Generate another"><Button type="button" variant="outline" size="icon" onClick={() => set('email', dummyEmail(form.name, meta.dummy_domain))} aria-label="Generate another dummy e-mail"><Wand2 /></Button></Tip>}
+                    {p && (
+                      <div className="grid gap-3 sm:grid-cols-3">
+                        {p.variants?.length > 0 && <Field label="Option" className="sm:col-span-3"><Select value={l.variant} onChange={(v) => setLine(l.key, { variant: v, unit_price: '' })} options={p.variants.map((v) => ({ value: v.name, label: `${v.name}${Number(v.price_delta) ? ` (+${v.price_delta})` : ''}` }))} /></Field>}
+                        <Field label="Qty"><Input type="text" inputMode="numeric" autoComplete="off" value={l.quantity} onChange={(e) => setQty(l, e.target.value)} /></Field>
+                        <Field label="Actual price" hint="Per piece. Leave as it is for the list price"><Input type="text" inputMode="decimal" autoComplete="off" value={l.unit_price} placeholder={String(Math.round(unit * 100) / 100)} onChange={(e) => setLine(l.key, { unit_price: decimal(e.target.value) })} /></Field>
+                        <div className="flex flex-wrap content-end items-end gap-1.5 pb-2 text-xs">
+                          {ql?.tier_percent > 0 && <Badge tone="success">Wholesale {ql.tier_percent}% off</Badge>}
+                          {type === 'sample' && <Badge tone="warning">Sample price</Badge>}
+                          {p.plan && <Badge tone="primary"><IdCard className="size-3" />Plan: {p.plan.name}</Badge>}
+                          {Number(p.discount_value) > 0 && type !== 'sample' && <Badge tone="success">Product discount {p.discount_type === 'percent' ? `${Number(p.discount_value)}%` : money(cur, p.discount_value)}</Badge>}
                         </div>
-                      </Field>
-                      {form.customer_type !== 'organisation' && <Field label="Company"><Input value={form.company_name} onChange={(e) => set('company_name', e.target.value)} placeholder="Optional" /></Field>}
-                      <Field label="City" required={courier} error={errors.city}><Input value={form.city} onChange={(e) => set('city', e.target.value)} placeholder={courier ? 'City' : 'Optional'} /></Field>
-                      <Field label="Address" required={courier} error={errors.address} className={form.customer_type === 'organisation' ? 'sm:col-span-2 xl:col-span-3' : 'sm:col-span-2'}><Input value={form.address} onChange={(e) => set('address', e.target.value)} placeholder={courier ? 'Delivery address' : 'Optional · not needed for office collection'} /></Field>
-                    </div>
-                    {!noShip(form.order_type) && (
-                      <div className="grid gap-2 sm:grid-cols-2">
-                        <ChoiceCard active={form.fulfilment === 'delivery'} onClick={() => { set('fulfilment', 'delivery'); if (form.payment === 'collection') set('payment', 'cod'); }} icon={Truck} title="Courier delivery" text="Sent by courier: phone, address and city are needed" />
-                        <ChoiceCard active={form.fulfilment === 'collection'} onClick={() => { set('fulfilment', 'collection'); if (form.payment === 'cod') set('payment', 'collection'); setErrors((e) => ({ ...e, phone: undefined, address: undefined, city: undefined })); }} icon={Store} title="Office collection" text="Customer collects: no delivery or COD charges" />
                       </div>
                     )}
-                    {form.customer_type === 'new' && <p className="flex items-center gap-2 rounded-xl bg-primary-soft/50 px-3 py-2 text-xs text-muted-foreground"><Sparkles className="size-4 shrink-0 text-primary" />A login and a starter vCard are created and linked to this order. The plan comes from the products; an existing account with this e-mail is reused.</p>}
+                    {i === 0 && errors.products && <p className="text-sm text-danger">{errors.products}</p>}
                   </div>
-                )}
+                );
+              })}
+              {!planChange && <Button size="sm" variant="outline" onClick={() => setLines((ls) => [...ls, newLine()])}><Plus />Add another product</Button>}
+              {type === 'upgrade' && subInfo && !subInfo.expired && (
+                <Field label="Credit for the unused time" hint={`Calculated from what they paid (${money(cur, subInfo.paid)}) and the time left. Leave empty to use it.`}>
+                  <Input type="number" min="0" value={form.plan_credit} onChange={(e) => set('plan_credit', e.target.value)} placeholder={String(subInfo.unused_credit)} className="max-w-48" />
+                </Field>
+              )}
+              {type === 'wholesale' && meta.sample_credit_enable && (
+                <Field label="Samples already paid for?" hint="Optional: the sample charge is taken off this bulk order">
+                  <SearchSelect value={form.sample_order} onChange={(o) => set('sample_order', o)} search={(q) => api.get('/admin/sample-orders', { params: { q } }).then(({ data }) => data.data)} placeholder="Find the sample order (number, name or phone)..." empty="No open sample orders"
+                    renderItem={(o) => <div className="flex items-center justify-between gap-3"><span className="min-w-0 truncate">{o.order_number} · {o.name}</span><Badge tone="success" className="shrink-0">Credit {money(cur, o.credit)}</Badge></div>}
+                    renderValue={(o) => <span className="truncate">{o.order_number}{o.name ? ` · ${o.name}` : ''} <span className="text-success">(credit {money(cur, o.credit)})</span></span>} />
+                </Field>
+              )}
+            </div>
 
-                {screen === 'products' && (
-                  <div className="space-y-3">
-                    <ProductPicker meta={meta} pool={pool} suggested={suggested} lines={lines} setLines={setLines} quote={quote} valid={valid} form={form} cur={cur} sampleMax={sampleMax} error={errors.products} />
-                    {form.order_type === 'wholesale' && meta.sample_credit_enable && (
-                      <div className="rounded-2xl border border-border p-3">
-                        <p className="mb-2 text-sm font-semibold">Samples already paid for?</p>
-                        <SearchSelect value={form.sample_order} onChange={(o) => set('sample_order', o)} search={(q) => api.get('/admin/sample-orders', { params: { q } }).then(({ data }) => data.data)} placeholder="Find the sample order (number, name or phone)..." empty="No open sample orders"
-                          renderItem={(o) => <div className="flex items-center justify-between gap-3"><span className="min-w-0 truncate">{o.order_number} · {o.name}</span><Badge tone="success" className="shrink-0">Credit {money(cur, o.credit)}</Badge></div>}
-                          renderValue={(o) => <span className="truncate">{o.order_number}{o.name ? ` · ${o.name}` : ''} <span className="text-success">(credit {money(cur, o.credit)})</span></span>} />
-                        {form.sample_order && <button type="button" onClick={() => set('sample_order', null)} className="mt-2 cursor-pointer text-xs text-muted-foreground hover:text-danger">Remove credit</button>}
-                      </div>
-                    )}
-                    {PLAN_CHANGE.includes(form.order_type) && (
-                      <div className="space-y-3 rounded-2xl border border-border p-3 text-sm">
-                        {subInfo === undefined ? <p className="text-muted-foreground">Choose the customer first.</p> : subInfo === null ? <p className="text-muted-foreground">This customer has no plan yet{form.order_type === 'upgrade' ? ': use Renewal instead.' : ': the renewal starts today.'}</p>
-                          : <p><b>{subInfo.plan}</b> {subInfo.expired ? <span className="text-danger">expired on {new Date(subInfo.ends_at).toLocaleDateString()}</span> : <>runs until <b>{new Date(subInfo.ends_at).toLocaleDateString()}</b></>}.{' '}
-                            {form.order_type === 'renewal' ? <>The renewal {subInfo.expired ? 'starts today' : 'starts after that date'}.</> : subInfo.expired ? <span className="text-danger">It has expired: use Renewal instead.</span> : <>Choose the plan to upgrade to below.</>}</p>}
-                        {form.order_type === 'upgrade' && subInfo && !subInfo.expired && (
-                          <Field label="Credit for the unused time" hint={`Calculated from what they paid (${money(cur, subInfo.paid)}) and the time left. Leave empty to use it.`}>
-                            <Input type="number" min="0" value={form.plan_credit} onChange={(e) => set('plan_credit', e.target.value)} placeholder={String(subInfo.unused_credit)} className="max-w-48" />
-                          </Field>
-                        )}
-                      </div>
-                    )}
-                    {pool.length === 0 && <p className="rounded-xl bg-warning-soft px-3 py-2 text-xs text-warning">No plan products found{form.order_source_id ? ' for this website' : ''}. Add them in Orders &gt; Products.</p>}
-                  </div>
-                )}
+            <Field label="Discount" error={errors.discount_value}>
+              <div className="flex gap-2">
+                <Input className="flex-1" type="text" inputMode="decimal" autoComplete="off" value={form.discount_value} placeholder="0" onChange={(e) => set('discount_value', decimal(e.target.value))} />
+                <Segmented id="dt" value={form.discount_type} onChange={(v) => set('discount_type', v)} options={[{ value: 'fixed', label: cur }, { value: 'percent', label: '%' }]} />
+              </div>
+            </Field>
 
-                {screen === 'delivery' && (
-                  <div className="space-y-5">
-                    {noShip(form.order_type)
-                      ? <div className="rounded-2xl bg-primary-soft/40 p-3 text-sm"><p className="flex items-center gap-2 font-semibold"><Smartphone className="size-4 text-primary" />{{ renewal: 'Renewal', upgrade: 'Upgrade' }[form.order_type] || 'Digital profile'}: nothing to ship</p><p className="mt-1 text-muted-foreground">No delivery or COD charges. Just record the payment.</p></div>
-                      : <p className="flex items-center gap-2 rounded-xl bg-muted/60 px-3 py-2 text-xs text-muted-foreground">{form.fulfilment === 'collection' ? <Store className="size-4 text-primary" /> : <Truck className="size-4 text-primary" />}<span><b className="text-foreground">{form.fulfilment === 'collection' ? 'Office collection' : 'Courier delivery'}</b> (chosen on the customer step)</span><button type="button" onClick={() => goTo('customer')} className="ml-auto cursor-pointer font-medium text-primary hover:underline">Change</button></p>}
-                    <div className="grid gap-4 sm:grid-cols-2">
-                      <Field label="Payment">
-                        <Segmented id="pay" value={form.payment} onChange={(v) => set('payment', v)} options={noShip(form.order_type) ? [{ value: 'paid', label: 'Paid' }, { value: 'pending', label: 'Unpaid' }] : form.fulfilment === 'collection'
-                          ? [{ value: 'collection', label: 'Pay at collection' }, { value: 'paid', label: 'Paid' }]
-                          : [{ value: 'cod', label: 'COD' }, { value: 'paid', label: 'Paid' }, { value: 'pending', label: 'Unpaid' }]} />
-                      </Field>
-                      {form.fulfilment === 'delivery' && !noShip(form.order_type) && (
-                        <Field label="Delivery charges" hint={`Empty = default (${money(cur, quote?.delivery_default ?? meta.delivery_charges)})`}><Input type="number" min="0" value={form.delivery_charges} onChange={(e) => set('delivery_charges', e.target.value)} placeholder={String(quote?.delivery_default ?? meta.delivery_charges)} /></Field>
-                      )}
-                    </div>
-                    <Field label="Payment method" error={errors.payment_account_id} hint={form.payment === 'paid' ? 'Where the money was received' : 'Where the money will go when it is paid (optional for now)'}>
-                      <Select id="pay-account" value={addingMethod ? '__new' : form.payment_account_id} allowEmpty placeholder="Choose a payment method" invalid={!!errors.payment_account_id}
-                        onChange={(v) => { if (v === '__new') { setAddingMethod(true); set('payment_account_id', ''); } else { setAddingMethod(false); set('payment_account_id', v); } }}
-                        options={[...(meta.accounts || []).map((a) => ({ value: a.id, label: a.name })), { value: '__new', label: '+ Add new method' }]} />
-                      {addingMethod && (
-                        <div className="mt-2 flex gap-2">
-                          <Input value={newMethod} onChange={(e) => setNewMethod(e.target.value)} placeholder="e.g. Meezan Bank Account" />
-                          <Button type="button" disabled={!newMethod.trim()} onClick={async () => {
-                            try {
-                              const { data } = await api.post('/admin/finance/accounts', { name: newMethod.trim(), type: 'bank' });
-                              const a = data.data || data;
-                              setMeta((m) => ({ ...m, accounts: [...(m.accounts || []), { id: a.id, name: a.name, type: a.type }] }));
-                              set('payment_account_id', String(a.id)); setAddingMethod(false); setNewMethod(''); toast.success('Payment method added');
-                            } catch (e) { toast.error(e.errors?.name || e.message); }
-                          }}>Add</Button>
-                          <Button type="button" variant="ghost" onClick={() => { setAddingMethod(false); setNewMethod(''); }}>Cancel</Button>
-                        </div>
-                      )}
-                    </Field>
-                    <Field label="Internal note" hint="Only staff see this"><Textarea rows={2} value={form.admin_note} onChange={(e) => set('admin_note', e.target.value)} /></Field>
-                  </div>
-                )}
+            <div className="space-y-3 rounded-2xl border border-border p-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div><p className="text-sm font-semibold">Create a link?</p><p className="text-xs text-muted-foreground">A link to write on the NFC card or print as a QR code. Whoever opens it first attaches it to their e-mail.</p></div>
+                <Segmented id="ml" value={form.make_links ? 'yes' : 'no'} onChange={(v) => set('make_links', v === 'yes')} options={[{ value: 'no', label: 'No' }, { value: 'yes', label: 'Yes' }]} />
+              </div>
+              {form.make_links && (
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <Field label="Link type"><Select value={form.link_kind} onChange={(v) => { set('link_kind', v); if (v === 'review') set('link_plan_id', ''); }} options={LINK_KINDS} /></Field>
+                  {linkNeedsPlan
+                    ? <Field label="Plan" required error={errors.link_plan_id} hint="Its length counts from when the link is claimed"><Select value={form.link_plan_id} onChange={(v) => set('link_plan_id', v)} invalid={!!errors.link_plan_id} placeholder="Choose a plan" options={(meta.plans || []).map((x) => ({ value: x.id, label: x.name }))} /></Field>
+                    : <Field label="Plan" hint="A review link has no plan"><Input value="No plan" readOnly /></Field>}
+                  <Field label="How many links" hint="One per piece by default"><Input type="text" inputMode="numeric" value={form.link_qty} placeholder={String(Number(first?.quantity) || 1)} onChange={(e) => set('link_qty', e.target.value.replace(/\D/g, '').slice(0, 3))} /></Field>
+                </div>
+              )}
+            </div>
 
-                {screen === 'review' && (
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <ReviewBlock title="Customer" icon={User} onEdit={() => goTo('customer')} rows={[
-                      ['Order type', `${TYPE_TITLE[form.order_type]}${form.order_type === 'social' && form.social_variant ? ` · ${SOCIAL_VARIANTS.find((v) => v.value === form.social_variant)?.label}` : ''}`],
-                      ['Type', `${TYPE_LABEL[form.customer_type]}${form.customer_type === 'organisation' && form.organisation ? ` · ${form.organisation.name}` : ''}`],
-                      ['Name', form.name], ['Phone', form.phone || '-'], ['E-mail', form.email ? `${form.email}${form.dummy ? ' (dummy)' : ''}` : '-'],
-                      ['Company', form.company_name || '-'], ['Address', [form.address, form.city].filter(Boolean).join(', ') || '-'], ['Source', srcName || '-'],
-                    ]} />
-                    <ReviewBlock title="Delivery & payment" icon={Banknote} onEdit={() => goTo('delivery')} rows={[
-                      ['Fulfilment', noShip(form.order_type) ? 'No shipping' : form.fulfilment === 'collection' ? 'Office collection' : 'Courier delivery'],
-                      ['Payment', { cod: 'Cash on delivery', paid: 'Paid', pending: 'Unpaid', collection: 'Pay at collection' }[form.payment]],
-                      ['Payment method', (meta.accounts || []).find((a) => String(a.id) === String(form.payment_account_id))?.name || '-'],
-                      ['Sample credit', quote?.sample_credit > 0 ? money(cur, quote.sample_credit) : 'None'],
-                      ...(form.order_type === 'upgrade' ? [['Credit for unused time', quote?.plan_credit > 0 ? money(cur, quote.plan_credit) : 'None']] : []),
-                      ['Note', form.admin_note || '-'],
-                    ]} />
-                    <ReviewBlock title="Products" icon={Package} onEdit={() => goTo('products')} className="sm:col-span-2" rows={(quote?.lines || []).map((l) => [
-                      `${l.name}${l.variant ? ` · ${l.variant}` : ''}`, `${l.quantity} × ${money(cur, l.unit_price)} = ${money(cur, l.total)}${l.plan ? ` · Plan: ${l.plan.name}` : ' · Non-plan'}`,
-                    ])} />
-                    <div className="rounded-2xl border border-border p-4 sm:col-span-2">
-                      <div className="flex items-start justify-between gap-3">
-                        <div><p className="flex items-center gap-2 text-sm font-semibold"><Link2 className="size-4 text-primary" />Generate links for this order</p>
-                          <p className="mt-0.5 text-xs text-muted-foreground">Optional. Each link has a type (business card, redirect or review), its own plan, and is attached to an e-mail by whoever opens it first.</p></div>
-                        <Switch checked={genLinks} onChange={setGenLinks} />
-                      </div>
-                      {genLinks && <div className="mt-4"><LinkRows rows={linkRows} setRows={setLinkRows} /></div>}
-                    </div>
-                  </div>
-                )}
-              </CardBody>
-            </motion.div>
-          </AnimatePresence>
-          <div className="flex items-center justify-between gap-2 border-t border-border px-5 py-3.5">
-            <Button variant="ghost" onClick={() => (step ? setStep(step - 1) : navigate('/admin/orders'))}><ArrowLeft />{step ? 'Back' : 'Cancel'}</Button>
-            <span className="text-xs text-muted-foreground">Step {step + 1} of {screens.length}</span>
-            {step < screens.length - 1
-              ? <Button onClick={next}>Next<ArrowRight /></Button>
-              : <Button onClick={create} loading={busy} disabled={!quote || quote.error}><Check />Create order{quote?.total ? ` · ${money(cur, quote.total)}` : ''}</Button>}
-          </div>
+            <div className="space-y-3">
+              <Field label="Payment" required>
+                <Segmented id="pay" value={form.payment} onChange={(v) => { set('payment', v); if (v === 'cod') set('ship', true); }} options={[...(noShip ? [] : [{ value: 'cod', label: 'COD' }]), { value: 'online', label: 'Online payment' }, { value: 'advance', label: 'Advance' }]} />
+              </Field>
+              {form.payment === 'advance' && <Field label="Advance received" required error={errors.advance_amount} hint={total ? `Balance due: ${money(cur, Math.max(0, total - advance))}` : undefined}><Input type="text" inputMode="decimal" autoComplete="off" value={form.advance_amount} placeholder="0" onChange={(e) => set('advance_amount', decimal(e.target.value))} className="max-w-56" /></Field>}
+              {form.payment !== 'cod' && (
+                <Field label="Received in" required={form.payment === 'online'} error={errors.payment_account_id} hint={meta.accounts?.length ? 'The cash, bank or wallet account the money went into' : 'Add a payment method under Finance first'}>
+                  <Select value={form.payment_account_id} onChange={(v) => set('payment_account_id', v)} allowEmpty={form.payment === 'advance'} invalid={!!errors.payment_account_id} placeholder="Choose the account" options={(meta.accounts || []).map((a) => ({ value: a.id, label: a.name }))} />
+                </Field>
+              )}
+              {!noShip && form.payment !== 'cod' && (
+                <label className="flex cursor-pointer items-center gap-2 text-sm"><input type="checkbox" checked={form.ship} onChange={(e) => set('ship', e.target.checked)} className="size-4" />This order goes by courier</label>
+              )}
+              {(courier || tagType) && (
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <Field label="Phone" required error={errors.phone}><Input value={form.phone} onChange={(e) => set('phone', e.target.value)} placeholder="03xx xxxxxxx" /></Field>
+                  {courier && <Field label="City" required error={errors.city}><Input value={form.city} onChange={(e) => set('city', e.target.value)} /></Field>}
+                  {courier && <Field label="Address" required error={errors.address} className="sm:col-span-2"><Input value={form.address} onChange={(e) => set('address', e.target.value)} placeholder="Delivery address" /></Field>}
+                </div>
+              )}
+            </div>
+            <Field label="Note"><Textarea rows={2} value={form.admin_note} onChange={(e) => set('admin_note', e.target.value)} placeholder="Optional: card details, delivery instructions..." /></Field>
+          </CardBody>
         </Card>
-        <Summary meta={meta} quote={quote} lines={lines} form={form} setForm={set} loading={quoting} />
+
+        <Card className="overflow-hidden lg:sticky lg:top-24">
+          <CardHeader icon={ShoppingBag} title="Order summary" />
+          <CardBody className="space-y-3 text-sm">
+            <Badge tone="primary">{typeInfo?.title}</Badge>
+            {!valid.length ? <p className="text-muted-foreground">No product yet.</p> : (
+              <ul className="space-y-1.5">
+                {valid.map((l, i) => (
+                  <li key={l.key} className="flex justify-between gap-3">
+                    <span className="min-w-0 truncate">{products[l.product_id]?.name}{l.variant ? ` · ${l.variant}` : ''} <span className="text-muted-foreground">× {l.quantity || 1}</span></span>
+                    <span className="shrink-0">{quote?.lines?.[i] ? money(cur, quote.lines[i].total) : '…'}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <div className="space-y-1.5 border-t border-border pt-3">
+              <Row label="Subtotal" value={money(cur, quote?.subtotal)} />
+              {quote?.discount > 0 && <Row label={`Discount${quote.discount_type === 'percent' ? ` (${quote.discount_value}%)` : ''}`} value={`- ${money(cur, quote.discount)}`} className="font-medium text-success" />}
+              {quote?.plan_credit > 0 && <Row label="Credit for unused time" value={`- ${money(cur, quote.plan_credit)}`} className="font-medium text-success" />}
+              {quote?.sample_credit > 0 && <Row label="Sample credit" value={`- ${money(cur, quote.sample_credit)}`} className="font-medium text-success" />}
+              {quote?.tax > 0 && <Row label={`${quote.tax_name} (${quote.tax_rate}%)`} value={money(cur, quote.tax)} />}
+              <Row label="Delivery" value={noShip ? 'No shipping' : courier ? money(cur, quote?.delivery ?? meta.delivery_charges) : 'None'} />
+              {quote?.cod > 0 && <Row label="COD charges" value={money(cur, quote.cod)} />}
+            </div>
+            <div className={cn('flex items-center justify-between rounded-2xl bg-primary-soft px-4 py-3 text-primary transition-opacity', quoting && 'opacity-60')}>
+              <span className="font-semibold">Total</span><span className="font-display text-xl font-bold">{money(cur, quote?.total)}</span>
+            </div>
+            {form.payment === 'advance' && advance > 0 && total > 0 && <Row label="Balance after advance" value={money(cur, Math.max(0, total - advance))} className="font-medium" />}
+            {quote?.error && <p className="text-xs text-danger">{quote.error}</p>}
+            {(quote?.warnings || []).map((w) => <p key={w} className="rounded-xl bg-warning-soft px-3 py-2 text-xs text-warning">{w}</p>)}
+            <Button size="lg" className="w-full" onClick={create} loading={busy}>Create order<ArrowRight /></Button>
+            {form.make_links && <p className="text-center text-xs text-muted-foreground">{linkCount} {form.link_kind === 'review' ? 'review' : form.link_kind === 'vcard' ? 'business card' : 'redirect'} link{linkCount === 1 ? '' : 's'} will be created</p>}
+          </CardBody>
+        </Card>
       </div>
     </>
   );
 }
-
-function ReviewBlock({ title, icon: Icon, rows, onEdit, className }) {
-  return (
-    <div className={cn('rounded-2xl border border-border p-4', className)}>
-      <div className="mb-2 flex items-center justify-between"><p className="flex items-center gap-2 text-sm font-semibold"><Icon className="size-4 text-primary" />{title}</p><button type="button" onClick={onEdit} className="cursor-pointer text-xs text-primary hover:underline">Edit</button></div>
-      <dl className="space-y-1 text-sm">{rows.map(([k, v], i) => <div key={i} className="flex justify-between gap-4"><dt className="shrink-0 whitespace-nowrap text-muted-foreground">{k}</dt><dd className="min-w-0 text-right break-words">{v}</dd></div>)}</dl>
-    </div>
-  );
-}
-
+const Row = ({ label, value, className }) => <div className={cn('flex justify-between gap-3', className)}><span className="text-muted-foreground">{label}</span><span>{value}</span></div>;
