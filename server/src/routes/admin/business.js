@@ -225,7 +225,7 @@ r.post('/orders', wrap(async (req, res) => {
   const collection = b.fulfilment === 'collection';
   const type = ['existing', 'new', 'organisation', 'guest'].includes(b.customer_type) ? b.customer_type : toBool(b.create_account) ? 'new' : 'guest';
   // phone and address are optional for staff orders
-  validate(b, { name: 'required|max:120', phone: 'phone', address: 'max:1000', city: 'max:120', email: `${type === 'new' ? 'required|' : ''}email|max:191`, company_name: 'max:150', discount_value: 'numeric', delivery_charges: 'numeric|minv:0' });
+  validate(b, { name: 'required|max:120', phone: 'phone', address: 'max:1000', city: 'max:120', email: `${type === 'new' ? 'required|' : ''}email|max:191`, company_name: 'max:150', discount_value: 'numeric', advance_amount: 'numeric|minv:0', delivery_charges: 'numeric|minv:0' });
   if (b.discount_type === 'percent' && Number(b.discount_value) > 100) fail(422, 'Validation failed', { discount_value: 'A percentage cannot be more than 100' });
   // a parcel that goes by courier needs somewhere to go and someone to call (office collection and digital orders do not)
   if (!collection && !orders.NO_SHIP_TYPES.includes(b.order_type || 'nfc_profile')) {
@@ -302,6 +302,8 @@ r.post('/orders', wrap(async (req, res) => {
     if (Number(target.price) <= Number(cur.plan_amount || 0)) fail(422, 'Validation failed', { items: 'That plan costs the same or less than the current one, so it is not an upgrade.' });
   }
   const isCod = !collection && !orders.NO_SHIP_TYPES.includes(b.order_type) && toBool(b.is_cod);
+  const advance = b.payment_type === 'advance' ? r2(b.advance_amount) : 0;
+  if (b.payment_type === 'advance' && (!(advance > 0) || advance > Number(q.total))) fail(422, 'Validation failed', { advance_amount: 'Enter the advance received: more than 0 and not more than the order total' });
   const payAccount = b.payment_account_id ? await M.FinanceAccount.findByPk(b.payment_account_id) : null;
   if (b.payment_account_id && !payAccount) fail(422, 'Validation failed', { payment_account_id: 'Choose a payment method from the list' });
   if (b.payment_status === 'paid' && !payAccount) fail(422, 'Validation failed', { payment_account_id: 'Choose the payment method the money was received in' });
@@ -311,8 +313,9 @@ r.post('/orders', wrap(async (req, res) => {
     email, user_id: user?.id || null, vcard_id: vcard?.id || null, guest_customer_id: guest?.id || null, organisation_id: orgOwner?.id || null,
     fulfilment: collection ? 'collection' : orders.NO_SHIP_TYPES.includes(b.order_type) ? 'digital' : 'delivery', is_cod: isCod,
     social_variant: ['static', 'dynamic', 'profile'].includes(b.social_variant) ? b.social_variant : null, parent_order_id: sampleOf?.id || null,
-    payment_type: isCod ? 'cod' : collection && b.payment_status !== 'paid' ? 'collection' : (b.payment_type || 'manual'),
-    payment_status: b.payment_status === 'paid' ? 'paid' : 'pending', source: 'admin', design_type: 'standard',
+    advance_amount: advance,
+    payment_type: isCod ? 'cod' : advance ? 'advance' : collection && b.payment_status !== 'paid' ? 'collection' : (b.payment_type || 'manual'),
+    payment_status: b.payment_status === 'paid' && !advance ? 'paid' : 'pending', source: 'admin', design_type: 'standard',
     order_source_id: source?.id || null, created_by: req.user.id,
   }, q);
   if (vcard) await M.ShortLink.create({ code: await shortlinks.uniqueCode(M), title: `Order ${o.order_number}`, target_type: 'vcard', vcard_id: vcard.id, user_id: user.id, nfc_order_id: o.id });

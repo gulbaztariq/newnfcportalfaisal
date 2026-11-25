@@ -53,3 +53,15 @@ test('order status: staff can move an order forward; an unknown status is refuse
   const ok = await admin.patch(`/api/admin/orders/${o.id}`, { order_status: 'processing' }); assert.ok([200, 204].includes(ok.status), ok.text.slice(0, 150));
   const bad = await admin.patch(`/api/admin/orders/${o.id}`, { order_status: 'hacked' }); assert.ok(bad.status >= 400 && bad.status < 500, `bad status -> ${bad.status}`);
 });
+
+test('admin order: advance payment keeps the advance, leaves the order unpaid and checks the amount', async () => {
+  const p = await product({ price: 1000 });
+  const bad = await admin.post('/api/admin/orders', base([{ product_id: p.id, quantity: 1 }], { payment_type: 'advance', advance_amount: 0 }));
+  assert.equal(bad.status, 422);
+  const tooMuch = await admin.post('/api/admin/orders', base([{ product_id: p.id, quantity: 1 }], { payment_type: 'advance', advance_amount: 999999 }));
+  assert.equal(tooMuch.status, 422);
+  const r = await admin.post('/api/admin/orders', base([{ product_id: p.id, quantity: 1 }], { payment_type: 'advance', advance_amount: 400, payment_status: 'pending', fulfilment: 'collection' }));
+  assert.equal(r.status, 201, r.text.slice(0, 200));
+  const o = await M.NfcOrder.findByPk(r.body.data.id);
+  assert.equal(o.payment_type, 'advance'); assert.equal(Number(o.advance_amount), 400); assert.equal(o.payment_status, 'pending');
+});

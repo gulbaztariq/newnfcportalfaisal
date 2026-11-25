@@ -51,8 +51,9 @@ function checkDestination(kind, url, { required = false } = {}) {
 async function generate({ kind, planId, qty = 1, templateId, presetUrl, orderedFor, orderId, title }) {
   if (!KINDS.includes(kind)) errs('kind', 'Choose a link type');
   const n = Math.min(200, Math.max(1, parseInt(qty, 10) || 1));
+  // a review link may have no plan (it then never expires); a business card or a redirect link needs one
   const plan = planId ? await M.Plan.findOne({ where: { id: planId, status: true } }) : null;
-  if (!plan) errs('plan_id', 'Choose a plan for this link');
+  if (!plan && kind !== 'review') errs('plan_id', 'Choose a plan for this link');
   let template = null;
   if (kind === 'vcard' && templateId) {
     template = await M.Template.findOne({ where: { id: templateId, status: true } });
@@ -63,7 +64,7 @@ async function generate({ kind, planId, qty = 1, templateId, presetUrl, orderedF
   const out = [];
   for (let i = 0; i < n; i += 1) {
     out.push(await M.ShortLink.create({
-      code: await shortlinks.uniqueCode(M), title: String(title || KIND_LABEL[kind]).slice(0, 150), target_type: 'unassigned', kind, plan_id: plan.id,
+      code: await shortlinks.uniqueCode(M), title: String(title || KIND_LABEL[kind]).slice(0, 150), target_type: 'unassigned', kind, plan_id: plan ? plan.id : null,
       template_id: template?.id || null, preset_url: preset || null, ordered_for: orderedFor || null, nfc_order_id: orderId || null,
     }));
   }

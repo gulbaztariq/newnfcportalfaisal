@@ -511,7 +511,8 @@ const NfcOrder = sequelize.define('nfc_order', {
   amount: { type: T.DECIMAL(12, 2), defaultValue: 0 },
   order_status: { type: T.ENUM('pending', 'confirmed', 'designing', 'printing', 'processing', 'ready', 'shipped', 'delivered', 'returned', 'cancelled'), defaultValue: 'pending' },
   payment_status: { type: T.ENUM('pending', 'paid', 'rejected'), defaultValue: 'pending' },
-  payment_type: T.STRING(30),
+  payment_type: T.STRING(30), // cod | online | advance | collection | manual ...
+  advance_amount: { type: T.DECIMAL(12, 2), defaultValue: 0 }, // paid in advance; the rest is still due
   nfc_written: { type: T.BOOLEAN, defaultValue: false },
   // shop / checkout
   source: { type: T.STRING(20), defaultValue: 'portal' }, // portal | shop | admin

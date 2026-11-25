@@ -12,8 +12,8 @@ export const KINDS = [
 ];
 export const kindLabel = (k) => KINDS.find((x) => x.value === k)?.label || k;
 export const newRow = () => ({ kind: 'vcard', plan_id: '', qty: 1, template_id: '', preset_url: '' });
-export const rowsValid = (rows) => rows.length > 0 && rows.every((r) => r.kind && r.plan_id && Number(r.qty) >= 1);
-export const rowsPayload = (rows) => rows.map((r) => ({ kind: r.kind, plan_id: Number(r.plan_id), qty: Number(r.qty) || 1, template_id: r.kind === 'vcard' && r.template_id ? Number(r.template_id) : undefined, preset_url: r.kind !== 'vcard' && r.preset_url ? r.preset_url : undefined }));
+export const rowsValid = (rows) => rows.length > 0 && rows.every((r) => r.kind && (r.kind === 'review' || r.plan_id) && Number(r.qty) >= 1); // a review link has no plan
+export const rowsPayload = (rows) => rows.map((r) => ({ kind: r.kind, plan_id: r.kind === 'review' ? undefined : Number(r.plan_id), qty: Number(r.qty) || 1, template_id: r.kind === 'vcard' && r.template_id ? Number(r.template_id) : undefined, preset_url: r.kind !== 'vcard' && r.preset_url ? r.preset_url : undefined }));
 
 let cache = null;
 export function useLookups() {
@@ -34,9 +34,11 @@ export function LinkRows({ rows, setRows }) {
             <Field label="Link type" className="min-w-44 flex-1" hint={KINDS.find((k) => k.value === r.kind)?.hint}>
               <Select value={r.kind} onChange={(x) => upd(i, { kind: x, preset_url: '', template_id: '' })} options={KINDS.map((k) => ({ value: k.value, label: k.label }))} />
             </Field>
-            <Field label="Plan" className="min-w-44 flex-1" required hint="Each link has its own plan and expiry, counted from when it is claimed">
-              <Select value={r.plan_id} onChange={(x) => upd(i, { plan_id: x })} placeholder="Choose a plan" options={(lookups?.plans || []).map((p) => ({ value: p.id, label: `${p.name} (${p.frequency})` }))} />
-            </Field>
+            {r.kind === 'review'
+              ? <Field label="Plan" className="min-w-44 flex-1" hint="A review link has no plan and never expires"><Input value="No plan" readOnly /></Field>
+              : <Field label="Plan" className="min-w-44 flex-1" required hint="Each link has its own plan and expiry, counted from when it is claimed">
+                <Select value={r.plan_id} onChange={(x) => upd(i, { plan_id: x })} placeholder="Choose a plan" options={(lookups?.plans || []).map((p) => ({ value: p.id, label: `${p.name} (${p.frequency})` }))} />
+              </Field>}
             <Field label="How many" className="w-24"><Input type="number" min={1} max={200} value={r.qty} onChange={(e) => upd(i, { qty: e.target.value })} /></Field>
             {rows.length > 1 && <Button variant="danger-soft" size="icon" onClick={() => setRows(rows.filter((_, j) => j !== i))} aria-label="Remove"><Trash2 /></Button>}
           </div>

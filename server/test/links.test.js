@@ -237,3 +237,12 @@ test('old links (made before this feature) keep their behaviour', async () => {
   assert.equal(r.status, 200); assert.match(r.text, /not activated/i);
   assert.equal((await client(ctx.base).get(`/api/public/links/${legacy.code}`)).status, 404, 'not a managed link');
 });
+
+test('a review link needs no plan and never expires; a business card or redirect link still needs one', async () => {
+  const r = await admin.post('/api/admin/links/generate', { links: [{ kind: 'review', qty: 2 }] });
+  assert.equal(r.status, 201, r.text);
+  assert.equal(r.body.data.length, 2);
+  assert.ok(r.body.data.every((l) => l.kind === 'review' && l.plan_id === null));
+  assert.equal((await admin.post('/api/admin/links/generate', { links: [{ kind: 'redirect' }] })).status, 422);
+  assert.equal((await admin.post('/api/admin/links/generate', { links: [{ kind: 'vcard' }] })).status, 422);
+});
