@@ -121,7 +121,7 @@ app.get('/invoice/:token/pdf', require('./routes/redirects').invoicePdf);
 app.use(require('./routes/public').customDomain);
 
 /* ------------------------------------------------------------------ SPA */
-const SPA = /^\/($|(login|register|forgot-password|reset-password|verify-email|two-factor|terms-conditions|privacy-policy|directory|blog|shop|cart|checkout|track|admin|user)(\/|$))/;
+const SPA = /^\/($|(login|register|forgot-password|reset-password|verify-email|two-factor|terms-conditions|privacy-policy|directory|blog|shop|cart|checkout|track|claim|admin|user)(\/|$))/;
 const spaIndex = path.join(config.clientDist, 'index.html');
 app.use((req, res, next) => {
   if (req.method !== 'GET' || !SPA.test(req.path)) return next();
