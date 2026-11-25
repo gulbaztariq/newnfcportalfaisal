@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { MODULES } from '@/lib/modules';
 import { Link } from 'react-router-dom';
 import { motion } from 'motion/react';
 import { Users, IdCard, UserX, EyeOff, Wallet, ArrowUpRight, Plus, LayoutTemplate, Package, Mail, Building2, Store, ShoppingBag, Truck, FileText, Boxes, TrendingUp } from 'lucide-react';
@@ -67,7 +68,7 @@ export default function Dashboard() {
         <StatCard index={1} icon={IdCard} color="pink" label="Active vCards" value={stats.activeVcards} hint="Published and public" to="/admin/vcards" />
         <StatCard index={2} icon={UserX} color="amber" label="Deactivated users" value={stats.inactiveUsers} to="/admin/users" />
         <StatCard index={3} icon={EyeOff} color="sky" label="Deactivated vCards" value={stats.inactiveVcards} to="/admin/vcards" />
-        <StatCard index={4} icon={Building2} color="emerald" label="Organisations" value={stats.organisations || 0} hint="Team accounts" to="/admin/users" />
+        {MODULES.organisation && <StatCard index={4} icon={Building2} color="emerald" label="Organisations" value={stats.organisations || 0} hint="Team accounts" to="/admin/users" />}
         <StatCard index={5} icon={Store} color="rose" label="WhatsApp stores" value={stats.stores || 0} hint="Product catalogues" to="/admin/whatsapp-stores" />
       </div>
 

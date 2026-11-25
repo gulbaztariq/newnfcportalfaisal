@@ -1,4 +1,5 @@
 /* Admin: orders (shop + portal + manual) with workflow, Leopards courier, invoices, NFC writing; products with costing */
+import { MODULES } from '@/lib/modules';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { ContactTags } from './ContactTags';
@@ -72,7 +73,7 @@ export function Orders() {
       <TableCard title="Orders" list={list} toolbar={<>
         <FilterSelect value={list.params.source} onChange={(v) => list.set({ source: v })} placeholder="All channels" options={[{ value: 'shop', label: 'Website shop' }, { value: 'portal', label: 'User portal' }, { value: 'admin', label: 'Manual (staff)' }]} />
         {sources.length > 0 && <FilterSelect value={list.params.order_source_id} onChange={(v) => list.set({ order_source_id: v })} placeholder="All order sources" options={sources.map((x) => ({ value: x.id, label: x.name }))} />}
-        <FilterSelect value={list.params.customer} onChange={(v) => list.set({ customer: v })} placeholder="All customers" options={[{ value: 'registered', label: 'Registered customers' }, { value: 'organisation', label: 'Organisations' }, { value: 'guest', label: 'Guests' }]} />
+        <FilterSelect value={list.params.customer} onChange={(v) => list.set({ customer: v })} placeholder="All customers" options={[{ value: 'registered', label: 'Registered customers' }, ...(MODULES.organisation ? [{ value: 'organisation', label: 'Organisations' }] : []), { value: 'guest', label: 'Guests' }]} />
         <FilterSelect value={list.params.order_type} onChange={(v) => list.set({ order_type: v })} placeholder="All order types" options={Object.entries(ORDER_TYPE_LABEL).map(([value, label]) => ({ value, label }))} />
         <FilterSelect value={list.params.fulfilment} onChange={(v) => list.set({ fulfilment: v })} placeholder="Delivery / collection" options={[{ value: 'delivery', label: 'Courier delivery' }, { value: 'collection', label: 'Office collection' }]} />
         <FilterSelect value={list.params.is_cod} onChange={(v) => list.set({ is_cod: v })} placeholder="COD / prepaid" options={[{ value: '1', label: 'Cash on delivery' }, { value: '0', label: 'Prepaid / online' }]} />

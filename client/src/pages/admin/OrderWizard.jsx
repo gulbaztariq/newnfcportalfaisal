@@ -5,10 +5,11 @@ import { motion, AnimatePresence } from 'motion/react';
 import { toast } from 'sonner';
 import {
   ArrowLeft, ArrowRight, Check, User, Package, Truck, ClipboardCheck, Plus, Trash2, Store, Wand2, IdCard, Copy, ExternalLink,
-  Banknote, ShoppingBag, Settings2, Sparkles, UserCheck, UserPlus, UserRound, Building2, Repeat,
-  Share2, Link2, Boxes, FlaskConical, Printer, Smartphone, Layers, CreditCard, CalendarClock, TrendingUp, RefreshCw, ShieldCheck, Plane,
+  Banknote, ShoppingBag, Sparkles, UserCheck, UserPlus, UserRound, Building2, Repeat,
+  Share2, Link2, Boxes, FlaskConical, Printer, Smartphone, Layers, CreditCard, CalendarClock, TrendingUp, ShieldCheck, Plane,
 } from 'lucide-react';
 import api from '@/lib/api';
+import { MODULES } from '@/lib/modules';
 import { LinkRows, MadeLinks, newRow, rowsValid, rowsPayload } from './LinkGenerator';
 import SearchSelect from '@/components/SearchSelect';
 import { cn } from '@/lib/cn';
@@ -16,9 +17,9 @@ import {
   Card, CardHeader, CardBody, Button, Field, Input, Textarea, Select, Segmented, Checkbox, Switch, Badge, Tip, Skeleton, Avatar, run,
 } from '@/components/ui';
 
-const STEP_META = { type: ['Order type', Layers], customer: ['Customer', User], products: ['Products', Package], delivery: ['Delivery & payment', Truck], review: ['Review', ClipboardCheck] };
-/** Products come right after the order type (prices are fetched from the website). Renewals and upgrades need the customer first: their plan decides what is offered. */
-const flowFor = (type) => (['renewal', 'upgrade'].includes(type) ? ['type', 'customer', 'products', 'delivery', 'review'] : ['type', 'products', 'customer', 'delivery', 'review']);
+const STEP_META = { type: ['Order', Layers], customer: ['Customer', User], products: ['Products', Package], delivery: ['Delivery & payment', Truck], review: ['Review', ClipboardCheck] };
+/** Order type, website and products are chosen on the first screen. Renewals and upgrades need the customer first: their plan decides which plans are offered. */
+const flowFor = (type) => (['renewal', 'upgrade'].includes(type) ? ['type', 'customer', 'products', 'delivery', 'review'] : ['type', 'customer', 'delivery', 'review']);
 let lineId = 0;
 /* order types: what the customer wants decides the products, the pricing rules and whether anything ships */
 const ORDER_TYPES = [
@@ -133,6 +134,7 @@ const TYPES = [
   ['guest', 'Guest', 'No account · non-plan products', UserRound],
 ];
 const TYPE_LABEL = Object.fromEntries(TYPES.map(([k, l]) => [k, l]));
+const CUSTOMER_TYPES = TYPES.filter(([k]) => k !== 'organisation' || MODULES.organisation);
 const fetchList = (url) => (q) => api.get(url, { params: { q, search: q, per_page: 15 } }).then(({ data }) => data.data);
 const PersonLine = ({ p, sub }) => (
   <div className="flex min-w-0 items-center gap-3">
@@ -163,67 +165,54 @@ function estimate(meta, p, variant, qty, type) {
   return disc;
 }
 
-/** product catalog: search, categories, live website price next to your editable price, quantity per product */
-function Catalog({ meta, offered, lines, setLines, quote, valid, form, cur, sampleMax, refresh, onRefresh }) {
-  const [q, setQ] = useState('');
-  const [cat, setCat] = useState('');
-  const [pending, setPending] = useState({}); // option chosen before the product has a quantity
+/** every product of every website in one searchable dropdown; each product you pick becomes a line with its option, price and quantity */
+function ProductPicker({ meta, pool, suggested, lines, setLines, quote, valid, form, cur, sampleMax, error }) {
   const sourceName = (id) => meta.sources.find((x) => x.id === id)?.name;
-  const cats = [...new Set(offered.map((p) => p.category).filter(Boolean))].sort();
-  const shown = offered.filter((p) => (!cat || p.category === cat) && (!q || `${p.name} ${p.sku || ''} ${p.category || ''}`.toLowerCase().includes(q.toLowerCase())));
   const lineOf = (p) => lines.find((l) => String(l.product_id) === String(p.id));
   const firstQty = form.order_type === 'wholesale' ? Number(meta.wholesale_tiers?.[0]?.min) || 1 : 1;
   const clamp = (n) => (form.order_type === 'sample' ? Math.min(sampleMax, n) : n);
-  const upsert = (p, patch) => setLines((ls) => {
-    const has = ls.some((l) => String(l.product_id) === String(p.id));
-    if (has) return ls.map((l) => (String(l.product_id) === String(p.id) ? { ...l, ...patch } : l));
-    return [...ls.filter((l) => l.product_id), { key: ++lineId, product_id: p.id, variant: pending[p.id] ?? p.variants?.[0]?.name ?? '', quantity: firstQty, unit_price: '', customization: false, ...patch }];
-  });
-  const setQty = (p, raw) => {
-    const n = clamp(Math.max(0, parseInt(raw, 10) || 0));
-    if (n <= 0) setLines((ls) => ls.filter((l) => String(l.product_id) !== String(p.id)));
-    else upsert(p, { quantity: n });
+  const add = (p) => { if (p && !lineOf(p)) setLines((ls) => [...ls.filter((l) => l.product_id), { key: ++lineId, product_id: p.id, variant: p.variants?.[0]?.name ?? '', quantity: firstQty, unit_price: '', customization: false }]); };
+  const upd = (p, patch) => setLines((ls) => ls.map((l) => (String(l.product_id) === String(p.id) ? { ...l, ...patch } : l)));
+  const remove = (p) => setLines((ls) => ls.filter((l) => String(l.product_id) !== String(p.id)));
+  const setQty = (p, raw) => { const n = clamp(Math.max(0, parseInt(raw, 10) || 0)); if (n <= 0) remove(p); else upd(p, { quantity: n }); };
+  const search = (q) => {
+    const t = q.trim().toLowerCase(); const taken = new Set(valid.map((l) => String(l.product_id)));
+    const list = pool.filter((p) => !taken.has(String(p.id)) && (!t || `${p.name} ${p.sku || ''} ${p.category || ''} ${sourceName(p.order_source_id) || ''}`.toLowerCase().includes(t)));
+    list.sort((x, y) => (suggested.has(y.id) ? 1 : 0) - (suggested.has(x.id) ? 1 : 0)); // products made for this order type first
+    return Promise.resolve(list.slice(0, 400));
   };
-  const setVariant = (p, name) => { setPending((x) => ({ ...x, [p.id]: name })); if (lineOf(p)) upsert(p, { variant: name, unit_price: '' }); };
-  const failed = (refresh.results || []).filter((r) => r.status === 'failed');
-  const when = refresh.at ? refresh.at.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : null;
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="min-w-48 flex-1"><Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search products..." aria-label="Search products" /></div>
-        <Button size="sm" variant="outline" onClick={onRefresh} loading={refresh.loading}><RefreshCw />Refresh prices</Button>
-      </div>
-      <p className="text-xs text-muted-foreground">
-        {refresh.loading ? 'Reading the latest prices from the website...' : when ? `Prices read from ${form.order_source_id ? sourceName(Number(form.order_source_id)) : 'your websites'} at ${when}.` : 'Showing saved prices.'}
-        {' '}The <b>Your price</b> box is editable for this order; the website price is shown next to it.
-      </p>
-      {failed.map((r) => <p key={r.id} className="rounded-xl bg-warning-soft px-3 py-2 text-xs text-warning">{r.name}: {r.message} Saved prices are used.</p>)}
-      {cats.length > 1 && (
-        <div className="flex flex-wrap gap-1.5">
-          {[['', 'All'], ...cats.map((c) => [c, c])].map(([k, l]) => <button key={k} type="button" onClick={() => setCat(k)} className={cn('cursor-pointer rounded-full px-3 py-1 text-xs font-medium transition', cat === k ? 'bg-foreground text-background' : 'bg-muted text-muted-foreground hover:text-foreground')}>{l}</button>)}
-        </div>
-      )}
-      <div className="max-h-[520px] space-y-2 overflow-y-auto pr-1">
-        {!shown.length && <p className="py-8 text-center text-sm text-muted-foreground">No products found.</p>}
-        {shown.map((p) => {
-          const line = lineOf(p);
-          const variant = line?.variant ?? pending[p.id] ?? p.variants?.[0]?.name ?? '';
-          const qty = line ? Number(line.quantity) || 0 : 0;
-          const ql = line ? quote?.lines?.[valid.findIndex((x) => x.key === line.key)] : null;
+      <SearchSelect value={null} onChange={add} search={search} invalid={!!error} placeholder={`Select a product (${pool.length} available)...`} empty="No product found"
+        renderItem={(p) => (
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0"><p className="truncate font-medium">{p.name}</p><p className="truncate text-xs text-muted-foreground">{[sourceName(p.order_source_id) || 'Own products', p.category].filter(Boolean).join(' · ')}</p></div>
+            <span className="shrink-0 text-xs text-muted-foreground tabular-nums">{money(cur, p.price)}</span>
+          </div>
+        )} />
+      {error && <p className="text-sm text-danger">{error}</p>}
+      <div className="space-y-2">
+        {valid.length === 0 && <p className="rounded-2xl border border-dashed border-border py-6 text-center text-sm text-muted-foreground">No product selected yet. Choose one from the list above.</p>}
+        {valid.map((line) => {
+          const p = pool.find((x) => String(x.id) === String(line.product_id)) || meta.products.find((x) => String(x.id) === String(line.product_id));
+          if (!p) return null;
+          const variant = line.variant ?? '';
+          const qty = Number(line.quantity) || 0;
+          const ql = quote?.lines?.[valid.findIndex((x) => x.key === line.key)];
           const est = estimate(meta, p, variant, qty || firstQty, form.order_type);
-          const unit = line && line.unit_price !== '' ? Number(line.unit_price) : ql ? Number(ql.unit_price) : est;
+          const unit = line.unit_price !== '' ? Number(line.unit_price) : ql ? Number(ql.unit_price) : est;
           const site = p.source_price === null || p.source_price === undefined ? null : Number(p.source_price) + Number((p.variants || []).find((v) => v.name === variant)?.price_delta || 0);
           const img = p.front_image || p.images?.[0];
           return (
-            <div key={p.id} className={cn('rounded-2xl border p-2.5 transition', qty ? 'border-primary bg-primary-soft/30' : 'border-border')}>
+            <div key={line.key} className="rounded-2xl border border-primary bg-primary-soft/30 p-2.5">
               <div className="flex flex-wrap items-center gap-3">
                 <span className="size-12 shrink-0 overflow-hidden rounded-xl bg-muted">{img && <img src={img} alt="" loading="lazy" className="size-full object-cover" />}</span>
                 <div className="min-w-44 flex-1">
                   <p className="text-sm leading-snug font-medium">{p.name}</p>
-                  <p className="text-xs text-muted-foreground">{[p.category, !form.order_source_id && p.order_source_id ? sourceName(p.order_source_id) : null].filter(Boolean).join(' · ')}</p>
+                  <p className="text-xs text-muted-foreground">{[sourceName(p.order_source_id) || 'Own products', p.category].filter(Boolean).join(' · ')}</p>
                 </div>
                 {p.variants?.length > 0 && (
-                  <Select className="h-9 w-52" value={variant} onChange={(v) => setVariant(p, v)} options={p.variants.map((v) => ({ value: v.name, label: `${v.name}${Number(v.price_delta) ? ` (+${v.price_delta})` : ''}` }))} />
+                  <Select className="h-9 w-52" value={variant} onChange={(v) => upd(p, { variant: v, unit_price: '' })} options={p.variants.map((v) => ({ value: v.name, label: `${v.name}${Number(v.price_delta) ? ` (+${v.price_delta})` : ''}` }))} />
                 )}
                 <div className="text-right">
                   <p className="text-[11px] text-muted-foreground">Website</p>
@@ -231,27 +220,26 @@ function Catalog({ meta, offered, lines, setLines, quote, valid, form, cur, samp
                 </div>
                 <div className="w-28">
                   <p className="text-[11px] text-muted-foreground">Your price</p>
-                  <Input className="h-9" type="text" inputMode="decimal" autoComplete="off" aria-label={`Price of ${p.name}`} value={line?.unit_price ?? ''} placeholder={String(Math.round(unit * 100) / 100)}
-                    onChange={(e) => upsert(p, { unit_price: e.target.value.replace(/[^\d.]/g, '').replace(/(\..*)\./g, '$1') })} />
+                  <Input className="h-9" type="text" inputMode="decimal" autoComplete="off" aria-label={`Price of ${p.name}`} value={line.unit_price ?? ''} placeholder={String(Math.round(unit * 100) / 100)}
+                    onChange={(e) => upd(p, { unit_price: e.target.value.replace(/[^\d.]/g, '').replace(/(\..*)\./g, '$1') })} />
                 </div>
                 <div className="flex items-center gap-1">
-                  <Button size="icon-sm" variant="outline" onClick={() => setQty(p, qty - (qty > firstQty ? 1 : qty))} aria-label="Less" disabled={!qty}>-</Button>
+                  <Button size="icon-sm" variant="outline" onClick={() => setQty(p, qty - 1)} aria-label="Less">-</Button>
                   <Input className="h-9 w-16 text-center" type="text" inputMode="numeric" autoComplete="off" value={qty || ''} placeholder="0" aria-label={`Quantity of ${p.name}`} onChange={(e) => setQty(p, e.target.value)} />
-                  <Button size="icon-sm" variant="outline" onClick={() => setQty(p, qty ? qty + 1 : firstQty)} aria-label="More">+</Button>
+                  <Button size="icon-sm" variant="outline" onClick={() => setQty(p, qty + 1)} aria-label="More">+</Button>
                 </div>
+                <Button size="icon-sm" variant="ghost" onClick={() => remove(p)} aria-label={`Remove ${p.name}`}><Trash2 /></Button>
               </div>
-              {qty > 0 && (
-                <div className="mt-2 flex flex-wrap items-center gap-2 px-1 text-xs">
-                  <span className="font-semibold">{money(cur, ql && line.unit_price === '' ? ql.total : unit * qty)}</span>
-                  {ql?.tier_percent > 0 && <Badge tone="success">Wholesale tier {ql.tier_percent}% off</Badge>}
-                  {form.order_type === 'sample' && <Badge tone="warning">Sample price</Badge>}
-                  {p.plan && <Badge tone="primary"><IdCard className="size-3" />Plan: {p.plan.name}</Badge>}
-                  {Number(p.tags_per_unit) > 1 && <Badge tone="info">{Number(p.tags_per_unit) * qty} tags</Badge>}
-                  {Number(p.discount_value) > 0 && form.order_type !== 'sample' && <Badge tone="success">Discount {p.discount_type === 'percent' ? `${Number(p.discount_value)}%` : money(cur, p.discount_value)}</Badge>}
-                  {line.unit_price !== '' && ql && Number(line.unit_price) !== Number(ql.list_price) && <span className="text-muted-foreground">Edited from {money(cur, ql.list_price)}</span>}
-                  {Number(p.customization_price) > 0 && <Checkbox id={`cz-${p.id}`} checked={!!line.customization} onChange={(v) => upsert(p, { customization: v })} label={`Customisation +${money(cur, p.customization_price)} / pc`} />}
-                </div>
-              )}
+              <div className="mt-2 flex flex-wrap items-center gap-2 px-1 text-xs">
+                <span className="font-semibold">{money(cur, ql && line.unit_price === '' ? ql.total : unit * qty)}</span>
+                {ql?.tier_percent > 0 && <Badge tone="success">Wholesale tier {ql.tier_percent}% off</Badge>}
+                {form.order_type === 'sample' && <Badge tone="warning">Sample price</Badge>}
+                {p.plan && <Badge tone="primary"><IdCard className="size-3" />Plan: {p.plan.name}</Badge>}
+                {Number(p.tags_per_unit) > 1 && <Badge tone="info">{Number(p.tags_per_unit) * qty} tags</Badge>}
+                {Number(p.discount_value) > 0 && form.order_type !== 'sample' && <Badge tone="success">Discount {p.discount_type === 'percent' ? `${Number(p.discount_value)}%` : money(cur, p.discount_value)}</Badge>}
+                {line.unit_price !== '' && ql && Number(line.unit_price) !== Number(ql.list_price) && <span className="text-muted-foreground">Edited from {money(cur, ql.list_price)}</span>}
+                {Number(p.customization_price) > 0 && <Checkbox id={`cz-${p.id}`} checked={!!line.customization} onChange={(v) => upd(p, { customization: v })} label={`Customisation +${money(cur, p.customization_price)} / pc`} />}
+              </div>
             </div>
           );
         })}
@@ -272,9 +260,7 @@ export default function OrderWizard() {
     fulfilment: 'delivery', payment: 'cod', payment_account_id: '', delivery_charges: '', discount_type: 'fixed', discount_value: '', admin_note: '',
     order_type: 'nfc_profile', social_variant: '', sample_order: null, plan_credit: '',
   });
-  const [showAll, setShowAll] = useState(false);
   const [addingMethod, setAddingMethod] = useState(false); const [newMethod, setNewMethod] = useState('');
-  const [refresh, setRefresh] = useState({ loading: false, results: [], at: null });
   const refreshedKey = useRef('');
   const [subInfo, setSubInfo] = useState(undefined); // current plan of the customer being renewed
   const [errors, setErrors] = useState({});
@@ -313,7 +299,7 @@ export default function OrderWizard() {
         const items = o.items?.length ? o.items : [];
         setLines(items.length ? items.map((it) => ({ key: ++lineId, product_id: it.nfc_card_id, variant: it.variant || '', quantity: it.quantity, unit_price: String(Number(it.unit_price)), customization: !!it.customization })) : [newLine()]);
         setReorderOf(o.order_number);
-        setStep(params.get('edit') ? 1 : 4);
+        setStep(params.get('edit') ? 0 : 3);
       }).catch(() => toast.error('Could not load the order to reorder'));
     } else if (params.get('bulk') || params.get('sample')) {
       // bulk order from any order: same customer and products at wholesale pricing; a sample order's charge is credited
@@ -326,7 +312,7 @@ export default function OrderWizard() {
         else if (o.user_id) fill({ ...base, customer_type: 'existing', customer: { id: o.user_id, name: `${o.user?.first_name || ''} ${o.user?.last_name || ''}`.trim() || o.name, email: o.user?.email } });
         else fill({ ...base, customer_type: 'guest' });
         setLines((o.items?.length ? o.items : []).map((it) => ({ key: ++lineId, product_id: it.nfc_card_id, variant: it.variant || '', quantity: minQty, unit_price: '', customization: !!it.customization })));
-        setReorderOf(`bulk from ${o.order_number}`); setStep(1);
+        setReorderOf(`bulk from ${o.order_number}`); setStep(0);
       }).catch(() => toast.error('Could not load the order'));
     } else if (params.get('guest')) {
       api.get(`/admin/guest-customers/${params.get('guest')}`).then(({ data }) => { const g = data.data; fill({ customer_type: 'guest', guest: g, name: g.name, phone: g.phone || '', email: g.email || '', company_name: g.company_name || '', city: g.city || '', address: g.address || '' }); });
@@ -338,30 +324,31 @@ export default function OrderWizard() {
 
   const products = useMemo(() => Object.fromEntries((meta?.products || []).map((p) => [p.id, p])), [meta]);
   const sampleMax = meta?.sample_max_qty || 5;
-  // live prices: when the product screen opens, the chosen website (or all of them) is read again; saved prices show meanwhile
-  const doRefresh = async (force = false) => {
-    setRefresh((r) => ({ ...r, loading: true }));
+  // the website prices are read again quietly in the background; the saved prices show meanwhile and nothing needs to be clicked
+  const doRefresh = async () => {
     try {
-      const { data } = await api.post('/admin/order-sources/refresh', { ids: form.order_source_id ? [Number(form.order_source_id)] : undefined, force });
+      await api.post('/admin/order-sources/refresh', { ids: form.order_source_id ? [Number(form.order_source_id)] : undefined, force: false });
       const { data: m } = await api.get('/admin/orders-meta');
       setMeta((x) => ({ ...x, products: m.products, sources: m.sources }));
-      setRefresh({ loading: false, results: data.results, at: new Date() });
-    } catch { setRefresh((r) => ({ ...r, loading: false })); toast.error('Could not refresh the prices. Saved prices are shown.'); }
+    } catch { /* saved prices stay */ }
   };
   useEffect(() => {
-    if (screen !== 'products' || !meta) return;
+    if (!meta) return;
     const key = String(form.order_source_id || 'all');
     if (refreshedKey.current === key) return;
-    refreshedKey.current = key; doRefresh(false);
-  }, [screen, !!meta, form.order_source_id]); // eslint-disable-line
+    refreshedKey.current = key; doRefresh();
+  }, [!!meta, form.order_source_id]); // eslint-disable-line
   const renewFor = form.customer?.id || form.organisation?.id;
   useEffect(() => {
     if (!PLAN_CHANGE.includes(form.order_type) || !renewFor) { setSubInfo(undefined); return; }
     api.get(`/admin/customers/${renewFor}/subscription`).then(({ data }) => setSubInfo(data.data)).catch(() => setSubInfo(null));
   }, [form.order_type, renewFor]);
   const kinds = kindsFor(form.order_type, form.social_variant);
-  const offered = useMemo(() => (meta?.products || []).filter((p) => (!form.order_source_id || !p.order_source_id || String(p.order_source_id) === String(form.order_source_id))
-    && (showAll || !kinds || kinds.includes(p.product_kind || null) || (noShip(form.order_type) && p.plan_id && (form.order_type !== 'upgrade' || !subInfo || (p.plan_id !== subInfo.plan_id && Number(p.plan?.price) > Number(subInfo.plan_price)))))), [meta, subInfo, form.order_source_id, form.order_type, form.social_variant, showAll]); // eslint-disable-line
+  const fromSource = useMemo(() => (meta?.products || []).filter((p) => !form.order_source_id || !p.order_source_id || String(p.order_source_id) === String(form.order_source_id)), [meta, form.order_source_id]);
+  // renewals and upgrades sell plans only (an upgrade only offers a dearer plan than the current one); every other order type offers every product
+  const planProducts = useMemo(() => fromSource.filter((p) => p.plan_id && (form.order_type !== 'upgrade' || !subInfo || (p.plan_id !== subInfo.plan_id && Number(p.plan?.price) > Number(subInfo.plan_price)))), [fromSource, subInfo, form.order_type]);
+  const pool = PLAN_CHANGE.includes(form.order_type) ? planProducts : fromSource;
+  const suggested = useMemo(() => new Set(fromSource.filter((p) => kinds && kinds.includes(p.product_kind || null)).map((p) => p.id)), [fromSource, form.order_type, form.social_variant]); // eslint-disable-line
   const valid = lines.filter((l) => l.product_id);
   const payload = () => ({
     items: valid.map(({ product_id, variant, quantity, unit_price, customization }) => ({ product_id, variant, quantity, unit_price, customization })),
@@ -382,7 +369,8 @@ export default function OrderWizard() {
   // the price per piece is worked out by the server (type, tier, discount); typing one here overrides it
   const pickProduct = (key, id) => setLine(key, { product_id: id, variant: '', customization: false, unit_price: '', quantity: form.order_type === 'sample' ? 1 : undefined });
   const pickVariant = (key, p, variant) => setLine(key, { variant, unit_price: '' });
-  const pickType = (key) => setValues((f) => {
+  const pickType = (key) => { if (PLAN_CHANGE.includes(key) !== PLAN_CHANGE.includes(form.order_type)) setLines([newLine()]); applyType(key); }; // plans and physical products never share one order
+  const applyType = (key) => setValues((f) => {
     const untouched = !f.name && !f.customer && !f.organisation && !f.guest;
     const account = ['nfc_profile', 'digital'].includes(key) || (key === 'social' && f.social_variant === 'profile');
     const customerType = PLAN_CHANGE.includes(key) ? 'existing' : account ? 'new' : 'guest';
@@ -409,6 +397,7 @@ export default function OrderWizard() {
     () => ({}),
   ];
   const checks = Object.fromEntries(['type', 'customer', 'products', 'delivery', 'review'].map((k, i) => [k, checkList[i]]));
+  const typeCheck = checks.type; checks.type = () => ({ ...typeCheck(), ...(PLAN_CHANGE.includes(form.order_type) ? {} : checkList[2]()) });
   const done = screens.map((k) => !Object.keys(checks[k]()).length);
   const next = () => { const e = checks[screen](); setErrors(e); if (Object.keys(e).length) { toast.error(Object.values(e)[0]); return; } setStep((s) => Math.min(screens.length - 1, s + 1)); };
   const go = (i) => { if (i <= step || done.slice(0, i).every(Boolean)) setStep(i); };
@@ -500,8 +489,13 @@ export default function OrderWizard() {
               <CardBody className="min-h-[300px]">
                 {screen === 'type' && (
                   <div className="space-y-5">
-                    <div className="grid gap-2.5 sm:grid-cols-2 xl:grid-cols-3">
-                      {ORDER_TYPES.map((t) => <ChoiceCard key={t.key} active={form.order_type === t.key} onClick={() => pickType(t.key)} icon={t.icon} title={t.title} text={t.text} />)}
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <Field label="Order type" required hint={ORDER_TYPES.find((t) => t.key === form.order_type)?.text}>
+                        <Select value={form.order_type} onChange={pickType} options={ORDER_TYPES.map((t) => ({ value: t.key, label: t.title }))} />
+                      </Field>
+                      <Field label="Source" hint="The website or channel this order is for. Leave empty for every website, phone and walk-in.">
+                        <Select value={form.order_source_id} onChange={(v) => set('order_source_id', v)} allowEmpty placeholder="All websites, phone, walk-in" options={meta.sources.map((x) => ({ value: x.id, label: x.name }))} />
+                      </Field>
                     </div>
                     {form.order_type === 'social' && (
                       <Field label="Which social card?" required error={errors.social_variant}>
@@ -522,16 +516,20 @@ export default function OrderWizard() {
                     {form.order_type === 'contact_tag' && <p className="rounded-2xl bg-primary-soft/40 p-3 text-sm text-muted-foreground">One tag is made for every piece. Anyone who scans it can send the owner a message or ask for a call back, and <b>the owner's number is never shown</b>. Enter the owner's phone in the next step: that is where messages go. Each tag gets its own link and QR code, and the owner can edit their details from a private link.</p>}
                     {form.order_type === 'upgrade' && <p className="rounded-2xl bg-primary-soft/40 p-3 text-sm text-muted-foreground">Moves an existing customer to a more expensive plan <b>now</b>. What they paid for the unused time of the current plan is deducted from the price (you can change that amount). The new plan starts when the order is marked <b>Paid</b>. Nothing is shipped.</p>}
                     {form.order_type === 'digital' && <p className="rounded-2xl bg-primary-soft/40 p-3 text-sm text-muted-foreground">No delivery charge and no courier: only the profile and its plan are set up.</p>}
-                    <Field label={<span className="flex w-full items-center justify-between">Which website is this order for?<Link to="/admin/order-sources" className="text-xs font-normal text-primary hover:underline">Manage sources</Link></span>} hint="Products and prices come from this website's price list">
-                      <Select value={form.order_source_id} onChange={(v) => set('order_source_id', v)} allowEmpty placeholder={meta.sources.length ? 'Phone / walk-in / other (all products)' : 'No sources yet'} options={meta.sources.map((x) => ({ value: x.id, label: x.name }))} />
-                    </Field>
+                    {PLAN_CHANGE.includes(form.order_type)
+                      ? <p className="rounded-2xl border border-dashed border-border px-4 py-3 text-sm text-muted-foreground">Choose the customer on the next screen. Their current plan decides which plans you can pick.</p>
+                      : (
+                        <Field label="Products" required error={errors.products} hint="Every product of every website is in this list. Type to search by name, code, category or website.">
+                          <ProductPicker meta={meta} pool={pool} suggested={suggested} lines={lines} setLines={setLines} quote={quote} valid={valid} form={form} cur={cur} sampleMax={sampleMax} error={errors.products} />
+                        </Field>
+                      )}
                   </div>
                 )}
 
                 {screen === 'customer' && (
                   <div className="space-y-4">
                     <div className="grid grid-cols-2 gap-2 xl:grid-cols-4">
-                      {TYPES.map(([k, l, text, I]) => (
+                      {CUSTOMER_TYPES.map(([k, l, text, I]) => (
                         <button key={k} type="button" onClick={() => setType(k)} className={cn('flex cursor-pointer items-center gap-2.5 rounded-2xl border-2 p-2.5 text-left transition', form.customer_type === k ? 'border-primary bg-primary-soft/50' : 'border-border hover:border-primary/40')}>
                           <span className={cn('grid size-9 shrink-0 place-items-center rounded-xl', form.customer_type === k ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground')}><I className="size-4" /></span>
                           <span className="min-w-0"><span className="block text-sm leading-tight font-semibold">{l}</span><span className="block text-[11px] leading-tight text-muted-foreground">{text}</span></span>
@@ -592,8 +590,7 @@ export default function OrderWizard() {
 
                 {screen === 'products' && (
                   <div className="space-y-3">
-                    <Catalog meta={meta} offered={offered} lines={lines} setLines={setLines} quote={quote} valid={valid} form={form} cur={cur} sampleMax={sampleMax} refresh={refresh} onRefresh={() => doRefresh(true)} />
-                    {errors.products && <p className="text-sm text-danger">{errors.products}</p>}
+                    <ProductPicker meta={meta} pool={pool} suggested={suggested} lines={lines} setLines={setLines} quote={quote} valid={valid} form={form} cur={cur} sampleMax={sampleMax} error={errors.products} />
                     {form.order_type === 'wholesale' && meta.sample_credit_enable && (
                       <div className="rounded-2xl border border-border p-3">
                         <p className="mb-2 text-sm font-semibold">Samples already paid for?</p>
@@ -615,11 +612,7 @@ export default function OrderWizard() {
                         )}
                       </div>
                     )}
-                    {kinds && !showAll && offered.length === 0 && <p className="rounded-xl bg-warning-soft px-3 py-2 text-xs text-warning">No products are tagged for this order type{form.order_source_id ? ' on this website' : ''} yet. Tag them in Order sources &gt; Price list, or show all products.</p>}
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs text-muted-foreground">{valid.length ? `${valid.length} product${valid.length > 1 ? 's' : ''} selected` : 'Set a quantity to add a product'}</span>
-                      <div className="flex items-center gap-3">{kinds && <Checkbox id="showall" checked={showAll} onChange={setShowAll} label="Show all products" className="text-xs" />}<Link to="/admin/products" className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-primary"><Settings2 className="size-3.5" />Products & plans</Link></div>
-                    </div>
+                    {pool.length === 0 && <p className="rounded-xl bg-warning-soft px-3 py-2 text-xs text-warning">No plan products found{form.order_source_id ? ' for this website' : ''}. Add them in Orders &gt; Products.</p>}
                   </div>
                 )}
 

@@ -4,6 +4,7 @@ import {
   ShoppingBag, FileText, TrendingUp, BookOpen, Boxes, Truck, Megaphone, History, QrCode, Landmark,
   UserRound, BarChart3, Zap,
 } from 'lucide-react';
+import { MODULES } from '@/lib/modules';
 import { can } from '@/lib/perms';
 
 /** keep items the user may see; drop empty groups / child lists */
@@ -94,7 +95,7 @@ export const adminMenu = (user) => filterMenu([
 ], (perm) => (perm === 'super' ? user?.role === 'super_admin' : !perm || can(user, `${perm}.view`)));
 
 export const userMenu = (user) => filterMenu([
-  { group: 'Overview', items: [{ label: 'Dashboard', icon: LayoutDashboard, to: '/user/dashboard', perm: 'vcards' }, { label: 'Analytics', icon: BarChart3, to: '/user/analytics', perm: 'vcards' }, ...(user?.is_organisation || ['manager', 'supervisor'].includes(user?.company_role) ? [{ label: 'Company analytics', icon: Building2, to: '/user/company-analytics', perm: 'analytics' }] : [])] },
+  { group: 'Overview', items: [{ label: 'Dashboard', icon: LayoutDashboard, to: '/user/dashboard', perm: 'vcards' }, { label: 'Analytics', icon: BarChart3, to: '/user/analytics', perm: 'vcards' }, ...(MODULES.organisation && (user?.is_organisation || ['manager', 'supervisor'].includes(user?.company_role)) ? [{ label: 'Company analytics', icon: Building2, to: '/user/company-analytics', perm: 'analytics' }] : [])] },
   {
     group: 'My Cards', items: [
       { label: 'My links & cards', icon: Link2, to: '/user/links', perm: 'vcards' },
@@ -126,7 +127,7 @@ export const userMenu = (user) => filterMenu([
       { label: 'Transactions', icon: Receipt, to: '/user/transactions', perm: 'billing' },
       { label: 'Invoices', icon: FileText, to: '/user/invoices', perm: 'billing' },
       { label: 'Affiliation', icon: Wallet, to: '/user/affiliation', perm: 'billing' },
-      { label: 'Organisation', icon: Building2, to: '/user/organisation', perm: 'members' },
+      MODULES.organisation && { label: 'Organisation', icon: Building2, to: '/user/organisation', perm: 'members' },
       !['manager', 'supervisor'].includes(user?.company_role) && { label: 'Settings', icon: Settings, to: '/user/settings' },
       { label: 'Profile', icon: UserCircle, to: '/user/profile' },
     ],

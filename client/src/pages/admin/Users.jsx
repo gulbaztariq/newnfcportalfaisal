@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { MODULES } from '@/lib/modules';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { motion } from 'motion/react';
 import { toast } from 'sonner';
@@ -134,7 +135,7 @@ export default function Users({ role = 'user' }) {
     <>
       <PageHeader title={isAdmin ? 'Staff & roles' : 'Users'} description={isAdmin ? 'The people who run the admin panel. Staff have a role with permissions, not a plan: make roles on the Roles tab, then give each person one. Staff sign in with an e-mailed code, then a code from their authenticator app (set up on their first sign-in). Add someone with just a name and e-mail; they get an invitation. Lost phone? Reset their authenticator from this list.' : 'Everyone who has an account on the platform.'}>
         {!isAdmin && <ExportMenu what="users" base="/api/admin/export" />}
-        {!isAdmin && <Button variant="outline" onClick={() => openForm(null, true)}><Building2 />Add organisation</Button>}
+        {!isAdmin && MODULES.organisation && <Button variant="outline" onClick={() => openForm(null, true)}><Building2 />Add organisation</Button>}
         <Button onClick={() => openForm()}><Plus />Add {singular.toLowerCase()}</Button>
       </PageHeader>
       {isAdmin && <div className="mb-5"><Segmented id="staff-tab" value={tab} onChange={setTab} options={[{ value: 'staff', label: 'Staff' }, { value: 'roles', label: `Roles${roles ? ` (${roles.length})` : ''}` }]} /></div>}
@@ -142,7 +143,7 @@ export default function Users({ role = 'user' }) {
       <div className={isAdmin && tab === 'roles' ? 'hidden' : undefined}>
       <TableCard title={`All ${isAdmin ? 'staff' : 'users'}`} list={list} toolbar={<>
         {selected.length > 0 && <Button size="sm" variant="danger-soft" onClick={removeMany}><Trash2 />Delete {selected.length}</Button>}
-        {!isAdmin && <FilterSelect value={list.params.type} onChange={(v) => list.set({ type: v })} placeholder="All accounts" options={[{ value: 'organisation', label: 'Organisations' }, { value: 'member', label: 'Organisation users' }, { value: 'individual', label: 'Individuals' }]} />}
+        {!isAdmin && MODULES.organisation && <FilterSelect value={list.params.type} onChange={(v) => list.set({ type: v })} placeholder="All accounts" options={[{ value: 'organisation', label: 'Organisations' }, { value: 'member', label: 'Organisation users' }, { value: 'individual', label: 'Individuals' }]} />}
         <FilterSelect value={list.params.status} onChange={(v) => list.set({ status: v })} placeholder="All statuses" options={[{ value: 'active', label: 'Active' }, { value: 'inactive', label: 'Deactivated' }]} />
         <SearchInput value={list.params.search} onChange={(search) => list.set({ search })} placeholder="Search name or e-mail..." />
       </>}>
@@ -178,7 +179,7 @@ export default function Users({ role = 'user' }) {
           </Field>
           <Field label="Password" htmlFor="f-password" error={form.errors.password} hint={editing ? 'Leave empty to keep the current password' : 'Leave empty (recommended): they get an e-mail link to choose their own password'}><Input {...form.input('password')} type="password" autoComplete="new-password" /></Field>
           <Field label="Confirm password" htmlFor="f-password_confirmation" error={form.errors.password_confirmation}><Input {...form.input('password_confirmation')} type="password" autoComplete="new-password" /></Field>
-          {!isAdmin && editing && !editing.is_organisation && !editing.organisation_id && (
+          {MODULES.organisation && !isAdmin && editing && !editing.is_organisation && !editing.organisation_id && (
             <label className="flex cursor-pointer items-center justify-between rounded-2xl border border-border p-4 sm:col-span-2"><span><span className="block text-sm font-medium">Organisation account</span><span className="text-xs text-muted-foreground">Turn this user into an organisation that manages its own users</span></span><Switch checked={form.values.is_organisation} onChange={(v) => { form.set('is_organisation', v); if (v && !form.values.org_name) form.set('org_name', `${form.values.first_name} ${form.values.last_name}`.trim()); }} /></label>
           )}
           {!isAdmin && !editing && <Field label="Plan" className="sm:col-span-2" hint={isOrg ? 'The organisation and all of its users work with this plan' : 'Leave empty to give the default plan'}><Select value={form.values.plan_id} onChange={(v) => form.set('plan_id', v)} options={plans} placeholder="Default plan" allowEmpty /></Field>}
@@ -238,7 +239,7 @@ export function UserDetail() {
           </div>
         </Card>
       </motion.div>
-      {u.organisation_profile && <OrganisationCard u={u} onChanged={load} />}
+      {MODULES.organisation && u.organisation_profile && <OrganisationCard u={u} onChanged={load} />}
       <UserLinks user={u} />
       <div className="mt-6 grid gap-6 lg:grid-cols-3">
         <Card>
