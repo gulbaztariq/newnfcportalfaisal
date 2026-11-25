@@ -277,6 +277,8 @@ module.exports = function defineBusiness(sequelize, json, M) {
   /* ------------------------------------------------ audit log */
   const ActivityLog = sequelize.define('activity_log', {
     action: { type: T.STRING(80), allowNull: false }, entity: T.STRING(60), entity_id: T.INTEGER,
+    // who did it, as it was at that moment (kept even if the account is later demoted, renamed or deleted)
+    actor_email: T.STRING(191), actor_role: T.STRING(30),
     ip: T.STRING(64), user_agent: T.STRING(255), meta: json('meta', {}),
   }, { updatedAt: false });
   ActivityLog.belongsTo(User, { foreignKey: 'user_id' });

@@ -9,6 +9,7 @@ const dayjs = require('dayjs');
 const { Op } = require('sequelize');
 const sanitizeHtml = require('sanitize-html');
 const M = require('../../models');
+const { isSuperAdmin } = require('../../middleware/auth');
 const crud = require('../../utils/crud');
 const { wrap, fail, validate, pick, toBool, paginate, paged } = require('../../utils/http');
 const { makeUpload, fileUrl, DOC_TYPES } = require('../../middleware/upload');
@@ -1075,11 +1076,25 @@ r.use('/announcements', crud(M.Announcement, {
 r.get('/announcements-stats/:id', wrap(async (req, res) => res.json({ reads: await M.AnnouncementRead.count({ where: { announcement_id: req.params.id } }) })));
 
 /* ============================================================== logs */
+/* what super admins do is logged with their e-mail and shown only to super admins: other staff never see these rows, and nobody can delete or edit a log entry */
+const SUPER_ROW = { [Op.or]: [{ actor_role: 'super_admin' }, { '$user.role$': 'super_admin' }] };
+const NOT_SUPER = { [Op.and]: [{ [Op.or]: [{ actor_role: null }, { actor_role: { [Op.ne]: 'super_admin' } }] }, { [Op.or]: [{ '$user.role$': null }, { '$user.role$': { [Op.ne]: 'super_admin' } }] }] };
+const logInclude = [{ model: M.User, attributes: ['id', 'first_name', 'last_name', 'email', 'role'], required: false }];
+const mine = (req) => req.user.role === 'super_admin';
 r.get('/activity-logs', wrap(async (req, res) => {
   const p = paginate(req, 25);
-  const where = req.query.user_id ? { user_id: req.query.user_id } : {};
-  if (req.query.search) where.action = { [Op.like]: `%${req.query.search}%` };
-  const { rows, count } = await M.ActivityLog.findAndCountAll({ where, order: [['id', 'DESC']], limit: p.limit, offset: p.offset, include: [{ model: M.User, attributes: ['id', 'first_name', 'last_name', 'email', 'role'] }] });
+  const and = [mine(req) ? {} : NOT_SUPER];
+  if (req.query.user_id) and.push({ user_id: req.query.user_id });
+  if (req.query.search) and.push({ action: { [Op.like]: `%${req.query.search}%` } });
+  const { rows, count } = await M.ActivityLog.findAndCountAll({ where: { [Op.and]: and }, order: [['id', 'DESC']], limit: p.limit, offset: p.offset, include: logInclude });
+  res.json(paged(rows, count, p));
+}));
+r.get('/super-admin-log', isSuperAdmin, wrap(async (req, res) => {
+  const p = paginate(req, 25);
+  const and = [SUPER_ROW];
+  if (req.query.email) and.push({ [Op.or]: [{ actor_email: req.query.email }, { '$user.email$': req.query.email }] });
+  if (req.query.search) and.push({ action: { [Op.like]: `%${req.query.search}%` } });
+  const { rows, count } = await M.ActivityLog.findAndCountAll({ where: { [Op.and]: and }, order: [['id', 'DESC']], limit: p.limit, offset: p.offset, include: logInclude });
   res.json(paged(rows, count, p));
 }));
 r.get('/message-logs', wrap(async (req, res) => {

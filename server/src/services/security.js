@@ -81,7 +81,8 @@ async function audit(req, action, entity, entityId, meta) {
   req._audited = true; // the generic admin logger (below) skips requests that already wrote a detailed entry
   try {
     const { ActivityLog } = require('../models');
-    await ActivityLog.create({ user_id: req.actor?.id || req.user?.id || null, action, entity, entity_id: entityId || null, ip: req.ip, user_agent: String(req.get('user-agent') || '').slice(0, 250), meta: meta || {} });
+    const who = req.actor || req.user;
+    await ActivityLog.create({ user_id: who?.id || null, actor_email: who?.email || null, actor_role: who?.role || null, action, entity, entity_id: entityId || null, ip: req.ip, user_agent: String(req.get('user-agent') || '').slice(0, 250), meta: meta || {} });
   } catch (e) { console.error('[audit]', e.message); }
 }
 
