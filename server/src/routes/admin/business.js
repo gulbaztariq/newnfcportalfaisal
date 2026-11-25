@@ -228,7 +228,8 @@ r.post('/orders', wrap(async (req, res) => {
   validate(b, { name: 'required|max:120', phone: 'phone', address: 'max:1000', city: 'max:120', email: `${type === 'new' ? 'required|' : ''}email|max:191`, company_name: 'max:150', discount_value: 'numeric', advance_amount: 'numeric|minv:0', delivery_charges: 'numeric|minv:0' });
   if (b.discount_type === 'percent' && Number(b.discount_value) > 100) fail(422, 'Validation failed', { discount_value: 'A percentage cannot be more than 100' });
   // a parcel that goes by courier needs somewhere to go and someone to call (office collection and digital orders do not)
-  if (!collection && !orders.NO_SHIP_TYPES.includes(b.order_type || 'nfc_profile')) {
+  // (the one-page order form sends details_later: the address is added on the order afterwards, when the parcel is booked)
+  if (!collection && !toBool(b.details_later) && !orders.NO_SHIP_TYPES.includes(b.order_type || 'nfc_profile')) {
     const miss = {};
     if (!String(b.phone || '').trim()) miss.phone = 'Phone number is required for courier delivery';
     if (!String(b.address || '').trim()) miss.address = 'Delivery address is required for courier delivery';

@@ -36,6 +36,14 @@ const newLine = () => ({ key: ++lineId, product_id: '', variant: '', quantity: 1
 const money = (cur, v) => `${cur} ${Number(v || 0).toLocaleString('en-US', { maximumFractionDigits: 2 })}`;
 const fetchList = (url) => (q) => api.get(url, { params: { q, search: q, per_page: 15 } }).then(({ data }) => data.data);
 const PersonLine = ({ p, sub }) => <div className="min-w-0"><p className="truncate font-medium">{p.name}</p><p className="truncate text-xs text-muted-foreground">{sub}</p></div>;
+/** which order type a product is sold as: its kind says so, everything else is a normal NFC product */
+function deriveType(p) {
+  const k = p?.product_kind;
+  if (k === 'blank_card') return 'card_printing';
+  if (['printing', 'reprint', 'digital', 'contact_tag', 'airport_tag'].includes(k)) return k;
+  if (k && k.startsWith('social_')) return 'social';
+  return 'nfc_profile';
+}
 const decimal = (v) => v.replace(/[^\d.]/g, '').replace(/(\..*)\./g, '$1');
 
 /** price per piece shown before the server quotes it (type, tier, product discount) */
@@ -58,9 +66,9 @@ export default function OrderWizard() {
   const [meta, setMeta] = useState(null);
   const [lines, setLines] = useState([newLine()]);
   const [form, setValues] = useState({
-    order_type: 'nfc_profile', order_source_id: '', name: '', phone: '', city: '', address: '', email: '', customer: null, guest: null,
-    discount_type: 'fixed', discount_value: '', payment: 'cod', advance_amount: '', payment_account_id: '', ship: false, admin_note: '', sample_order: null, plan_credit: '',
-    make_links: false, link_kind: 'vcard', link_plan_id: '', link_qty: '',
+    type_override: '', order_source_id: '', name: '', phone: '', email: '', customer: null, guest: null,
+    discount_type: 'fixed', discount_value: '', payment: 'cod', advance_amount: '', payment_account_id: '', admin_note: '', sample_order: null, plan_credit: '',
+    make_links: false, link_kind: 'vcard', link_plan_id: '', link_qty: '', more: false,
   });
   const [errors, setErrors] = useState({});
   const [quote, setQuote] = useState(null);
@@ -68,19 +76,20 @@ export default function OrderWizard() {
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState(null);
   const [reorderOf, setReorderOf] = useState(null);
+  const [totalText, setTotalText] = useState(null); // what is being typed in the Total amount box
   const [subInfo, setSubInfo] = useState(undefined); // current plan of the customer being renewed
   const set = (k, v) => { setValues((f) => ({ ...f, [k]: v })); setErrors((e) => ({ ...e, [k]: undefined })); };
   useEffect(() => { api.get('/admin/orders-meta').then(({ data }) => setMeta(data)); }, []);
   useEffect(() => { setErrors((e) => (e.products ? { ...e, products: undefined } : e)); }, [lines]);
 
-  const type = form.order_type;
+  const products = useMemo(() => Object.fromEntries((meta?.products || []).map((p) => [p.id, p])), [meta]);
+  const valid = lines.filter((l) => l.product_id);
+  // the product decides the order type (its kind, set on the Products page); "More options" can override it
+  const type = form.type_override || deriveType(products[valid[0]?.product_id]);
   const planChange = PLAN_CHANGE.includes(type);
   const noShip = NO_SHIP.includes(type);
   const tagType = TAG_TYPES.includes(type);
   const cod = form.payment === 'cod' && !noShip;
-  const courier = !noShip && (cod || form.ship);
-  const valid = lines.filter((l) => l.product_id);
-  const products = useMemo(() => Object.fromEntries((meta?.products || []).map((p) => [p.id, p])), [meta]);
   const cur = meta?.currency;
   const sampleMax = meta?.sample_max_qty || 5;
 
@@ -101,7 +110,7 @@ export default function OrderWizard() {
     items: valid.map(({ product_id, variant, quantity, unit_price }) => ({ product_id, variant, quantity, unit_price, customization: false })),
     order_type: type, social_variant: type === 'social' ? SOCIAL_KIND[products[valid[0]?.product_id]?.product_kind] : undefined,
     sample_order_id: type === 'wholesale' ? form.sample_order?.id : undefined, plan_credit: type === 'upgrade' && form.plan_credit !== '' ? form.plan_credit : undefined,
-    fulfilment: noShip ? 'digital' : courier ? 'delivery' : 'collection', is_cod: cod, delivery_charges: '',
+    fulfilment: noShip ? 'digital' : cod ? 'delivery' : 'collection', is_cod: cod, delivery_charges: '', details_later: true,
     discount_type: form.discount_type, discount_value: form.discount_value === '' ? 0 : form.discount_value,
   });
   // live price from the server (the same rules as the saved order)
@@ -117,7 +126,7 @@ export default function OrderWizard() {
     if (!meta) return;
     const fill = (patch) => setValues((f) => ({ ...f, ...patch }));
     const person = (o) => (o.guest_customer_id ? { guest: { id: o.guest_customer_id, name: o.guest?.name || o.name, phone: o.phone } } : o.user_id ? { customer: { id: o.user_id, name: `${o.user?.first_name || ''} ${o.user?.last_name || ''}`.trim() || o.name, email: o.user?.email } } : {});
-    const base = (o) => ({ name: o.name, phone: o.phone || '', email: o.email || '', city: o.city || '', address: o.address || '', order_source_id: o.order_source_id ? String(o.order_source_id) : '', ...person(o) });
+    const base = (o) => ({ name: o.name, phone: o.phone || '', email: o.email || '', order_source_id: o.order_source_id ? String(o.order_source_id) : '', ...person(o) });
     if (params.get('reorder')) {
       api.get(`/admin/orders/${params.get('reorder')}`).then(({ data }) => {
         const o = data.data;
@@ -128,18 +137,19 @@ export default function OrderWizard() {
     } else if (params.get('bulk') || params.get('sample')) {
       api.get(`/admin/orders/${params.get('bulk') || params.get('sample')}`).then(({ data }) => {
         const o = data.data; const minQty = meta.wholesale_tiers?.[0]?.min || 25;
-        fill({ ...base(o), order_type: 'wholesale', sample_order: o.order_type === 'sample' ? { id: o.id, order_number: o.order_number, credit: (o.items || []).reduce((a, i) => a + Number(i.total), 0) } : null });
+        fill({ ...base(o), type_override: 'wholesale', sample_order: o.order_type === 'sample' ? { id: o.id, order_number: o.order_number, credit: (o.items || []).reduce((a, i) => a + Number(i.total), 0) } : null });
         setLines((o.items?.length ? o.items : []).map((it) => ({ key: ++lineId, product_id: it.nfc_card_id, variant: it.variant || '', quantity: minQty, unit_price: '' })));
         setReorderOf(`bulk from ${o.order_number}`);
       }).catch(() => toast.error('Could not load the order'));
     } else if (params.get('guest')) {
-      api.get(`/admin/guest-customers/${params.get('guest')}`).then(({ data }) => { const g = data.data; fill({ guest: g, name: g.name, phone: g.phone || '', email: g.email || '', city: g.city || '', address: g.address || '' }); });
+      api.get(`/admin/guest-customers/${params.get('guest')}`).then(({ data }) => { const g = data.data; fill({ guest: g, name: g.name, phone: g.phone || '', email: g.email || '' }); });
     }
   }, [meta]); // eslint-disable-line
 
   const pickType = (key) => {
-    if (PLAN_CHANGE.includes(key) !== planChange) setLines([newLine()]); // plans and physical products never share one order
-    setValues((f) => ({ ...f, order_type: key, sample_order: key === 'wholesale' ? f.sample_order : null, customer: PLAN_CHANGE.includes(key) ? f.customer : null }));
+    const next = key || deriveType(products[valid[0]?.product_id]);
+    if (PLAN_CHANGE.includes(next) !== planChange) setLines([newLine()]); // plans and physical products never share one order
+    setValues((f) => ({ ...f, type_override: key, sample_order: next === 'wholesale' ? f.sample_order : null, customer: PLAN_CHANGE.includes(next) ? f.customer : null }));
   };
   const setLine = (key, patch) => setLines((ls) => ls.map((l) => (l.key === key ? { ...l, ...patch } : l)));
   const pickProduct = (key, p) => setLine(key, { product_id: p ? p.id : '', variant: p?.variants?.[0]?.name ?? '', unit_price: '', quantity: type === 'sample' ? 1 : (type === 'wholesale' && p ? Number(meta.wholesale_tiers?.[0]?.min) || 1 : 1) });
@@ -162,7 +172,6 @@ export default function OrderWizard() {
     else if (type === 'sample' && valid.some((l) => Number(l.quantity) > sampleMax)) e.products = `Samples are limited to ${sampleMax} pieces per product`;
     if (form.phone && !/^\+?[\d\s().-]{7,20}$/.test(String(form.phone).trim())) e.phone = 'Phone number is not valid. Use digits only, like 03001234567';
     if (tagType && String(form.phone).replace(/\D/g, '').length < 7) e.phone = 'The tag owner\'s phone number is needed: messages are sent there';
-    if (courier) { if (!String(form.phone || '').trim()) e.phone = 'Phone number is required for courier delivery'; if (!String(form.address || '').trim()) e.address = 'Delivery address is required'; if (!String(form.city || '').trim()) e.city = 'City is required'; }
     if (form.discount_type === 'percent' && Number(form.discount_value) > 100) e.discount_value = 'A percentage cannot be more than 100';
     if (form.payment === 'online' && !form.payment_account_id) e.payment_account_id = 'Choose where the money was received';
     if (form.payment === 'advance') { const a = Number(form.advance_amount); if (!(a > 0)) e.advance_amount = 'Enter the advance received'; else if (quote && !quote.error && a > Number(quote.total)) e.advance_amount = 'The advance is more than the order total'; }
@@ -175,7 +184,7 @@ export default function OrderWizard() {
     setBusy(true);
     try {
       const body = {
-        ...payload(), name: planChange ? form.customer.name : form.name, phone: form.phone, email: form.email, city: form.city, address: form.address,
+        ...payload(), name: planChange ? form.customer.name : form.name, phone: form.phone, email: form.email,
         order_source_id: form.order_source_id || undefined, admin_note: form.admin_note,
         customer_type: planChange ? 'existing' : 'guest', user_id: planChange ? form.customer.id : undefined, guest_customer_id: planChange ? undefined : form.guest?.id,
         payment_status: form.payment === 'online' ? 'paid' : 'pending', payment_type: form.payment === 'cod' ? undefined : form.payment, advance_amount: form.payment === 'advance' ? form.advance_amount : undefined,
@@ -190,7 +199,7 @@ export default function OrderWizard() {
       setResult({ ...d, links: made });
     } catch (err) { setErrors(err.errors || {}); } finally { setBusy(false); }
   };
-  const restart = () => { setResult(null); setLines([newLine()]); setQuote(null); setReorderOf(null); setValues((f) => ({ ...f, customer: null, guest: null, name: '', phone: '', email: '', city: '', address: '', discount_value: '', advance_amount: '', admin_note: '', make_links: false, link_qty: '', sample_order: null })); };
+  const restart = () => { setResult(null); setLines([newLine()]); setQuote(null); setReorderOf(null); setValues((f) => ({ ...f, customer: null, guest: null, name: '', phone: '', email: '', discount_value: '', advance_amount: '', admin_note: '', make_links: false, link_qty: '', sample_order: null })); };
 
   if (!meta) return <div className="grid gap-6 lg:grid-cols-[1fr_340px]"><Skeleton className="h-[520px] rounded-3xl" /><Skeleton className="h-80 rounded-3xl" /></div>;
 
@@ -229,6 +238,9 @@ export default function OrderWizard() {
   }
 
   const typeInfo = ORDER_TYPES.find((t) => t.key === type);
+  const l0 = valid[0]; const ql0 = l0 ? quote?.lines?.[0] : null;
+  const unit0 = l0 ? (l0.unit_price !== '' ? Number(l0.unit_price) : ql0 ? Number(ql0.unit_price) : estimate(meta, products[l0.product_id], l0.variant, Number(l0.quantity) || 1, type)) : 0;
+  const totalDerived = valid.length === 1 ? Math.round(unit0 * (Number(l0.quantity) || 1) * 100) / 100 : Number(quote?.subtotal || 0);
   const advance = Number(form.advance_amount) || 0;
   const total = quote && !quote.error ? Number(quote.total) : 0;
   return (
@@ -243,25 +255,22 @@ export default function OrderWizard() {
         <Card>
           <CardBody className="space-y-6">
             <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="Order type" required hint={typeInfo?.text}>
-                <Select value={type} onChange={pickType} options={ORDER_TYPES.map((t) => ({ value: t.key, label: t.title }))} />
-              </Field>
               <Field label="Order source" hint="The website or channel this order came from">
                 <Select value={form.order_source_id} onChange={(v) => set('order_source_id', v)} allowEmpty placeholder="Choose the source" options={meta.sources.map((x) => ({ value: x.id, label: x.name }))} />
               </Field>
+              {planChange ? (
+                <Field label="Client" required error={errors.customer} hint={subInfo === undefined ? 'The plan of this customer is renewed or upgraded' : subInfo === null ? 'This customer has no plan yet' : `${subInfo.plan}${subInfo.expired ? ' expired' : ' runs'} until ${new Date(subInfo.ends_at).toLocaleDateString()}`}>
+                  <SearchSelect value={form.customer} onChange={(u) => set('customer', u)} search={fetchList('/admin/customers/search')} invalid={!!errors.customer} placeholder="Search by name, e-mail or phone..." empty="No customer found"
+                    renderItem={(u) => <PersonLine p={u} sub={[u.email, u.contact].filter(Boolean).join(' · ')} />} renderValue={(u) => <PersonLine p={u} sub={[u.email, u.contact].filter(Boolean).join(' · ')} />} />
+                </Field>
+              ) : (
+                <Field label="Name of client" required error={errors.name}><Input value={form.name} onChange={(e) => set('name', e.target.value)} placeholder="Client name" autoComplete="off" /></Field>
+              )}
             </div>
-            {planChange ? (
-              <Field label="Client" required error={errors.customer} hint={subInfo === undefined ? 'The plan of this customer is renewed or upgraded' : subInfo === null ? 'This customer has no plan yet' : `${subInfo.plan}${subInfo.expired ? ' expired' : ' runs'} until ${new Date(subInfo.ends_at).toLocaleDateString()}`}>
-                <SearchSelect value={form.customer} onChange={(u) => set('customer', u)} search={fetchList('/admin/customers/search')} invalid={!!errors.customer} placeholder="Search by name, e-mail or phone..." empty="No customer found"
-                  renderItem={(u) => <PersonLine p={u} sub={[u.email, u.contact].filter(Boolean).join(' · ')} />} renderValue={(u) => <PersonLine p={u} sub={[u.email, u.contact].filter(Boolean).join(' · ')} />} />
-              </Field>
-            ) : (
-              <Field label="Name of client" required error={errors.name}><Input value={form.name} onChange={(e) => set('name', e.target.value)} placeholder="Client name" autoComplete="off" /></Field>
-            )}
 
             {/* products: every product added on the Products page is in the list */}
             <div className="space-y-3">
-              <p className="text-sm font-semibold">Product</p>
+              <div><p className="text-sm font-semibold">Product</p><p className="text-xs text-muted-foreground">Every product from your Products page is in this list. It also decides the order type: {typeInfo?.title}.</p></div>
               {lines.map((l, i) => {
                 const p = products[l.product_id];
                 const qty = Number(l.quantity) || 1;
@@ -311,12 +320,19 @@ export default function OrderWizard() {
               )}
             </div>
 
-            <Field label="Discount" error={errors.discount_value}>
-              <div className="flex gap-2">
-                <Input className="flex-1" type="text" inputMode="decimal" autoComplete="off" value={form.discount_value} placeholder="0" onChange={(e) => set('discount_value', decimal(e.target.value))} />
-                <Segmented id="dt" value={form.discount_type} onChange={(v) => set('discount_type', v)} options={[{ value: 'fixed', label: cur }, { value: 'percent', label: '%' }]} />
-              </div>
-            </Field>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label="Total amount" hint={valid.length === 1 ? 'Quantity × price, before the discount. Type a total to set the price per piece.' : 'All products together, before the discount'}>
+                <Input type="text" inputMode="decimal" autoComplete="off" readOnly={valid.length !== 1} value={totalText ?? String(totalDerived)}
+                  onChange={(e) => { const t = decimal(e.target.value); setTotalText(t); const q = Number(valid[0]?.quantity) || 1; if (t !== '' && Number(t) >= 0) setLine(valid[0].key, { unit_price: String(Math.round((Number(t) / q) * 10000) / 10000) }); }}
+                  onBlur={() => setTotalText(null)} />
+              </Field>
+              <Field label="Discount" error={errors.discount_value} hint={quote?.discount > 0 ? `Takes off ${money(cur, quote.discount)}` : undefined}>
+                <div className="flex gap-2">
+                  <Input className="flex-1" type="text" inputMode="decimal" autoComplete="off" value={form.discount_value} placeholder="0" onChange={(e) => set('discount_value', decimal(e.target.value))} />
+                  <Segmented id="dt" value={form.discount_type} onChange={(v) => set('discount_type', v)} options={[{ value: 'fixed', label: cur }, { value: 'percent', label: '%' }]} />
+                </div>
+              </Field>
+            </div>
 
             <div className="space-y-3 rounded-2xl border border-border p-4">
               <div className="flex flex-wrap items-center justify-between gap-3">
@@ -336,7 +352,7 @@ export default function OrderWizard() {
 
             <div className="space-y-3">
               <Field label="Payment" required>
-                <Segmented id="pay" value={form.payment} onChange={(v) => { set('payment', v); if (v === 'cod') set('ship', true); }} options={[...(noShip ? [] : [{ value: 'cod', label: 'COD' }]), { value: 'online', label: 'Online payment' }, { value: 'advance', label: 'Advance' }]} />
+                <Segmented id="pay" value={form.payment} onChange={(v) => set('payment', v)} options={[...(noShip ? [] : [{ value: 'cod', label: 'COD' }]), { value: 'online', label: 'Online payment' }, { value: 'advance', label: 'Advance' }]} />
               </Field>
               {form.payment === 'advance' && <Field label="Advance received" required error={errors.advance_amount} hint={total ? `Balance due: ${money(cur, Math.max(0, total - advance))}` : undefined}><Input type="text" inputMode="decimal" autoComplete="off" value={form.advance_amount} placeholder="0" onChange={(e) => set('advance_amount', decimal(e.target.value))} className="max-w-56" /></Field>}
               {form.payment !== 'cod' && (
@@ -344,18 +360,17 @@ export default function OrderWizard() {
                   <Select value={form.payment_account_id} onChange={(v) => set('payment_account_id', v)} allowEmpty={form.payment === 'advance'} invalid={!!errors.payment_account_id} placeholder="Choose the account" options={(meta.accounts || []).map((a) => ({ value: a.id, label: a.name }))} />
                 </Field>
               )}
-              {!noShip && form.payment !== 'cod' && (
-                <label className="flex cursor-pointer items-center gap-2 text-sm"><input type="checkbox" checked={form.ship} onChange={(e) => set('ship', e.target.checked)} className="size-4" />This order goes by courier</label>
-              )}
-              {(courier || tagType) && (
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <Field label="Phone" required error={errors.phone}><Input value={form.phone} onChange={(e) => set('phone', e.target.value)} placeholder="03xx xxxxxxx" /></Field>
-                  {courier && <Field label="City" required error={errors.city}><Input value={form.city} onChange={(e) => set('city', e.target.value)} /></Field>}
-                  {courier && <Field label="Address" required error={errors.address} className="sm:col-span-2"><Input value={form.address} onChange={(e) => set('address', e.target.value)} placeholder="Delivery address" /></Field>}
-                </div>
-              )}
+              {tagType && <Field label="Tag owner's phone" required error={errors.phone} hint="Messages from whoever scans the tag are sent here. The number is never shown."><Input value={form.phone} onChange={(e) => set('phone', e.target.value)} placeholder="03xx xxxxxxx" className="max-w-64" /></Field>}
             </div>
             <Field label="Note"><Textarea rows={2} value={form.admin_note} onChange={(e) => set('admin_note', e.target.value)} placeholder="Optional: card details, delivery instructions..." /></Field>
+            <div>
+              <button type="button" onClick={() => set('more', !form.more)} className="cursor-pointer text-sm font-medium text-primary hover:underline">{form.more ? 'Hide more options' : 'More options'}</button>
+              {form.more && (
+                <div className="mt-3 max-w-md"><Field label="Order type" hint="Normally chosen from the product. Change it for a renewal, an upgrade, a wholesale order or samples.">
+                  <Select value={form.type_override} onChange={pickType} allowEmpty placeholder="Automatic (from the product)" options={ORDER_TYPES.map((t) => ({ value: t.key, label: t.title }))} />
+                </Field></div>
+              )}
+            </div>
           </CardBody>
         </Card>
 
@@ -379,7 +394,7 @@ export default function OrderWizard() {
               {quote?.plan_credit > 0 && <Row label="Credit for unused time" value={`- ${money(cur, quote.plan_credit)}`} className="font-medium text-success" />}
               {quote?.sample_credit > 0 && <Row label="Sample credit" value={`- ${money(cur, quote.sample_credit)}`} className="font-medium text-success" />}
               {quote?.tax > 0 && <Row label={`${quote.tax_name} (${quote.tax_rate}%)`} value={money(cur, quote.tax)} />}
-              <Row label="Delivery" value={noShip ? 'No shipping' : courier ? money(cur, quote?.delivery ?? meta.delivery_charges) : 'None'} />
+              <Row label="Delivery" value={noShip ? 'No shipping' : cod ? money(cur, quote?.delivery ?? meta.delivery_charges) : 'None'} />
               {quote?.cod > 0 && <Row label="COD charges" value={money(cur, quote.cod)} />}
             </div>
             <div className={cn('flex items-center justify-between rounded-2xl bg-primary-soft px-4 py-3 text-primary transition-opacity', quoting && 'opacity-60')}>
