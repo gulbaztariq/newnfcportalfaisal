@@ -4,6 +4,7 @@ import { useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { MailX, ArrowRightLeft, Link2, Plus, Pencil, Trash2, Copy, QrCode, Download, BarChart3, Layers, Megaphone, History, MessageSquare, Lock, ShieldBan } from 'lucide-react';
 import api from '@/lib/api';
+import { useAuth } from '@/lib/auth';
 import CrudPage from '@/components/CrudPage';
 import ExportMenu from '@/components/ExportMenu';
 import { GenerateLinksDialog, ResetMoveDialog, StateBadge, kindLabel } from './LinkGenerator';
@@ -164,13 +165,15 @@ export const Announcements = () => (
 
 /* ------------------------------------------------------------ logs */
 export function Logs() {
+  const { user } = useAuth();
+  const isSuper = user?.role === 'super_admin';
   const [tab, setTab] = useState('activity');
   return (
     <>
       <PageHeader title="Logs" description="Who did what in the admin panel, WhatsApp / SMS delivery, and temporarily blocked IP addresses.">
-        <Segmented id="lg" value={tab} onChange={setTab} options={[{ value: 'activity', label: 'Activity' }, { value: 'messages', label: 'WhatsApp & SMS' }, { value: 'bans', label: 'Blocked IPs' }]} />
+        <Segmented id="lg" value={tab} onChange={setTab} options={[{ value: 'activity', label: 'Activity' }, ...(isSuper ? [{ value: 'super', label: 'Super admins' }] : []), { value: 'messages', label: 'WhatsApp & SMS' }, { value: 'bans', label: 'Blocked IPs' }]} />
       </PageHeader>
-      {tab === 'activity' ? <ActivityLog /> : tab === 'messages' ? <MessageLog /> : <Bans />}
+      {tab === 'activity' ? <ActivityLog /> : tab === 'super' && isSuper ? <SuperAdminLog /> : tab === 'messages' ? <MessageLog /> : <Bans />}
     </>
   );
 }
@@ -180,9 +183,26 @@ function ActivityLog() {
     <TableCard title="Activity" list={list} toolbar={<SearchInput value={list.params.search} onChange={(search) => list.set({ search })} placeholder="Action e.g. order." />}>
       <DataTable loading={list.loading} rows={list.rows} empty={<EmptyState icon={History} title="No activity yet" />} columns={[
         { key: 'at', label: 'When', render: (l) => <span className="text-xs">{fmtDateTime(l.created_at)}</span> },
-        { key: 'who', label: 'By', render: (l) => (l.user ? <UserCell user={l.user} sub={label(l.user.role)} /> : 'System') },
+        { key: 'who', label: 'By', render: (l) => (l.user ? <UserCell user={l.user} sub={l.actor_email || label(l.user.role)} /> : (l.actor_email || 'System')) },
         { key: 'a', label: 'Action', render: (l) => <Badge tone="outline" className="font-mono">{l.action}</Badge> },
         { key: 'e', label: 'Record', render: (l) => (l.entity ? `${label(l.entity)} #${l.entity_id}` : '-') },
+        { key: 'ip', label: 'IP', render: (l) => <span className="font-mono text-xs text-muted-foreground">{l.ip}</span> },
+      ]} />
+    </TableCard>
+  );
+}
+/** everything a super admin does, by e-mail. Only super admins can open this; entries cannot be edited or deleted. */
+function SuperAdminLog() {
+  const list = useList('/admin/super-admin-log');
+  const detail = (l) => { const m = l.meta || {}; const parts = [m.path, ...Object.entries(m.values || {}).map(([k, v]) => `${k}: ${v}`), m.changed?.length ? `changed: ${m.changed.join(', ')}` : null].filter(Boolean).join(' · '); return parts || '-'; };
+  return (
+    <TableCard title="Super admin activity" list={list} toolbar={<SearchInput value={list.params.search} onChange={(search) => list.set({ search })} placeholder="Action e.g. user.delete" />}>
+      <DataTable loading={list.loading} rows={list.rows} empty={<EmptyState icon={History} title="No super admin activity yet" />} columns={[
+        { key: 'at', label: 'When', render: (l) => <span className="text-xs">{fmtDateTime(l.created_at)}</span> },
+        { key: 'who', label: 'Super admin', render: (l) => <span className="font-medium">{l.actor_email || l.user?.email || 'Unknown'}</span> },
+        { key: 'a', label: 'Action', render: (l) => <Badge tone="outline" className="font-mono">{l.action}</Badge> },
+        { key: 'e', label: 'Record', render: (l) => (l.entity ? `${label(l.entity)}${l.entity_id ? ` #${l.entity_id}` : ''}` : '-') },
+        { key: 'd', label: 'Details', render: (l) => <p className="max-w-96 truncate text-xs text-muted-foreground" title={detail(l)}>{detail(l)}</p> },
         { key: 'ip', label: 'IP', render: (l) => <span className="font-mono text-xs text-muted-foreground">{l.ip}</span> },
       ]} />
     </TableCard>
