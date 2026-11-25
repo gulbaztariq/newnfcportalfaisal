@@ -65,3 +65,13 @@ test('admin order: advance payment keeps the advance, leaves the order unpaid an
   const o = await M.NfcOrder.findByPk(r.body.data.id);
   assert.equal(o.payment_type, 'advance'); assert.equal(Number(o.advance_amount), 400); assert.equal(o.payment_status, 'pending');
 });
+
+test('admin order: delivery details can be left for later when the form says so, and are still required otherwise', async () => {
+  const p = await product({ price: 500 });
+  const items = [{ product_id: p.id, quantity: 1 }];
+  const strict = await admin.post('/api/admin/orders', { name: 'No Address', customer_type: 'guest', order_type: 'nfc_profile', is_cod: true, items });
+  assert.equal(strict.status, 422);
+  const later = await admin.post('/api/admin/orders', { name: 'No Address', customer_type: 'guest', order_type: 'nfc_profile', is_cod: true, details_later: true, items });
+  assert.equal(later.status, 201, later.text.slice(0, 200));
+  assert.equal(later.body.data.is_cod, true);
+});
