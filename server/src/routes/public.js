@@ -7,7 +7,9 @@ const dayjs = require('dayjs');
 const { Op, fn, col } = require('sequelize');
 const analytics = require('../services/analytics');
 const M = require('../models');
-const { wrap, fail, validate } = require('../utils/http');
+const { wrap, fail, validate, HttpError } = require('../utils/http');
+const links = require('../services/links');
+const { issueToken } = require('../middleware/auth');
 const settings = require('../services/settings');
 const subs = require('../services/subscription');
 const extras = require('../services/extras');
@@ -34,6 +36,30 @@ const formLimiter = rateLimit({ windowMs: 10 * 60 * 1000, limit: 10, standardHea
 const orderLimiter = rateLimit({ windowMs: 10 * 60 * 1000, limit: 20, standardHeaders: true, legacyHeaders: false, message: { message: 'Too many orders, please try again later.' } });
 
 /* ================================================================= API */
+/* ---- managed links: the first person who opens an unclaimed link attaches it to an e-mail (one-time code), no account needed first */
+const linkLimiter = rateLimit({ windowMs: 10 * 60 * 1000, limit: 15, standardHeaders: true, legacyHeaders: false, message: { message: 'Too many attempts, please try again later.' } });
+const managedLink = async (code) => {
+  const l = /^[A-Za-z0-9_-]{3,40}$/.test(String(code)) ? await M.ShortLink.findOne({ where: { code: String(code) } }) : null;
+  if (!l || !l.kind) throw new HttpError(404, 'This link was not found');
+  return l;
+};
+api.get('/links/:code', wrap(async (req, res) => res.json({ data: await links.publicInfo(await managedLink(req.params.code)) })));
+api.post('/links/:code/claim/start', linkLimiter, wrap(async (req, res) => {
+  const l = await managedLink(req.params.code);
+  if (links.stateOf(l) !== 'unclaimed') fail(409, 'This link has already been claimed.');
+  res.json({ ...(await links.startOtp(l, req.body.email, 'claim', {}, 'claim')), message: 'We e-mailed you a code' });
+}));
+api.post('/links/:code/claim/verify', linkLimiter, wrap(async (req, res) => {
+  const l = await managedLink(req.params.code);
+  if (links.stateOf(l) !== 'unclaimed') fail(409, 'This link has already been claimed.');
+  links.validateDetails(l, req.body.details || {}); // a typo in the details must not use up the code
+  await links.checkOtp(l, req.body.email, 'claim', req.body.code);
+  const user = await links.ensureUser(req.body.email);
+  await links.claim(l, user, req.body.details || {});
+  issueToken(res, user);
+  res.json({ user: require('./auth').publicUser(user), data: await links.publicInfo(l), message: 'Done! This link now belongs to your e-mail.' });
+}));
+
 api.get('/settings', wrap(async (_req, res) => res.json({ data: await settings.publicSettings() })));
 
 /* data for the React landing page (front CMS) */
@@ -362,17 +388,17 @@ async function findVcard(alias) {
 /* plan checks are cached for a minute to keep the page instant */
 const planCache = new Map();
 async function planGate(v) {
-  const hit = planCache.get(v.user_id);
+  const hit = planCache.get(`${v.user_id}:${v.id}`);
   if (hit && hit.t > Date.now() - 60_000) return hit.reason;
   let reason = null;
-  const sub = await subs.current(v.user_id);
+  const sub = await links.subFor(v); // a card attached to a managed link follows that link's own plan and expiry
   if (!sub || new Date(sub.ends_at) < new Date()) reason = 'This card is currently unavailable.';
   else if (sub.plan?.no_of_visitors) {
     const ids = (await M.Vcard.findAll({ where: { user_id: v.user_id }, attributes: ['id'], raw: true })).map((x) => x.id);
     const used = await M.VcardView.count({ where: { vcard_id: ids, created_at: { [Op.gte]: extras.periodStart(sub) } } });
     if (used >= sub.plan.no_of_visitors) reason = 'This card has reached its visitor limit for now. Please try again later.';
   }
-  planCache.set(v.user_id, { t: Date.now(), reason });
+  planCache.set(`${v.user_id}:${v.id}`, { t: Date.now(), reason });
   if (planCache.size > 20000) planCache.clear();
   return reason;
 }
@@ -406,7 +432,7 @@ async function vcardPage(req, res, v) {
 }
 
 async function customCodeAllowed(v) {
-  const sub = await require('../services/subscription').current(v.user_id);
+  const sub = await links.subFor(v);
   return !!sub?.plan?.features?.custom_code;
 }
 /* the owner's own HTML/CSS/JS, served with a CSP sandbox (unique origin) so it cannot read cookies or call the API */

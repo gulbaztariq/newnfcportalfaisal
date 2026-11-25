@@ -22,6 +22,7 @@ const finance = require('../../services/finance');
 const shortlinks = require('../../services/shortlinks');
 const perms = require('../../services/permissions');
 const security = require('../../services/security');
+const links = require('../../services/links');
 const mail = require('../../services/mail');
 const docs = require('../../services/documents');
 const { appUrl, clientUrl } = require('../../config');
@@ -623,11 +624,47 @@ r.get('/short-links', wrap(async (req, res) => {
   const where = {};
   if (req.query.batch) where.batch = req.query.batch;
   if (req.query.target_type) where.target_type = req.query.target_type;
+  if (req.query.kind) where.kind = req.query.kind;
+  if (req.query.ordered_for) where.ordered_for = Number(req.query.ordered_for) || 0;
+  if (req.query.for_user) { const id = Number(req.query.for_user) || 0; where[Op.and] = [{ [Op.or]: [{ ordered_for: id }, { user_id: id }] }]; }
+  if (req.query.state === 'unclaimed') Object.assign(where, { kind: { [Op.ne]: null }, claimed_at: null });
+  if (req.query.state === 'claimed') Object.assign(where, { claimed_at: { [Op.ne]: null } });
+  if (req.query.state === 'expired') Object.assign(where, { expires_at: { [Op.lt]: new Date() } });
   const q = (req.query.search || '').trim();
   if (q) where[Op.or] = ['code', 'title', 'target_url', 'batch', 'note'].map((f) => ({ [f]: { [Op.like]: `%${q}%` } }));
   const { rows, count } = await M.ShortLink.findAndCountAll({ where, order: [['id', 'DESC']], limit: p.limit, offset: p.offset, include: [{ model: M.User, attributes: ['id', 'first_name', 'last_name', 'email'] }, { model: M.Vcard, attributes: ['id', 'name', 'url_alias'] }] });
   const batches = await M.ShortLink.findAll({ attributes: ['batch'], where: { batch: { [Op.ne]: null } }, group: ['batch'], raw: true });
-  res.json({ ...paged(rows.map((l) => ({ ...l.toJSON(), short_url: shortlinks.shortUrl(l.code) })), count, p), batches: batches.map((b) => b.batch) });
+  const plans = Object.fromEntries((await M.Plan.findAll({ attributes: ['id', 'name'], raw: true })).map((x) => [x.id, x.name]));
+  res.json({ ...paged(rows.map((l) => ({ ...l.toJSON(), short_url: shortlinks.shortUrl(l.code), state: links.stateOf(l), plan_name: plans[l.plan_id] || null })), count, p), batches: batches.map((b) => b.batch) });
+}));
+/* ---- managed links: generate for a customer / order, reset, move */
+r.post('/links/generate', wrap(async (req, res) => {
+  const specs = Array.isArray(req.body.links) ? req.body.links : [req.body];
+  if (!specs.length || specs.length > 20) fail(422, 'Validation failed', { links: 'Add between 1 and 20 link types' });
+  const userId = Number(req.body.user_id) || null; const orderId = Number(req.body.order_id) || null;
+  let forUser = userId;
+  if (orderId) { const o = await M.NfcOrder.findByPk(orderId, { attributes: ['id', 'user_id'] }); if (!o) fail(404, 'Order not found'); forUser = forUser || o.user_id || null; }
+  const made = [];
+  for (const sp of specs) made.push(...(await links.generate({ kind: sp.kind, planId: Number(sp.plan_id) || null, qty: sp.qty, templateId: Number(sp.template_id) || null, presetUrl: sp.preset_url, orderedFor: forUser, orderId, title: sp.title })));
+  security.audit(req, 'link.generate', 'short_link', made[0]?.id, { count: made.length, user: forUser, order: orderId });
+  res.status(201).json({ data: made.map((l) => ({ ...l.toJSON(), short_url: shortlinks.shortUrl(l.code), state: links.stateOf(l) })), message: `${made.length} link${made.length === 1 ? '' : 's'} generated. Write each one to an NFC chip or print it as a QR code.` });
+}));
+r.post('/short-links/:id/reset', wrap(async (req, res) => {
+  const l = await M.ShortLink.findByPk(req.params.id);
+  if (!l || !l.kind) fail(404, 'Not found');
+  const wipe = toBool(req.body.wipe);
+  await links.reset(l, { wipe });
+  security.audit(req, 'link.reset', 'short_link', l.id, { code: l.code, wipe, by: 'admin' });
+  res.json({ message: 'The link is unclaimed again. The next person who opens it can attach it to their e-mail.' });
+}));
+r.post('/short-links/:id/transfer', wrap(async (req, res) => {
+  const l = await M.ShortLink.findByPk(req.params.id);
+  if (!l || !l.kind) fail(404, 'Not found');
+  validate(req.body, { email: 'required|email' });
+  const wipe = toBool(req.body.wipe);
+  const { to } = await links.transfer(l, req.body.email, { wipe });
+  security.audit(req, 'link.transfer', 'short_link', l.id, { code: l.code, to: to.email, wipe, by: 'admin' });
+  res.json({ message: `The link now belongs to ${to.email}.` });
 }));
 async function linkBody(b, row) {
   const d = pick(b, ['title', 'note', 'batch']);

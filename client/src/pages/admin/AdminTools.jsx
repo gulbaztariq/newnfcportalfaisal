@@ -2,10 +2,11 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
-import { Link2, Plus, Pencil, Trash2, Copy, QrCode, Download, BarChart3, Layers, Megaphone, History, MessageSquare, Lock, ShieldBan } from 'lucide-react';
+import { MailX, ArrowRightLeft, Link2, Plus, Pencil, Trash2, Copy, QrCode, Download, BarChart3, Layers, Megaphone, History, MessageSquare, Lock, ShieldBan } from 'lucide-react';
 import api from '@/lib/api';
 import CrudPage from '@/components/CrudPage';
 import ExportMenu from '@/components/ExportMenu';
+import { GenerateLinksDialog, ResetMoveDialog, StateBadge, kindLabel } from './LinkGenerator';
 import { fmtDate, fmtDateTime, label } from '@/lib/format';
 import { AreaTrend, Donut } from '@/components/ui/charts';
 import {
@@ -20,6 +21,8 @@ export function ShortLinks() {
   const list = useList('/admin/short-links', { search: params.get('search') || '' });
   const [editing, setEditing] = useState(null);
   const [bulk, setBulk] = useState(false);
+  const [generating, setGenerating] = useState(false);
+  const [act, setAct] = useState(null);
   const [stats, setStats] = useState(null);
   const [selected, setSelected] = useState([]);
   const batches = list.extra?.batches || [];
@@ -30,10 +33,13 @@ export function ShortLinks() {
       <PageHeader title="Short links & QR" description="Every QR code and NFC tag points to a dynamic link. Change where it goes at any time without re-printing.">
         <ExportMenu what={`short-links/export?batch=${encodeURIComponent(list.params.batch || '')}`} base="/api/admin" label="Export" />
         <Button variant="outline" onClick={() => setBulk(true)}><Layers />Bulk generate</Button>
+        <Button variant="outline" onClick={() => setGenerating(true)}><Link2 />Generate links</Button>
         <Button onClick={() => setEditing({ target_type: 'url', status: true })}><Plus />New link</Button>
       </PageHeader>
       <TableCard title="Links" list={list} toolbar={<>
         {selected.length > 0 && <Button size="sm" variant="danger-soft" onClick={removeMany}><Trash2 />Delete {selected.length}</Button>}
+        <FilterSelect value={list.params.state} onChange={(v) => list.set({ state: v })} placeholder="Any state" options={[{ value: 'unclaimed', label: 'Not claimed yet' }, { value: 'claimed', label: 'Claimed' }, { value: 'expired', label: 'Expired' }]} />
+        <FilterSelect value={list.params.kind} onChange={(v) => list.set({ kind: v })} placeholder="Any type" options={[{ value: 'vcard', label: 'Business card' }, { value: 'redirect', label: 'Redirect link' }, { value: 'review', label: 'Review link' }]} />
         <FilterSelect value={list.params.target_type} onChange={(v) => list.set({ target_type: v })} placeholder="All destinations" options={Object.entries(TARGETS).map(([value, l]) => ({ value, label: l }))} />
         {batches.length > 0 && <FilterSelect value={list.params.batch} onChange={(v) => list.set({ batch: v })} placeholder="All batches" options={batches.map((b) => ({ value: b, label: b }))} />}
         <SearchInput value={list.params.search} onChange={(search) => list.set({ search })} placeholder="Code, title, URL..." />
@@ -41,19 +47,23 @@ export function ShortLinks() {
         <DataTable loading={list.loading} rows={list.rows} selected={selected} onSelect={setSelected} empty={<EmptyState icon={Link2} title="No links yet" />} columns={[
           { key: 'code', label: 'Link', render: (l) => <div><button type="button" onClick={() => copy(l.short_url)} className="flex cursor-pointer items-center gap-1.5 font-mono text-xs font-semibold text-primary hover:underline">{l.short_url.replace(/^https?:\/\//, '')}<Copy className="size-3" /></button><p className="text-xs text-muted-foreground">{l.title || l.batch || '-'}</p></div> },
           { key: 'to', label: 'Destination', render: (l) => <div className="max-w-64"><Badge tone={l.target_type === 'unassigned' ? 'warning' : 'outline'}>{TARGETS[l.target_type]}</Badge><p className="mt-0.5 truncate text-xs text-muted-foreground">{l.target_type === 'url' ? l.target_url : l.vcard ? `/${l.vcard.url_alias}` : ''}</p></div> },
-          { key: 'owner', label: 'Owner', render: (l) => (l.user ? <UserCell user={l.user} /> : <span className="text-xs text-muted-foreground">-</span>) },
+          { key: 'owner', label: 'Attached to', render: (l) => (l.kind ? (<div><p className="text-sm">{l.claimed_email || <span className="text-xs text-muted-foreground">Not claimed yet</span>}</p><p className="text-xs text-muted-foreground">{kindLabel(l.kind)}{l.plan_name ? ` · ${l.plan_name}` : ''}{l.expires_at ? ` · until ${fmtDate(l.expires_at)}` : ''}</p></div>) : l.user ? <UserCell user={l.user} /> : <span className="text-xs text-muted-foreground">-</span>) },
           { key: 'clicks', label: 'Scans', render: (l) => <div><p className="font-semibold">{l.clicks}</p><p className="text-xs text-muted-foreground">{l.last_clicked_at ? fmtDate(l.last_clicked_at) : 'never'}</p></div> },
-          { key: 'st', label: 'Status', render: (l) => <div className="flex items-center gap-1.5">{l.status ? <StatusBadge value="active" /> : <StatusBadge value="inactive" />}{l.locked && <Tip content="Only admins can change it"><Lock className="size-3.5 text-muted-foreground" /></Tip>}</div> },
+          { key: 'st', label: 'Status', render: (l) => <div className="flex items-center gap-1.5">{l.kind ? <StateBadge state={l.state} /> : l.status ? <StatusBadge value="active" /> : <StatusBadge value="inactive" />}{l.locked && <Tip content="Only admins can change it"><Lock className="size-3.5 text-muted-foreground" /></Tip>}</div> },
           { key: '_a', label: '', className: 'text-right', render: (l) => (
             <Actions>
               <Action icon={BarChart3} label="Scan analytics" onClick={() => setStats(l)} />
               <Action icon={QrCode} label="Download QR" href={`/api/admin/short-links/${l.id}/qrcode?size=800`} />
-              <Action icon={Pencil} label="Change destination" tone="info" onClick={() => setEditing(l)} />
+              {l.kind && l.claimed_at && <Action icon={MailX} label="Reset the e-mail (back to unclaimed)" tone="warning" onClick={() => setAct({ link: l, mode: 'reset' })} />}
+              {l.kind && l.claimed_at && <Action icon={ArrowRightLeft} label="Move to another e-mail" tone="info" onClick={() => setAct({ link: l, mode: 'move' })} />}
+              {!l.kind && <Action icon={Pencil} label="Change destination" tone="info" onClick={() => setEditing(l)} />}
               <Action icon={Trash2} label="Delete" tone="danger" onClick={async () => { if (await confirm({ title: 'Delete this link?', description: 'QR codes and NFC tags using it stop working.' })) { await run(api.delete(`/admin/short-links/${l.id}`)).catch(() => {}); list.reload(); } }} />
             </Actions>
           ) },
         ]} />
       </TableCard>
+      <GenerateLinksDialog open={generating} onClose={() => setGenerating(false)} onDone={list.reload} />
+      <ResetMoveDialog link={act?.link} mode={act?.mode} onClose={() => setAct(null)} onDone={list.reload} />
       {editing && <LinkForm link={editing} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); list.reload(); }} />}
       {bulk && <BulkForm onClose={() => setBulk(false)} onDone={(b) => { setBulk(false); list.set({ batch: b }); }} />}
       {stats && <LinkStats link={stats} onClose={() => setStats(null)} />}

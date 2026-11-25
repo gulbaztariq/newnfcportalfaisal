@@ -6,13 +6,14 @@ import { toast } from 'sonner';
 import {
   ArrowLeft, ArrowRight, Check, User, Package, Truck, ClipboardCheck, Plus, Trash2, Store, Wand2, IdCard, Copy, ExternalLink,
   Banknote, ShoppingBag, Settings2, Sparkles, UserCheck, UserPlus, UserRound, Building2, Repeat,
-  Share2, Boxes, FlaskConical, Printer, Smartphone, Layers, CreditCard, CalendarClock, TrendingUp, RefreshCw, ShieldCheck, Plane,
+  Share2, Link2, Boxes, FlaskConical, Printer, Smartphone, Layers, CreditCard, CalendarClock, TrendingUp, RefreshCw, ShieldCheck, Plane,
 } from 'lucide-react';
 import api from '@/lib/api';
+import { LinkRows, MadeLinks, newRow, rowsValid, rowsPayload } from './LinkGenerator';
 import SearchSelect from '@/components/SearchSelect';
 import { cn } from '@/lib/cn';
 import {
-  Card, CardHeader, CardBody, Button, Field, Input, Textarea, Select, Segmented, Checkbox, Badge, Tip, Skeleton, Avatar, run,
+  Card, CardHeader, CardBody, Button, Field, Input, Textarea, Select, Segmented, Checkbox, Switch, Badge, Tip, Skeleton, Avatar, run,
 } from '@/components/ui';
 
 const STEP_META = { type: ['Order type', Layers], customer: ['Customer', User], products: ['Products', Package], delivery: ['Delivery & payment', Truck], review: ['Review', ClipboardCheck] };
@@ -284,6 +285,8 @@ export default function OrderWizard() {
   const [quoting, setQuoting] = useState(false);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState(null);
+  const [genLinks, setGenLinks] = useState(false); // optional: generate managed links together with the order
+  const [linkRows, setLinkRows] = useState([newRow()]);
   const nameRef = useRef(null);
   const set = (k, v) => { setValues((f) => ({ ...f, [k]: v })); setErrors((e) => ({ ...e, [k]: undefined })); };
   useEffect(() => { setErrors((e) => (e.products ? { ...e, products: undefined } : e)); }, [lines]); // a stale "add a product" message must go as soon as the cart changes
@@ -420,7 +423,12 @@ export default function OrderWizard() {
         payment_status: form.payment === 'paid' ? 'paid' : 'pending', payment_account_id: form.payment_account_id || undefined,
       };
       const d = await run(api.post('/admin/orders', body));
-      setResult(d);
+      let made = null;
+      if (genLinks && rowsValid(linkRows)) {
+        try { made = (await api.post('/admin/links/generate', { order_id: d.data.id, user_id: d.data.user_id || form.customer?.id || undefined, links: rowsPayload(linkRows) })).data.data; }
+        catch (e) { toast.error(`The order was created, but the links were not: ${e.errors ? Object.values(e.errors)[0] : e.message}. Add them from the order or the customer's page.`); }
+      }
+      setResult({ ...d, links: made });
     } catch (e) { setErrors(e.errors || {}); if (e.errors && Object.keys(e.errors).some((k) => ['name', 'email', 'phone', 'address', 'user_id', 'organisation_id', 'contact_id'].includes(k))) goTo('customer'); else if (e.errors?.payment_account_id) goTo('delivery'); } finally { setBusy(false); }
   };
   const restart = () => { setResult(null); setStep(0); setLines([newLine()]); setQuote(null); setReorderOf(null); setValues((f) => ({ ...f, customer: null, organisation: null, contact_id: '', guest: null, name: '', phone: '', email: '', dummy: false, company_name: '', city: '', address: '', delivery_charges: '', discount_value: '', admin_note: '' })); };
@@ -463,6 +471,7 @@ export default function OrderWizard() {
               {acc.created && <p className="px-1 text-xs text-muted-foreground">The password is shown only once.</p>}
             </div>
           )}
+          {result.links?.length > 0 && <div className="relative mt-6 space-y-2 rounded-2xl border border-border bg-muted/40 p-4 text-left text-sm"><p className="flex items-center gap-2 font-semibold"><Link2 className="size-4 text-primary" />{result.links.length} link{result.links.length === 1 ? '' : 's'} generated</p><MadeLinks made={result.links} /></div>}
           <div className="relative mt-6 flex flex-wrap justify-center gap-2">
             {o.order_type === 'sample' && <Button variant="outline" onClick={() => navigate(`/admin/orders/new?sample=${o.id}`)}><Boxes />Bulk order from this sample</Button>}
             {result.guest && <Button variant="outline" onClick={() => navigate(`/admin/guest-customers/${result.guest.id}`)}><UserRound />Guest journey</Button>}
@@ -671,6 +680,14 @@ export default function OrderWizard() {
                     <ReviewBlock title="Products" icon={Package} onEdit={() => goTo('products')} className="sm:col-span-2" rows={(quote?.lines || []).map((l) => [
                       `${l.name}${l.variant ? ` · ${l.variant}` : ''}`, `${l.quantity} × ${money(cur, l.unit_price)} = ${money(cur, l.total)}${l.plan ? ` · Plan: ${l.plan.name}` : ' · Non-plan'}`,
                     ])} />
+                    <div className="rounded-2xl border border-border p-4 sm:col-span-2">
+                      <div className="flex items-start justify-between gap-3">
+                        <div><p className="flex items-center gap-2 text-sm font-semibold"><Link2 className="size-4 text-primary" />Generate links for this order</p>
+                          <p className="mt-0.5 text-xs text-muted-foreground">Optional. Each link has a type (business card, redirect or review), its own plan, and is attached to an e-mail by whoever opens it first.</p></div>
+                        <Switch checked={genLinks} onChange={setGenLinks} />
+                      </div>
+                      {genLinks && <div className="mt-4"><LinkRows rows={linkRows} setRows={setLinkRows} /></div>}
+                    </div>
                   </div>
                 )}
               </CardBody>

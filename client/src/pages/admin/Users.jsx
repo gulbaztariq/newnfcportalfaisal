@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { motion } from 'motion/react';
-import { Plus, Eye, Pencil, Trash2, UserCog, ShieldCheck, Users as UsersIcon, MailCheck, Send, ArrowLeft, LogOut, ExternalLink, Calendar, Clock, Phone, IdCard, Package, Building2, Globe, MapPin, Mail, Armchair, Route, Upload, ShoppingBag, Lock, LockOpen, Ban, KeyRound, Megaphone, UserPlus, UserMinus, FileSpreadsheet, Sparkles } from 'lucide-react';
+import { toast } from 'sonner';
+import { Link2, MailX, ArrowRightLeft, QrCode, Copy, Plus, Eye, Pencil, Trash2, UserCog, ShieldCheck, Users as UsersIcon, MailCheck, Send, ArrowLeft, LogOut, ExternalLink, Calendar, Clock, Phone, IdCard, Package, Building2, Globe, MapPin, Mail, Armchair, Route, Upload, ShoppingBag, Lock, LockOpen, Ban, KeyRound, Megaphone, UserPlus, UserMinus, FileSpreadsheet, Sparkles } from 'lucide-react';
 import { ImportUsers } from '@/pages/user/Organisation';
+import { GenerateLinksDialog, ResetMoveDialog, StateBadge, kindLabel } from './LinkGenerator';
 import { cn } from '@/lib/cn';
 import api, { toFormData } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
@@ -83,6 +85,7 @@ export default function Users({ role = 'user' }) {
   };
   const resetAuth = async (u) => { if (await confirm({ title: `Reset ${fullName(u)}'s authenticator?`, description: 'They are signed out and must set up a new authenticator app at their next sign-in. Use this when they lost their phone and recovery codes.', confirmText: 'Reset', tone: 'primary' })) await run(api.post(`${endpoint}/${u.id}/reset-authenticator`)).then(() => list.reload()).catch(() => {}); };
   const signOut = async (u) => { if (await confirm({ title: `Sign ${fullName(u)} out everywhere?`, description: 'Every device they are signed in on is logged out immediately.', confirmText: 'Sign out', tone: 'primary' })) await run(api.post(`${endpoint}/${u.id}/sign-out`)).catch(() => {}); };
+  const [linkFor, setLinkFor] = useState(null);
   const [invite, setInvite] = useState(null); // invitation link to share when e-mail could not be sent
   const reinvite = async (u) => { const res = await run(api.post(`${endpoint}/${u.id}/resend-invite`)).catch(() => null); if (res?.invite_url && !res.invite_sent) setInvite({ name: fullName(u), url: res.invite_url }); };
   const resend = (u) => run(api.post(`/admin/users/${u.id}/resend-verification`)).catch(() => {});
@@ -115,6 +118,7 @@ export default function Users({ role = 'user' }) {
       key: '_a', label: '', className: 'text-right', render: (u) => (
         <Actions>
           {!isAdmin && <Action icon={Eye} label="View details" onClick={() => navigate(`/admin/users/${u.id}`)} />}
+          {!isAdmin && <Action icon={Link2} label="Generate links for this user" tone="success" onClick={() => setLinkFor(u)} />}
           {!isAdmin && <Action icon={UserCog} label="Impersonate" tone="warning" onClick={() => impersonate(u)} />}
           <Action icon={Send} label="Send invitation again (sets a new password link)" onClick={() => reinvite(u)} />
           {isAdmin && <Action icon={ShieldCheck} label="Reset authenticator (lost phone)" tone="warning" onClick={() => resetAuth(u)} />}
@@ -192,6 +196,7 @@ export default function Users({ role = 'user' }) {
           <button type="submit" className="hidden" />
         </form>
       </Dialog>
+      <GenerateLinksDialog open={!!linkFor} user={linkFor} onClose={() => setLinkFor(null)} />
       <Dialog open={!!invite} onOpenChange={(o) => !o && setInvite(null)} size="md" icon={Send} title="Share the invitation link" description={`E-mail is not set up, so ${invite?.name || 'the user'} did not get a message. Send them this link (works once, 7 days):`}
         footer={<Button onClick={() => setInvite(null)}>Done</Button>}>
         <div className="flex gap-2"><Input readOnly value={invite?.url || ''} onFocus={(e) => e.target.select()} className="flex-1 font-mono text-xs" /><Button variant="outline" onClick={() => { navigator.clipboard?.writeText(invite.url); }}>Copy</Button></div>
@@ -234,6 +239,7 @@ export function UserDetail() {
         </Card>
       </motion.div>
       {u.organisation_profile && <OrganisationCard u={u} onChanged={load} />}
+      <UserLinks user={u} />
       <div className="mt-6 grid gap-6 lg:grid-cols-3">
         <Card>
           <CardHeader icon={Package} title="Subscription" />
@@ -259,6 +265,36 @@ export function UserDetail() {
         </Card>
       </div>
     </>
+  );
+}
+
+/** the links generated for this user and the links their e-mail owns: add more, reset the e-mail, move to another e-mail */
+function UserLinks({ user }) {
+  const [rows, setRows] = useState(null);
+  const [adding, setAdding] = useState(false);
+  const [act, setAct] = useState(null); // { link, mode }
+  const load = () => api.get('/admin/short-links', { params: { for_user: user.id, per_page: 100 } }).then(({ data }) => setRows(data.data));
+  useEffect(() => { load(); }, [user.id]); // eslint-disable-line
+  return (
+    <Card className="mt-6 overflow-hidden">
+      <CardHeader icon={Link2} title={`Links${rows ? ` (${rows.length})` : ''}`} description="Business cards, redirect links and review links for this customer. Each has its own plan."
+        actions={<Button size="sm" onClick={() => setAdding(true)}><Plus />Add link</Button>} />
+      <DataTable loading={!rows} rows={rows || []} empty={<EmptyState icon={Link2} title="No links yet" description="Generate a link; whoever opens it first attaches it to their e-mail." />} columns={[
+        { key: 'link', label: 'Link', render: (l) => <div><button type="button" onClick={() => { navigator.clipboard?.writeText(l.short_url); toast.success('Copied'); }} className="cursor-pointer font-mono text-xs font-semibold text-primary hover:underline">{l.short_url.replace(/^https?:\/\//, '')}</button><p className="text-xs text-muted-foreground">{kindLabel(l.kind) || 'Manual link'}</p></div> },
+        { key: 'plan', label: 'Plan', render: (l) => <div><p className="text-sm font-medium">{l.plan_name || '-'}</p><p className="text-xs text-muted-foreground">{l.expires_at ? `until ${fmtDate(l.expires_at)}` : l.kind ? 'starts when claimed' : ''}</p></div> },
+        { key: 'owner', label: 'Attached to', render: (l) => (l.claimed_email ? <span className="text-sm">{l.claimed_email}</span> : <span className="text-xs text-muted-foreground">Not claimed yet</span>) },
+        { key: 'state', label: 'Status', render: (l) => <StateBadge state={l.state} /> },
+        { key: '_a', label: '', className: 'text-right', render: (l) => (
+          <Actions>
+            <Action icon={QrCode} label="Download QR" href={`/api/admin/short-links/${l.id}/qrcode?size=800`} />
+            {l.kind && l.claimed_at && <Action icon={MailX} label="Reset the e-mail (back to unclaimed)" tone="warning" onClick={() => setAct({ link: l, mode: 'reset' })} />}
+            {l.kind && l.claimed_at && <Action icon={ArrowRightLeft} label="Move to another e-mail" tone="info" onClick={() => setAct({ link: l, mode: 'move' })} />}
+          </Actions>
+        ) },
+      ]} />
+      <GenerateLinksDialog open={adding} user={user} onClose={() => setAdding(false)} onDone={load} />
+      <ResetMoveDialog link={act?.link} mode={act?.mode} onClose={() => setAct(null)} onDone={load} />
+    </Card>
   );
 }
 

@@ -57,7 +57,7 @@ function Showcase() {
   );
 }
 
-function Shell({ title, subtitle, children, footer }) {
+export function Shell({ title, subtitle, children, footer }) {
   useEffect(() => { document.title = title; }, [title]);
   const { settings } = useAuth();
   const theme = settings?.auth_theme || 'split';
