@@ -93,7 +93,8 @@ async function completeLogin(req, res, user) {
   const staff = STAFF_ROLES.includes(user.role);
   // (skipped while no SMTP server is configured, so nobody gets locked out by codes that cannot be delivered)
   // emergency switch: set DISABLE_LOGIN_OTP=1 on the server if the mail server breaks
-  if ((s.login_otp_enable === '1' || (staff && s.enforce_2fa_staff !== '0')) && process.env.DISABLE_LOGIN_OTP !== '1' && (await mail.isConfigured())) {
+  // PASSWORD_LOGIN_OTP=0: the password tab signs in directly; the e-mail code is then a separate way to sign in (the other tab)
+  if ((s.login_otp_enable === '1' || (staff && s.enforce_2fa_staff !== '0')) && process.env.DISABLE_LOGIN_OTP !== '1' && process.env.PASSWORD_LOGIN_OTP !== '0' && (await mail.isConfigured())) {
     try { await security.sendLoginCode(user); } catch (e) { console.error('[login code]', e.message); fail(502, 'We could not e-mail your sign-in code. Please try again in a moment.'); }
     const challenge = jwt.sign({ sub: user.id, v: user.token_version || 0, p: '2fa', m: 'email' }, jwtSecret, { expiresIn: '10m' });
     const [n, d] = String(user.email).split('@');
