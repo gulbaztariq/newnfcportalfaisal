@@ -104,6 +104,8 @@ async function all() {
   const rows = await Setting.findAll();
   cache = { ...DEFAULTS };
   for (const r of rows) cache[r.key] = r.value ?? '';
+  // REGISTER_ENABLE=0 in the server environment closes public sign-up whatever the admin setting says
+  if (process.env.REGISTER_ENABLE === '0' || process.env.REGISTER_ENABLE === '1') cache.register_enable = process.env.REGISTER_ENABLE;
   return cache;
 }
 async function get(key) { return (await all())[key]; }
