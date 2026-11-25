@@ -12,11 +12,16 @@ let cached = { key: null, transport: null };
 async function transport() {
   const s = await settings.all();
   const host = s.mail_host || mail.host;
-  const key = JSON.stringify([host, s.mail_port, s.mail_username, s.mail_password, s.mail_encryption]);
+  // no mail server saved in the admin settings: the server environment (MAIL_HOST, MAIL_PORT, MAIL_SECURE...) decides everything,
+  // otherwise the built-in defaults (port 587 / tls) would override its port and SSL choice
+  const env = !s.mail_host && !!mail.host;
+  const port = Number(env ? mail.port : (s.mail_port || mail.port || 587));
+  const secure = env ? !!mail.secure : (s.mail_encryption || (mail.secure ? 'ssl' : 'tls')) === 'ssl';
+  const key = JSON.stringify([host, port, secure, s.mail_username, s.mail_password]);
   if (cached.key === key) return cached.transport;
   const t = host
     ? nodemailer.createTransport({
-      host, port: Number(s.mail_port || mail.port || 587), secure: (s.mail_encryption || (mail.secure ? 'ssl' : 'tls')) === 'ssl',
+      host, port, secure,
       auth: (s.mail_username || mail.user) ? { user: s.mail_username || mail.user, pass: s.mail_password || mail.password } : undefined,
     })
     : nodemailer.createTransport({ jsonTransport: true });
