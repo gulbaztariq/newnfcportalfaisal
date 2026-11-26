@@ -75,3 +75,17 @@ test('admin order: delivery details can be left for later when the form says so,
   assert.equal(later.status, 201, later.text.slice(0, 200));
   assert.equal(later.body.data.is_cod, true);
 });
+
+test('admin order: the link is created with the order, and a bad link request stops the order from being created', async () => {
+  const p = await product({ price: 300 });
+  const items = [{ product_id: p.id, quantity: 3 }];
+  const before = await M.NfcOrder.count(); const linksBefore = await M.ShortLink.count();
+  const bad = await admin.post('/api/admin/orders', base(items, { link: { kind: 'vcard', qty: 3 } }));
+  assert.equal(bad.status, 422, 'a business card link needs a plan');
+  assert.equal(await M.NfcOrder.count(), before, 'no order without its link');
+  const ok = await admin.post('/api/admin/orders', base(items, { link: { kind: 'review', qty: 3 } }));
+  assert.equal(ok.status, 201, ok.text.slice(0, 200));
+  assert.equal(ok.body.links.length, 3);
+  assert.ok(ok.body.links.every((l) => l.kind === 'review' && l.nfc_order_id === ok.body.data.id && l.state === 'unclaimed'));
+  assert.equal(await M.ShortLink.count(), linksBefore + 3);
+});
