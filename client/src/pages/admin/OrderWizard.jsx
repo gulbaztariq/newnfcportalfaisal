@@ -252,19 +252,14 @@ export default function OrderWizard() {
       <div className="grid items-start gap-5 lg:grid-cols-[1fr_330px]">
         <Card>
           <CardBody className="space-y-6">
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="Order source" hint="The website or channel this order came from">
-                <Select value={form.order_source_id} onChange={(v) => set('order_source_id', v)} allowEmpty placeholder="Choose the source" options={meta.sources.map((x) => ({ value: x.id, label: x.name }))} />
+            {planChange ? (
+              <Field label="Client" required error={errors.customer} hint={subInfo === undefined ? 'The plan of this customer is renewed or upgraded' : subInfo === null ? 'This customer has no plan yet' : `${subInfo.plan}${subInfo.expired ? ' expired' : ' runs'} until ${new Date(subInfo.ends_at).toLocaleDateString()}`}>
+                <SearchSelect value={form.customer} onChange={(u) => set('customer', u)} search={fetchList('/admin/customers/search')} invalid={!!errors.customer} placeholder="Search by name, e-mail or phone..." empty="No customer found"
+                  renderItem={(u) => <PersonLine p={u} sub={[u.email, u.contact].filter(Boolean).join(' · ')} />} renderValue={(u) => <PersonLine p={u} sub={[u.email, u.contact].filter(Boolean).join(' · ')} />} />
               </Field>
-              {planChange ? (
-                <Field label="Client" required error={errors.customer} hint={subInfo === undefined ? 'The plan of this customer is renewed or upgraded' : subInfo === null ? 'This customer has no plan yet' : `${subInfo.plan}${subInfo.expired ? ' expired' : ' runs'} until ${new Date(subInfo.ends_at).toLocaleDateString()}`}>
-                  <SearchSelect value={form.customer} onChange={(u) => set('customer', u)} search={fetchList('/admin/customers/search')} invalid={!!errors.customer} placeholder="Search by name, e-mail or phone..." empty="No customer found"
-                    renderItem={(u) => <PersonLine p={u} sub={[u.email, u.contact].filter(Boolean).join(' · ')} />} renderValue={(u) => <PersonLine p={u} sub={[u.email, u.contact].filter(Boolean).join(' · ')} />} />
-                </Field>
-              ) : (
-                <Field label="Name of client" required error={errors.name}><Input value={form.name} onChange={(e) => set('name', e.target.value)} placeholder="Client name" autoComplete="off" /></Field>
-              )}
-            </div>
+            ) : (
+              <Field label="Name of client" required error={errors.name}><Input value={form.name} onChange={(e) => set('name', e.target.value)} placeholder="Client name" autoComplete="off" /></Field>
+            )}
 
             {/* products: every product added on the Products page is in the list */}
             <div className="space-y-3">
@@ -352,14 +347,9 @@ export default function OrderWizard() {
               {tagType && <Field label="Tag owner's phone" required error={errors.phone} hint="Messages from whoever scans the tag are sent here. The number is never shown."><Input value={form.phone} onChange={(e) => set('phone', e.target.value)} placeholder="03xx xxxxxxx" className="max-w-64" /></Field>}
             </div>
             <Field label="Note"><Textarea rows={2} value={form.admin_note} onChange={(e) => set('admin_note', e.target.value)} placeholder="Optional: card details, delivery instructions..." /></Field>
-            <div>
-              <button type="button" onClick={() => set('more', !form.more)} className="cursor-pointer text-sm font-medium text-primary hover:underline">{form.more ? 'Hide more options' : 'More options'}</button>
-              {form.more && (
-                <div className="mt-3 max-w-md"><Field label="Order type" hint="Normally chosen from the product. Change it for a renewal, an upgrade, a wholesale order or samples.">
-                  <Select value={form.type_override} onChange={pickType} allowEmpty placeholder="Automatic (from the product)" options={ORDER_TYPES.map((t) => ({ value: t.key, label: t.title }))} />
-                </Field></div>
-              )}
-            </div>
+            <Field label="Order source" hint="The website or channel this order came from">
+              <Select value={form.order_source_id} onChange={(v) => set('order_source_id', v)} allowEmpty placeholder="Choose the source" options={meta.sources.map((x) => ({ value: x.id, label: x.name }))} />
+            </Field>
           </CardBody>
         </Card>
 
