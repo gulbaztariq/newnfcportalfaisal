@@ -394,7 +394,14 @@ function ManualTracking({ onSave }) {
 }
 
 /* ================================================================ products */
-const blankProduct = { plan_id: '', name: '', category: '', sku: '', price: '', compare_price: '', customization_price: 0, size_label: '', short_description: '', description: '', variants: [], featured: false, show_in_shop: true, status: true, sort: 0, weight_grams: 50, extra_cost: 0, track_stock: true, front_image: null, back_image: null };
+/** what a product is sold as: decides the order type on the New order page */
+const PRODUCT_KINDS = [
+  { value: 'nfc_profile', label: 'NFC Business Card' }, { value: 'blank_card', label: 'Blank NFC card / tag' }, { value: 'printing', label: 'Printing only' }, { value: 'reprint', label: 'Card reprinting (metal / wood / PVC)' },
+  { value: 'digital', label: 'Digital profile' }, { value: 'plan', label: 'Plan only (renewal / upgrade)' }, { value: 'social_static', label: 'Social card: static link' }, { value: 'social_dynamic', label: 'Social card: dynamic link' },
+  { value: 'social_profile', label: 'Social profile (all-in-one)' }, { value: 'contact_tag', label: 'Car contact tag (number hidden)' }, { value: 'airport_tag', label: 'Airport tag (luggage)' },
+];
+const KIND_LABEL = Object.fromEntries(PRODUCT_KINDS.map((k) => [k.value, k.label]));
+const blankProduct = { product_kind: '', order_source_id: '', discount_type: 'fixed', discount_value: '', plan_id: '', name: '', category: '', sku: '', price: '', compare_price: '', customization_price: 0, size_label: '', short_description: '', description: '', variants: [], featured: false, show_in_shop: true, status: true, sort: 0, weight_grams: 50, extra_cost: 0, track_stock: true, front_image: null, back_image: null };
 
 export function Products() {
   const [rows, setRows] = useState(null);
@@ -425,36 +432,27 @@ export function Products() {
         <ButtonLink href="/shop" target="_blank" rel="noreferrer" variant="outline"><ExternalLink />View shop</ButtonLink>
         <Button onClick={() => setEditing(blankProduct)}><Plus />Add product</Button>
       </PageHeader>
-      {!rows ? <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">{Array.from({ length: 8 }).map((_, i) => <Skeleton key={i} className="h-80 rounded-3xl" />)}</div> : !shown.length ? <Card><EmptyState icon={Package} title="No products" action={<Button onClick={() => setEditing(blankProduct)}><Plus />Add product</Button>} /></Card> : (
-        <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
-          {shown.map((p, i) => (
-            <motion.div key={p.id} initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: Math.min(i * 0.03, 0.3) }}>
-              <Card hover className={cn('group flex h-full flex-col overflow-hidden', !p.status && 'opacity-60')}>
-                <div className="relative aspect-[4/3] bg-linear-to-br from-violet-500/10 to-fuchsia-500/10">
-                  {p.front_image ? <img src={p.front_image} alt="" className="size-full object-cover transition duration-500 group-hover:scale-105" /> : <div className="grid size-full place-items-center"><Nfc className="size-12 text-primary/40" /></div>}
-                  <div className="absolute top-3 left-3 flex gap-1.5">{p.category && <Badge className="bg-card/90 shadow">{p.category}</Badge>}{p.featured && <Badge tone="primary" className="shadow"><Sparkles className="size-3" />Featured</Badge>}</div>
-                  {!p.show_in_shop && <Badge tone="warning" className="absolute top-3 right-3 shadow">Hidden in shop</Badge>}
-                </div>
-                <div className="flex flex-1 flex-col p-4">
-                  <p className="font-display font-semibold leading-snug">{p.name}</p>
-                  {[p.size_label, p.sku, p.order_source?.name].filter(Boolean).length > 0 && <p className="text-xs text-muted-foreground">{[p.size_label, p.sku, p.order_source?.name].filter(Boolean).join(' · ')}</p>}
-                  <div className="mt-2 flex items-baseline gap-2"><span className="text-lg font-bold">{rs(p.price)}</span>{Number(p.compare_price) > Number(p.price) && <span className="text-sm text-muted-foreground line-through">{rs(p.compare_price)}</span>}</div>
-                  {Number(p.customization_price) > 0 && <p className="text-xs text-primary">Customisation +{rs(p.customization_price)}</p>}
-                  {p.variants?.length > 0 && <p className="text-xs text-muted-foreground">Options: {p.variants.map((v) => v.name).join(', ')}</p>}
-                  <p className="mt-1.5">{p.plan ? <Badge tone="primary"><IdCard className="size-3" />Plan: {p.plan.name}</Badge> : <Badge tone="neutral">Non-plan product</Badge>}</p>
-                  <div className="mt-auto flex items-center gap-2 pt-4">
-                    <Tip content="Visible in the shop"><span><Switch size="sm" checked={p.show_in_shop} onChange={(v) => toggle(p, 'show_in_shop', v)} /></span></Tip>
-                    <span className="flex-1" />
-                    <Tip content="Costing: inventory components + printing cost"><Button size="icon-sm" variant="ghost" onClick={() => setCosting(p)}><Calculator /></Button></Tip>
-                    <Tip content="Edit"><Button size="icon-sm" variant="ghost" onClick={() => setEditing(p)}><Pencil /></Button></Tip>
-                    <Tip content="Delete"><Button size="icon-sm" variant="ghost" onClick={() => remove(p)}><Trash2 /></Button></Tip>
-                  </div>
-                </div>
-              </Card>
-            </motion.div>
-          ))}
-        </div>
-      )}
+      <Card>
+        <DataTable loading={!rows} rows={shown} empty={<EmptyState icon={Package} title="No products" description="Add your products here. They are what you pick on the New order page." action={<Button onClick={() => setEditing(blankProduct)}><Plus />Add product</Button>} />} columns={[
+          { key: 'name', label: 'Product', render: (p) => (
+            <div className="flex min-w-0 items-center gap-3">
+              <span className="grid size-11 shrink-0 place-items-center overflow-hidden rounded-xl bg-muted">{p.front_image ? <img src={p.front_image} alt="" loading="lazy" className="size-full object-cover" /> : <Nfc className="size-5 text-muted-foreground" />}</span>
+              <div className="min-w-0"><p className="truncate font-medium">{p.name}</p><p className="truncate text-xs text-muted-foreground">{[p.category, p.sku].filter(Boolean).join(' · ') || '-'}</p></div>
+            </div>) },
+          { key: 'kind', label: 'Order type', render: (p) => (p.product_kind ? <Badge tone="primary">{KIND_LABEL[p.product_kind] || p.product_kind}</Badge> : <span className="text-xs text-muted-foreground">NFC product (default)</span>) },
+          { key: 'src', label: 'Source', render: (p) => p.order_source?.name || <span className="text-xs text-muted-foreground">Own product</span> },
+          { key: 'price', label: 'Price', render: (p) => (
+            <div><span className="font-semibold">{rs(p.price)}</span>{Number(p.discount_value) > 0 && <p className="text-xs text-success">Discount {p.discount_type === 'percent' ? `${Number(p.discount_value)}%` : rs(p.discount_value)}</p>}{p.plan && <p className="text-xs text-muted-foreground">Plan: {p.plan.name}</p>}</div>) },
+          { key: 'active', label: 'Active', render: (p) => <Tip content={p.status ? 'Can be ordered' : 'Hidden from orders'}><span><Switch size="sm" checked={!!p.status} onChange={(v) => toggle(p, 'status', v)} /></span></Tip> },
+          { key: 'shop', label: 'In shop', render: (p) => <Switch size="sm" checked={!!p.show_in_shop} onChange={(v) => toggle(p, 'show_in_shop', v)} /> },
+          { key: 'actions', label: '', align: 'right', render: (p) => (
+            <div className="flex justify-end gap-0.5">
+              <Tip content="Costing: inventory components + printing cost"><Button size="icon-sm" variant="ghost" onClick={() => setCosting(p)}><Calculator /></Button></Tip>
+              <Tip content="Edit"><Button size="icon-sm" variant="ghost" onClick={() => setEditing(p)}><Pencil /></Button></Tip>
+              <Tip content="Delete"><Button size="icon-sm" variant="ghost" onClick={() => remove(p)}><Trash2 /></Button></Tip>
+            </div>) },
+        ]} />
+      </Card>
       {meta && meta.last_page > 1 && <Card className="mt-5"><Pagination meta={meta} onPage={(n) => { setPage(n); window.scrollTo({ top: 0, behavior: 'smooth' }); }} /></Card>}
       {editing && <ProductForm product={editing} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); load(); }} />}
       {costing && <ProductCosting product={costing} onClose={() => setCosting(null)} onSaved={load} />}
@@ -463,9 +461,11 @@ export function Products() {
 }
 
 function ProductForm({ product, onClose, onSaved }) {
-  const form = useForm({ ...blankProduct, ...product, plan_id: product.plan_id || '', variants: product.variants || [] });
+  const form = useForm({ ...blankProduct, ...product, plan_id: product.plan_id || '', order_source_id: product.order_source_id || '', product_kind: product.product_kind || '', discount_type: product.discount_type || 'fixed', discount_value: product.discount_value ?? '', variants: product.variants || [] });
   const [busy, setBusy] = useState(false);
   const [plans, setPlans] = useState([]);
+  const [sources, setSources] = useState([]);
+  useEffect(() => { api.get('/admin/order-sources', { params: { per_page: 100 } }).then(({ data }) => setSources((data.data || []).map((x) => ({ value: x.id, label: x.name })))).catch(() => {}); }, []);
   useEffect(() => { api.get('/admin/lookups').then(({ data }) => setPlans(data.plans.map((x) => ({ value: x.id, label: x.name })))); }, []);
   const v = form.values;
   const save = async () => {
@@ -487,13 +487,15 @@ function ProductForm({ product, onClose, onSaved }) {
         <Field label="Compare-at price" hint="Shown struck through"><Input {...form.input('compare_price')} type="number" min="0" /></Field>
         <Field label="Customisation price" hint="0 = not offered"><Input {...form.input('customization_price')} type="number" min="0" /></Field>
         <Field label="SKU"><Input {...form.input('sku')} /></Field>
+        <Field label="Order source" hint="The website or channel this product comes from"><Select value={v.order_source_id} onChange={(x) => form.set('order_source_id', x)} allowEmpty placeholder="Own product (no source)" options={sources} /></Field>
+        <Field label="Discount" hint="Taken off the price on every order" error={form.errors.discount_value}>
+          <div className="flex gap-2"><Input {...form.input('discount_value')} type="number" min="0" placeholder="0" /><Segmented id="pdt" value={v.discount_type} onChange={(x) => form.set('discount_type', x)} options={[{ value: 'fixed', label: 'Rs' }, { value: 'percent', label: '%' }]} /></div>
+        </Field>
         <Field label="Plan included" className="sm:col-span-2" hint="Customers who get this product (e.g. an NFC card) also get this plan when an account is created with the order. Leave empty for non-plan products (stickers, stands...).">
           <Select value={v.plan_id} onChange={(x) => form.set('plan_id', x)} allowEmpty placeholder="Non-plan product" options={plans} />
         </Field>
         <Field label="Order type this product is for" className="sm:col-span-2" hint="Decides which order types offer it. A tag that hides the owner's number is a Contact tag.">
-          <Select value={v.product_kind} onChange={(x) => form.set('product_kind', x)} allowEmpty placeholder="Not set (offered for normal cards)" options={[
-            { value: 'airport_tag', label: 'Airport tag (luggage)' }, { value: 'contact_tag', label: 'Car contact tag (number hidden)' }, { value: 'blank_card', label: 'Blank NFC card / tag' }, { value: 'nfc_profile', label: 'NFC Business Card' }, { value: 'social_static', label: 'Social card: static link' },
-            { value: 'social_dynamic', label: 'Social card: dynamic link' }, { value: 'social_profile', label: 'Social profile (all-in-one)' }, { value: 'printing', label: 'Printing only' }, { value: 'plan', label: 'Plan only (renewal / upgrade)' }, { value: 'reprint', label: 'Card reprinting (metal / wood / PVC)' }, { value: 'digital', label: 'Digital profile' }]} />
+          <Select value={v.product_kind} onChange={(x) => form.set('product_kind', x)} allowEmpty placeholder="Not set (a normal NFC product)" options={PRODUCT_KINDS} />
         </Field>
         {['contact_tag', 'airport_tag'].includes(v.product_kind) && <Field label="Tags per unit" hint="A pack of 2 makes 2 tags when it is ordered"><Input {...form.input('tags_per_unit')} type="number" min="1" max="50" /></Field>}
         <Field label="Short description" className="sm:col-span-2"><Input {...form.input('short_description')} maxLength={500} /></Field>
