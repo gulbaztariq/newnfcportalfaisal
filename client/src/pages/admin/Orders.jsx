@@ -99,7 +99,11 @@ export function Orders() {
 }
 
 /** the rest of the payment, and how it is paid, is decided when the order is closed */
-function RemainingPaymentDialog({ order, accounts, remaining, onClose, onSave, busy, closing }) {
+function RemainingPaymentDialog({ order, accounts, deliveryDefault, onClose, onSave, busy, closing }) {
+  const ships = order.fulfilment === 'delivery';
+  const [delivery, setDelivery] = useState(String(Number(order.delivery_charges || 0)));
+  // what is left follows the delivery fee typed here
+  const remaining = Math.max(0, Number(order.amount) - Number(order.advance_amount || 0) - Number(order.delivery_charges || 0) + (delivery === '' ? 0 : Number(delivery)));
   const [type, setType] = useState(order.fulfilment === 'delivery' ? 'cod' : 'cash');
   const [account, setAccount] = useState(accounts[0] ? String(accounts[0].id) : '');
   const types = [...(order.fulfilment === 'delivery' ? [{ value: 'cod', label: 'Cash on delivery (the courier collects it)' }] : []), { value: 'cash', label: 'Cash' }, { value: 'online', label: 'Online payment' }, { value: 'bank', label: 'Bank transfer' }];
@@ -107,8 +111,9 @@ function RemainingPaymentDialog({ order, accounts, remaining, onClose, onSave, b
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()} size="sm" icon={Banknote} title={closing ? 'Complete the order' : 'Remaining payment'}
       description={`${rs(remaining)} is still to be paid${Number(order.advance_amount) > 0 ? ` (advance ${rs(order.advance_amount)} already received)` : ''}. Choose how it is paid.`}
-      footer={<><Button variant="outline" onClick={onClose}>Cancel</Button><Button loading={busy} disabled={needsAccount && !account} onClick={() => onSave({ type, account_id: needsAccount ? Number(account) : undefined })}>{closing ? 'Save and complete' : 'Save'}</Button></>}>
+      footer={<><Button variant="outline" onClick={onClose}>Cancel</Button><Button loading={busy} disabled={needsAccount && !account} onClick={() => onSave({ remaining_payment: { type, account_id: needsAccount ? Number(account) : undefined }, ...(ships ? { delivery_charges: delivery === '' ? 0 : Number(delivery) } : {}) })}>{closing ? 'Save and complete' : 'Save'}</Button></>}>
       <div className="space-y-4">
+        {ships && <Field label="Delivery fee" hint={`Decided now. Your default is ${rs(deliveryDefault)}; type 0 for free delivery.`}><Input type="text" inputMode="decimal" autoComplete="off" value={delivery} onChange={(e) => setDelivery(e.target.value.replace(/[^\d.]/g, '').replace(/(\..*)\./g, '$1'))} className="max-w-48" /></Field>}
         <Field label="Remaining payment option" required><Select value={type} onChange={setType} options={types} /></Field>
         {needsAccount && <Field label="Payment method" required hint={accounts.length ? 'The cash, bank or wallet account the money went into' : 'Add a payment method under Finance first'}><Select value={account} onChange={setAccount} placeholder="Choose the method" options={accounts.map((a) => ({ value: a.id, label: a.name }))} /></Field>}
       </div>
@@ -136,7 +141,7 @@ export function OrderDetail() {
   const unpaid = o && o.payment_status !== 'paid' && !o.is_cod && o.payment_type !== 'collection' && remaining > 0;
   // closing the order asks for the remaining payment first
   const moveTo = (st) => { if (st === 'delivered' && unpaid) setPayDlg({ then: st }); else setStatus(st); };
-  const saveRemaining = (remaining_payment) => act('pay', async () => { await run(api.patch(`/admin/orders/${id}`, { remaining_payment }), 'Payment recorded'); const then = payDlg?.then; setPayDlg(null); if (then) await run(api.patch(`/admin/orders/${id}`, { order_status: then, note: note || undefined, stock_vendor_id: vendorId || undefined }), `Order moved to ${d.labels[then]}`); });
+  const saveRemaining = (body) => act('pay', async () => { await run(api.patch(`/admin/orders/${id}`, body), 'Payment recorded'); const then = payDlg?.then; setPayDlg(null); if (then) await run(api.patch(`/admin/orders/${id}`, { order_status: then, note: note || undefined, stock_vendor_id: vendorId || undefined }), `Order moved to ${d.labels[then]}`); });
   const loadCities = () => { if (!cities) api.get('/admin/courier/cities').then(({ data }) => setCities(data.data)).catch((e) => { setCities([]); toast.error(e.message); }); };
   const copy = (t, msg = 'Copied') => { navigator.clipboard?.writeText(t); toast.success(msg); };
   const writeNfc = async () => {
@@ -159,7 +164,7 @@ export function OrderDetail() {
   const items = o.items?.length ? o.items : [{ id: 0, name: o.nfc_card?.name || 'NFC card', quantity: o.quantity, unit_price: o.unit_price, total: o.amount }];
   return (
     <>
-      {payDlg && <RemainingPaymentDialog order={o} accounts={d.accounts || []} remaining={remaining} closing={!!payDlg.then} busy={busy === 'pay'} onClose={() => setPayDlg(null)} onSave={saveRemaining} />}
+      {payDlg && <RemainingPaymentDialog order={o} accounts={d.accounts || []} deliveryDefault={d.delivery_default || 0} closing={!!payDlg.then} busy={busy === 'pay'} onClose={() => setPayDlg(null)} onSave={saveRemaining} />}
       <Link to="/admin/orders" className="mb-4 inline-flex min-h-6 items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" />All orders</Link>
       <PageHeader eyebrow={`${SOURCE[o.source]?.[0] || 'Portal'} order${o.order_source ? ` · ${o.order_source.name}` : ''}${o.order_type && o.order_type !== 'nfc_profile' ? ` · ${ORDER_TYPE_LABEL[o.order_type]}` : ''}${Number(o.sample_credit) > 0 ? ` · sample credit ${Number(o.sample_credit)}` : ''}${Number(o.plan_credit) > 0 ? ` · plan credit ${Number(o.plan_credit)}` : ''} · ${fmtDateTime(o.created_at)} · by ${createdBy(o)}`} title={o.order_number} description={`${o.name} · ${rs(o.amount)} · ${paymentLabel(o)}${o.fulfilment === 'collection' ? ' · Office collection' : ''}`}>
         {!['digital', 'renewal', 'upgrade'].includes(o.order_type) && <Tip content="Same customer and products at wholesale prices"><ButtonLink as={Link} to={`/admin/orders/new?bulk=${o.id}`} variant="outline"><Boxes />Create bulk order</ButtonLink></Tip>}

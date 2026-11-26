@@ -119,3 +119,19 @@ test('admin order: only an advance is taken when creating; the remaining payment
   const afterCod = await M.NfcOrder.findByPk(cod.body.data.id);
   assert.equal(afterCod.is_cod, true); assert.equal(afterCod.payment_status, 'pending');
 });
+
+test('admin order: the delivery fee is not taken at creation and is set when the order is completed', async () => {
+  const p = await product({ price: 1000 });
+  const r = await admin.post('/api/admin/orders', base([{ product_id: p.id, quantity: 1 }], { details_later: true, delivery_charges: '0' }));
+  assert.equal(r.status, 201, r.text.slice(0, 200));
+  const o = await M.NfcOrder.findByPk(r.body.data.id);
+  assert.equal(Number(o.delivery_charges), 0); assert.equal(Number(o.amount), 1000);
+  const set = await admin.patch(`/api/admin/orders/${o.id}`, { delivery_charges: 180 });
+  assert.equal(set.status, 200, set.text.slice(0, 200));
+  assert.equal(Number((await M.NfcOrder.findByPk(o.id)).amount), 1180, 'the total follows the delivery fee');
+  const again = await admin.patch(`/api/admin/orders/${o.id}`, { delivery_charges: 100 });
+  assert.equal(again.status, 200); assert.equal(Number((await M.NfcOrder.findByPk(o.id)).amount), 1100, 'changing it replaces the old fee');
+  const acc = await M.FinanceAccount.create({ name: 'Delivery Test Cash', type: 'cash', status: true });
+  assert.equal((await admin.patch(`/api/admin/orders/${o.id}`, { remaining_payment: { type: 'cash', account_id: acc.id } })).status, 200);
+  assert.equal((await admin.patch(`/api/admin/orders/${o.id}`, { delivery_charges: 50 })).status, 422, 'a paid order total no longer changes');
+});

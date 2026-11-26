@@ -70,7 +70,7 @@ export default function OrderWizard() {
   const [lines, setLines] = useState([newLine()]);
   const [form, setValues] = useState({
     type_override: '', order_source_id: '', name: '', phone: '', email: '', customer: null, guest: null,
-    advance_on: false, advance_amount: '', advance_account_id: '', delivery_charges: '', admin_note: '', sample_order: null, plan_credit: '',
+    advance_on: false, advance_amount: '', advance_account_id: '', admin_note: '', sample_order: null, plan_credit: '',
     more: false,
   });
   const [errors, setErrors] = useState({});
@@ -113,7 +113,7 @@ export default function OrderWizard() {
     items: valid.map((l) => ({ product_id: l.product_id, variant: l.variant, quantity: l.quantity, unit_price: saleOf(l) === null ? l.unit_price : actualOf(l), customization: false })),
     order_type: type, social_variant: type === 'social' ? SOCIAL_KIND[products[valid[0]?.product_id]?.product_kind] : undefined,
     sample_order_id: type === 'wholesale' ? form.sample_order?.id : undefined, plan_credit: type === 'upgrade' && form.plan_credit !== '' ? form.plan_credit : undefined,
-    fulfilment: noShip ? 'digital' : 'delivery', is_cod: false, delivery_charges: noShip ? '' : form.delivery_charges, details_later: true,
+    fulfilment: noShip ? 'digital' : 'delivery', is_cod: false, delivery_charges: '0', details_later: true,
     discount_type: 'fixed', discount_value: r2(valid.reduce((a, l) => a + discountOf(l), 0)),
   });
   // live price from the server (the same rules as the saved order)
@@ -202,7 +202,7 @@ export default function OrderWizard() {
       setResult({ ...d, links: d.links });
     } catch (err) { setErrors(err.errors || {}); } finally { setBusy(false); }
   };
-  const restart = () => { setResult(null); setLines([newLine()]); setQuote(null); setReorderOf(null); setValues((f) => ({ ...f, customer: null, guest: null, name: '', phone: '', email: '', advance_on: false, advance_amount: '', delivery_charges: '', admin_note: '', sample_order: null })); };
+  const restart = () => { setResult(null); setLines([newLine()]); setQuote(null); setReorderOf(null); setValues((f) => ({ ...f, customer: null, guest: null, name: '', phone: '', email: '', advance_on: false, advance_amount: '', admin_note: '', sample_order: null })); };
 
   if (!meta) return <div className="grid gap-6 lg:grid-cols-[1fr_340px]"><Skeleton className="h-[520px] rounded-3xl" /><Skeleton className="h-80 rounded-3xl" /></div>;
 
@@ -379,14 +379,6 @@ export default function OrderWizard() {
               {quote?.plan_credit > 0 && <Row label="Credit for unused time" value={`- ${money(cur, quote.plan_credit)}`} className="font-medium text-success" />}
               {quote?.sample_credit > 0 && <Row label="Sample credit" value={`- ${money(cur, quote.sample_credit)}`} className="font-medium text-success" />}
               {quote?.tax > 0 && <Row label={`${quote.tax_name} (${quote.tax_rate}%)`} value={money(cur, quote.tax)} />}
-              <div className="flex items-center justify-between gap-3">
-                <span className="text-muted-foreground">Delivery fee</span>
-                {noShip ? <span>No shipping</span> : (
-                  <Tip content={`Leave empty for the default (${money(cur, quote?.delivery_default ?? meta.delivery_charges)}). Type 0 for free delivery.`}>
-                    <Input type="text" inputMode="decimal" autoComplete="off" aria-label="Delivery fee" value={form.delivery_charges} onChange={(e) => set('delivery_charges', decimal(e.target.value))} placeholder={String(quote?.delivery_default ?? meta.delivery_charges)} className="h-8 w-28 text-right" />
-                  </Tip>
-                )}
-              </div>
             </div>
             <div className={cn('flex items-center justify-between rounded-2xl bg-primary-soft px-4 py-3 text-primary transition-opacity', quoting && 'opacity-60')}>
               <span className="font-semibold">Total</span><span className="font-display text-xl font-bold">{money(cur, quote?.total)}</span>
