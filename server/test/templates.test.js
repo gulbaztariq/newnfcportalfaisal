@@ -270,3 +270,21 @@ test('template previews show Pakistani demo people, one fixed person per templat
   }
   assert.ok(seen.size >= 5, 'the gallery shows a variety of people');
 });
+
+test('every template has an Add to contact button that stays at the bottom while scrolling', async () => {
+  const c = client(ctx.base);
+  let shared = 0; let own = 0;
+  for (const t of TEMPLATES) {
+    const r = await c.get(`/t/preview/${t.slug}?full=1`);
+    assert.equal(r.status, 200, t.slug);
+    const hasBar = r.text.includes('<a class="addbar"') && r.text.includes('contact.vcf');
+    // a few designs already end in their own labelled save button
+    const hasOwn = r.text.includes('<nav class="tp-dock"') || /<nav class="x-(dock|bar2)[^"]*"[^>]*>[\s\S]*?>Save Contact</.test(r.text);
+    assert.ok(hasBar || hasOwn, `${t.slug}: a sticky Add to contact button`);
+    if (hasBar) { shared += 1; assert.ok(r.text.includes('.addbar{position:fixed'), `${t.slug}: fixed to the bottom`); } else own += 1;
+    assert.ok(!(hasBar && hasOwn), `${t.slug}: not two competing buttons`);
+  }
+  assert.ok(shared > own, 'most templates use the shared button');
+  // the picker thumbnails show it too
+  assert.ok((await c.get(`/t/preview/${TEMPLATES[0].slug}`)).text.includes('<a class="addbar"'));
+});
