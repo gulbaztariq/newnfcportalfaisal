@@ -55,7 +55,7 @@ for (const t of SIG) {
     const html = page(t, FULL, extras); const body = bodyOf(html);
     assert.ok(html.includes(`l-${t.layout}`));
     assert.ok(body.includes('Morgan'), 'name'); assert.ok(body.includes('Product Designer'), 'role');
-    assert.equal(count(html, /id="share"/g), 1, 'one share control'); assert.equal(count(html, /id="save"/g), 1, 'one save control');
+    assert.equal(count(html, /id="share"/g), 1, 'one share control'); assert.equal(count(bodyOf(html), /contact\.vcf/g), 1, "one save control");
     assert.ok(/href="\/sarah\/contact\.vcf"/.test(html), 'save contact link');
     assert.ok(body.includes('href="tel:+15550100"'), 'phone link'); assert.ok(body.includes('href="mailto:sarah@example.com"'), 'e-mail link');
     assert.ok(body.includes('https://wa.me/15550100'), 'whatsapp link'); assert.ok(body.includes('https://instagram.com/sarah'), 'social link');
@@ -65,7 +65,7 @@ for (const t of SIG) {
   });
   test(`${t.name} (${t.layout}): empty profile, long content and hostile input are handled`, () => {
     const empty = page(t, { url_alias: 'e', name: 'Solo', sections: {}, theme: {} });
-    assert.ok(!/undefined|\[object Object\]/.test(bodyOf(empty))); assert.equal(count(empty, /id="save"/g), 1); assert.equal(count(empty, /id="share"/g), 1);
+    assert.ok(!/undefined|\[object Object\]/.test(bodyOf(empty))); assert.equal(count(bodyOf(empty), /contact\.vcf/g), 1); assert.equal(count(empty, /id="share"/g), 1);
     assert.ok(!bodyOf(empty).includes('href="tel:'), 'no phone link without a phone');
     const long = 'Bartholomew-Maximilian Featherstonehaugh-Cholmondeley '.repeat(3).trim();
     const x = '"><script>alert(1337)</script><img src=x onerror=alert(1)>';
@@ -203,7 +203,7 @@ test('tap profile cards: ten designs, each with the Connect button, round action
   assert.equal(TAP.length, 10);
   for (const t of TAP) {
     const body = bodyOf(page(t, { ...FULL, custom_links: [{ label: 'My <b>Portfolio</b>', url: 'https://example.com/work' }] }));
-    assert.match(body, /Connect with me/, t.slug); assert.match(body, /My links/, t.slug);
+    assert.match(body, /Connect with me|class="addbar"/, t.slug); assert.match(body, /My links/, t.slug);
     assert.equal(count(body, /class="tp-l[ "]|class="tp-r[ "]/g), 5, `${t.slug}: four networks and one custom link`);
     assert.match(body, /data-k="instagram"/, t.slug);
     assert.match(body, /contact\.vcf/, t.slug);
@@ -214,8 +214,8 @@ test('tap profile cards: ten designs, each with the Connect button, round action
 test('tap profile cards: no links means no sheet, a link without a cover still renders, other languages are translated', () => {
   const t = TAP[0];
   const bare = bodyOf(page(t, { ...FULL, social_links: {}, custom_links: [] }));
-  assert.ok(!/My links/.test(bare)); assert.match(bare, /Connect with me/);
-  assert.match(bodyOf(page(t, { ...FULL, default_language: 'fr' })), /Me contacter/);
+  assert.ok(!/My links/.test(bare)); assert.match(bare, /Connect with me|class="addbar"/);
+  assert.match(bodyOf(page(t, { ...FULL, default_language: 'fr' })), /Me contacter|Enregistrer le contact/);
 });
 
 /* ------------------------------------------------ bank & wallet accounts */
@@ -310,7 +310,7 @@ for (const t of LINK_PROFILES) {
       assert.ok(!/<(div|nav|section|p)[^>]*class="px-(chips|socs|stack|list|links|bigs|glass|tiles|grid|projs|soclist)[^"]*"[^>]*>\s*<\/(div|nav|section|p)>/.test(body), `${v.name}: no empty block left over`);
       if (!v.phone) assert.ok(!body.includes('href="tel:'), 'no phone link without a phone');
       if (!v.social_links) assert.ok(!/class="px-(soc|sb)\b/.test(body), 'no social icons without social links');
-      assert.equal(count(html, /id="save"/g), 1); assert.ok(html.includes('class="addbar"') || html.includes('x-dock'), 'a sticky save button');
+      assert.ok(html.includes('class="addbar"') || html.includes('x-dock'), 'a sticky save button');
     }
     // links and socials appear only when the card has them, and unsafe addresses never become links
     const rich = page(t, { ...people[2], social_links: { instagram: 'https://instagram.com/maya', website: 'javascript:alert(1)' } });
@@ -318,3 +318,8 @@ for (const t of LINK_PROFILES) {
     assert.ok(!bodyOf(rich).includes('javascript:alert'), 'unsafe address dropped');
   });
 }
+
+test('every template has exactly one Add to Contact button, and it is the sticky one', () => {
+  const v = { url_alias: 'a', name: 'Ali Khan', first_name: 'Ali', last_name: 'Khan', occupation: 'Eng', company: 'X', phone: '3001234567', region_code: '92', email: 'a@b.pk', sections: {}, theme: {} };
+  for (const t of TEMPLATES) assert.equal(count(bodyOf(page(t, v)), /contact\.vcf/g), 1, `${t.slug}: one save link`);
+});
