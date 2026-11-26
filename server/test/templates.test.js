@@ -28,10 +28,10 @@ const bodyOf = (html) => html.split('</style>').pop().split('<script')[0];
 const count = (html, re) => (html.match(re) || []).length;
 
 /* ------------------------------------------------ collection */
-test('signature collection: 40 designs, each with its own layout, name, category and description', () => {
-  assert.equal(SIG.length, 40);
-  assert.equal(new Set(SIG.map((t) => t.layout)).size, 40, 'every design has its own page structure');
-  assert.equal(new Set(SIG.map((t) => t.name)).size, 40);
+test('signature collection: 45 designs, each with its own layout, name, category and description', () => {
+  assert.equal(SIG.length, 45);
+  assert.equal(new Set(SIG.map((t) => t.layout)).size, 45, 'every design has its own page structure');
+  assert.equal(new Set(SIG.map((t) => t.name)).size, 45);
   for (const t of SIG) {
     const m = metaOf(t);
     assert.ok(CATEGORIES.includes(m.category), `${t.slug} category`);
@@ -42,8 +42,8 @@ test('signature collection: 40 designs, each with its own layout, name, category
   }
 });
 test('the catalogue keeps one template per page layout (same-layout copies were removed)', () => {
-  assert.equal(TEMPLATES.length, 112);
-  assert.equal(new Set(TEMPLATES.map((t) => t.layout)).size, 112);
+  assert.equal(TEMPLATES.length, 117);
+  assert.equal(new Set(TEMPLATES.map((t) => t.layout)).size, 117);
   assert.equal(TEMPLATES.filter((t) => !signature.ARCH[t.layout]).length, 72);
   for (const slug of ['vcard1', 'vcard8', 'vcard174']) assert.ok(TEMPLATES.some((t) => t.slug === slug), `${slug} is used by live cards`);
   for (const t of TEMPLATES) assert.ok(CATEGORIES.includes(metaOf(t).category), t.slug);
@@ -288,3 +288,33 @@ test('every template has an Add to contact button that stays at the bottom while
   // the picker thumbnails show it too
   assert.ok((await c.get(`/t/preview/${TEMPLATES[0].slug}`)).text.includes('<a class="addbar"'));
 });
+
+/* ------------------------------------------------ link profiles (signature6) */
+const LINK_PROFILES = SIG.filter((t) => t.layout.startsWith('px'));
+test('the five link profiles are in the catalogue with their own names, layouts and readable defaults', () => {
+  assert.deepEqual(LINK_PROFILES.map((t) => t.slug), ['vcard181', 'vcard182', 'vcard183', 'vcard184', 'vcard185']);
+  assert.deepEqual(LINK_PROFILES.map((t) => t.name), ['Minimalist Creator', 'Luxury Executive', 'Modern Business', 'Creative Portfolio', 'Modern Social Profile']);
+});
+for (const t of LINK_PROFILES) {
+  test(`${t.name}: different profiles fill it from their own data and leave no empty blocks`, () => {
+    const people = [
+      { url_alias: 'p1', name: 'Zayn Ahmed', first_name: 'Zayn', last_name: 'Ahmed', occupation: 'Software Engineer', sections: {}, theme: {} },
+      { url_alias: 'p2', name: 'Zara Hussain', first_name: 'Zara', last_name: 'Hussain', company: 'Zara Couture', location: 'Lahore', phone: '3211234567', region_code: '92', social_links: { instagram: 'https://instagram.com/zara' }, sections: {}, theme: {} },
+      { url_alias: 'p3', name: 'Maya Sheikh', first_name: 'Maya', last_name: 'Sheikh', email: 'maya@example.pk', custom_links: [{ label: 'Book a visit', url: 'https://example.pk/book', desc: 'Same-day slots', badge: 'New', featured: true }, { label: 'Price list', url: 'https://example.pk/prices' }], sections: { links: true }, theme: {} },
+    ];
+    for (const v of people) {
+      const html = page(t, v); const body = bodyOf(html);
+      assert.ok(body.includes(v.first_name) && body.includes(v.last_name), `${v.name}: the name comes from the card`);
+      for (const other of people.filter((x) => x !== v)) assert.ok(!body.includes(other.last_name), `${v.name}: nothing from another card`);
+      assert.ok(!body.includes('Acme') && !body.includes('San Francisco'), 'no hard-coded content');
+      assert.ok(!/<(div|nav|section|p)[^>]*class="px-(chips|socs|stack|list|links|bigs|glass|tiles|grid|projs|soclist)[^"]*"[^>]*>\s*<\/(div|nav|section|p)>/.test(body), `${v.name}: no empty block left over`);
+      if (!v.phone) assert.ok(!body.includes('href="tel:'), 'no phone link without a phone');
+      if (!v.social_links) assert.ok(!/class="px-(soc|sb)\b/.test(body), 'no social icons without social links');
+      assert.equal(count(html, /id="save"/g), 1); assert.ok(html.includes('class="addbar"') || html.includes('x-dock'), 'a sticky save button');
+    }
+    // links and socials appear only when the card has them, and unsafe addresses never become links
+    const rich = page(t, { ...people[2], social_links: { instagram: 'https://instagram.com/maya', website: 'javascript:alert(1)' } });
+    assert.ok(bodyOf(rich).includes('Price list') && bodyOf(rich).includes('https://instagram.com/maya'));
+    assert.ok(!bodyOf(rich).includes('javascript:alert'), 'unsafe address dropped');
+  });
+}

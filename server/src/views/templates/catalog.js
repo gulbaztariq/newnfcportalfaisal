@@ -242,5 +242,11 @@ module.exports = {
     S('vcard178', 'Tap Compact', 'Signature: Minimal', 'sxtapsplit', 'Minimal', 'Compact and quick: portrait and name side by side, actions in one row and links in four columns.', ['#0f172a', '#64748b', '#ffffff', '#0f172a'], F.inter),
     S('vcard179', 'Tap Bold', 'Signature: Influencer', 'sxtapbold', 'Influencer', 'Your name in big letters over the cover photo, outlined round icons and a Connect button that stays at the bottom of the screen.', ['#d63500', '#ffb800', '#fff8f0', '#141414'], F.bricolage),
     S('vcard180', 'Tap Pastel', 'Signature: Personal Branding', 'sxtapsoft', 'Personal Branding', 'Soft pastel colour with a dotted header, a rounded-square portrait and tinted round links on a white sheet.', ['#7c4ddf', '#f9a8d4', '#fdf4ff', '#3b0764'], F.nunito),
+    /* link profiles: five premium link-in-bio style pages for a business card (signature6.js) */
+    S('vcard181', 'Minimalist Creator', 'Signature: Influencer', 'pxcreator', 'Influencer', 'Centred and calm: a colour-ringed portrait, bio, social row, one featured link and soft pill buttons.', ['#7c3aed', '#f472b6', '#faf7ff', '#1e1b4b'], F.poppins),
+    S('vcard182', 'Luxury Executive', 'Signature: Luxury', 'pxexecutive', 'Luxury', 'Charcoal and gold: a framed portrait, serif name, premium contact tiles, a gold save button and list links.', ['#c9a24b', '#e8cf8b', '#0f0f12', '#f5f1e8'], F.lora),
+    S('vcard183', 'Modern Business', 'Signature: Corporate', 'pxbusiness', 'Corporate', 'A clean business page: header band, company tile, save and WhatsApp buttons, a contact grid and a location card.', ['#2563eb', '#0ea5e9', '#f6f8fc', '#0f172a'], F.jakarta),
+    S('vcard184', 'Creative Portfolio', 'Signature: Creative', 'pxportfolio', 'Creative', 'Editorial: a huge name, an offset portrait, numbered project cards, the gallery up front and a bold contact call-out.', ['#c93a14', '#111827', '#fffaf3', '#18181b'], F.bricolage),
+    S('vcard185', 'Modern Social Profile', 'Signature: Influencer', 'pxsocial', 'Influencer', 'Vibrant gradient with a soft glow, a turning colour ring, big network buttons, glass link cards and a video block.', ['#d6165f', '#7c5cff', '#12062b', '#ffffff'], F.outfit),
   ],
 };
