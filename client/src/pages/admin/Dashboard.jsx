@@ -49,7 +49,7 @@ export default function Dashboard() {
                 [Wallet, 'Sales this month', `Rs ${Math.round(d.business.month_sales).toLocaleString()}`, `${d.business.month_orders} orders`, '/admin/orders'],
                 [Truck, 'COD to collect', `Rs ${Math.round(d.business.cod_pending).toLocaleString()}`, 'Dispatched, not settled', '/admin/finance/settlements'],
                 [FileText, 'Unpaid invoices', `Rs ${Math.round(d.business.unpaid_invoices).toLocaleString()}`, 'Outstanding balance', '/admin/invoices'],
-                [Boxes, 'Low stock', d.business.low_stock.length, d.business.low_stock.slice(0, 2).map((i) => i.name).join(', ') || 'All good', '/admin/inventory'],
+                ...(MODULES.inventory ? [[Boxes, 'Low stock', d.business.low_stock.length, d.business.low_stock.slice(0, 2).map((i) => i.name).join(', ') || 'All good', '/admin/inventory']] : []),
               ].map(([I, l, v, h, to]) => (
                 <Link key={l} to={to} className="group rounded-2xl border border-border p-4 transition hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-soft">
                   <I className="size-5 text-primary" />

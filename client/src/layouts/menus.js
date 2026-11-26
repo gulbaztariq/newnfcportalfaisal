@@ -38,10 +38,10 @@ export const adminMenu = (user) => filterMenu([
   },
   {
     group: 'Inventory', items: [
-      { label: 'Stock', icon: Boxes, to: '/admin/inventory', perm: 'inventory' },
-      { label: 'Stock movements', icon: ArrowLeftRight, to: '/admin/inventory/movements', perm: 'inventory' },
-      { label: 'Purchases & imports', icon: Package, to: '/admin/purchases', perm: 'inventory' },
-      { label: 'Printing vendors', icon: Building2, to: '/admin/vendors', perm: 'inventory' },
+      MODULES.inventory && { label: 'Stock', icon: Boxes, to: '/admin/inventory', perm: 'inventory' },
+      MODULES.inventory && { label: 'Stock movements', icon: ArrowLeftRight, to: '/admin/inventory/movements', perm: 'inventory' },
+      MODULES.inventory && { label: 'Purchases & imports', icon: Package, to: '/admin/purchases', perm: 'inventory' },
+      MODULES.inventory && { label: 'Printing vendors', icon: Building2, to: '/admin/vendors', perm: 'inventory' },
     ],
   },
   {

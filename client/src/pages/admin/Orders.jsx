@@ -202,7 +202,7 @@ export function OrderDetail() {
           {terminal && <p className="mt-2 rounded-xl bg-danger-soft px-3 py-2 text-sm text-danger">This order is {d.labels[o.order_status].toLowerCase()}.{(d.movements || []).some((m) => m.type === 'return') ? ' The stock it used was returned to inventory.' : ' No stock had been taken for it, so nothing was returned.'}</p>}
           <div className="mt-4 flex flex-wrap items-end gap-2 border-t border-border pt-4">
             <Field label="Note for this step (optional)" className="min-w-56 flex-1"><Input value={note} onChange={(e) => setNote(e.target.value)} placeholder="e.g. Sent for printing at vendor" /></Field>
-            {!o.stock_consumed && (
+            {MODULES.inventory && !o.stock_consumed && (
               <Field label="Take stock from" className="w-52"><Select value={vendorId} onChange={setVendorId} placeholder="Main store" options={[{ value: '', label: 'Main store' }, ...d.vendors.map((v) => ({ value: v.id, label: v.name }))]} /></Field>
             )}
             {next && <Button onClick={() => moveTo(next)} loading={busy === next}>Move to {d.labels[next]}</Button>}
@@ -452,7 +452,7 @@ export function Products() {
           { key: 'shop', label: 'In shop', render: (p) => <Switch size="sm" checked={!!p.show_in_shop} onChange={(v) => toggle(p, 'show_in_shop', v)} /> },
           { key: 'actions', label: '', align: 'right', render: (p) => (
             <div className="flex justify-end gap-0.5">
-              <Tip content="Costing: inventory components + printing cost"><Button size="icon-sm" variant="ghost" onClick={() => setCosting(p)}><Calculator /></Button></Tip>
+              {MODULES.inventory && <Tip content="Costing: inventory components + printing cost"><Button size="icon-sm" variant="ghost" onClick={() => setCosting(p)}><Calculator /></Button></Tip>}
               <Tip content="Edit"><Button size="icon-sm" variant="ghost" onClick={() => setEditing(p)}><Pencil /></Button></Tip>
               <Tip content="Delete"><Button size="icon-sm" variant="ghost" onClick={() => remove(p)}><Trash2 /></Button></Tip>
             </div>) },
@@ -519,7 +519,7 @@ function ProductForm({ product, onClose, onSaved }) {
           <SwitchRow title="Show in shop" {...{ checked: v.show_in_shop, onChange: (x) => form.set('show_in_shop', x) }} />
           <SwitchRow title="Featured" {...{ checked: v.featured, onChange: (x) => form.set('featured', x) }} />
           <SwitchRow title="Active" description="Inactive products cannot be ordered" {...{ checked: v.status, onChange: (x) => form.set('status', x) }} />
-          <SwitchRow title="Track stock" description="Take components from inventory on dispatch" {...{ checked: v.track_stock, onChange: (x) => form.set('track_stock', x) }} />
+          {MODULES.inventory && <SwitchRow title="Track stock" description="Take components from inventory on dispatch" {...{ checked: v.track_stock, onChange: (x) => form.set('track_stock', x) }} />}
           <SwitchRow title="Already a wholesale price" description="Wholesale orders get no quantity-tier discount on this product" {...{ checked: !!v.no_wholesale_tiers, onChange: (x) => form.set('no_wholesale_tiers', x) }} />
         </div>
       </div>

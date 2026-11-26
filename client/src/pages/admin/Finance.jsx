@@ -1,4 +1,5 @@
 /* Finance: profit analytics, unified ledger, expenses / income, accounts & partners, courier COD settlements */
+import { MODULES } from '@/lib/modules';
 import { useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
@@ -167,10 +168,10 @@ export function FinanceOverview() {
               <CardBody className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                 <Link to="/admin/invoices" className="block transition hover:-translate-y-0.5"><Tile label="Receivables" hint="Unpaid balance of sent, partially paid and overdue invoices." value={pkr(d.receivables.amount)} tone="in" sub={`${d.receivables.count} unpaid invoice(s) · ${d.receivables.overdue} overdue`} /></Link>
                 <Link to="/admin/finance/settlements" className="block transition hover:-translate-y-0.5"><Tile label="COD outstanding" hint="Cash-on-delivery orders shipped or delivered that Leopards has not settled yet." value={pkr(d.cod_outstanding.amount)} tone="warn" sub={`${d.cod_outstanding.count} shipment(s) · ${d.cod_outstanding.delivered} delivered`} /></Link>
-                <Link to="/admin/vendors" className="block transition hover:-translate-y-0.5"><Tile label="Vendor payables" hint="Opening balance + bills - payments, per vendor with money owed." value={pkr(sum(payables, 'balance'))} tone="out" sub={`${payables.length} vendor(s) to pay`} /></Link>
-                <Link to="/admin/inventory" className="block transition hover:-translate-y-0.5"><Tile label="Inventory value" hint="Stock on hand x weighted average landed cost. Retail uses the sale price." value={pkr(d.inventory_value.cost)} sub={`${Number(d.inventory_value.units).toLocaleString()} units · retail ${pkr(d.inventory_value.retail)}`} /></Link>
+                {MODULES.inventory && <Link to="/admin/vendors" className="block transition hover:-translate-y-0.5"><Tile label="Vendor payables" hint="Opening balance + bills - payments, per vendor with money owed." value={pkr(sum(payables, 'balance'))} tone="out" sub={`${payables.length} vendor(s) to pay`} /></Link>}
+                {MODULES.inventory && <Link to="/admin/inventory" className="block transition hover:-translate-y-0.5"><Tile label="Inventory value" hint="Stock on hand x weighted average landed cost. Retail uses the sale price." value={pkr(d.inventory_value.cost)} sub={`${Number(d.inventory_value.units).toLocaleString()} units · retail ${pkr(d.inventory_value.retail)}`} /></Link>}
               </CardBody>
-              {payables.length > 0 && (
+              {MODULES.inventory && payables.length > 0 && (
                 <div className="border-t border-border">
                   <DataTable rows={payables.slice(0, 6)} columns={[
                     { key: 'name', label: 'Vendor', render: (v) => <Link to={`/admin/vendors/${v.id}`} className="font-medium hover:text-primary">{v.name}</Link> },
