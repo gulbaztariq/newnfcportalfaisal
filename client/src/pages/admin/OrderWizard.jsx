@@ -32,7 +32,10 @@ const SOCIAL_KIND = { social_static: 'static', social_dynamic: 'dynamic', social
 const LINK_KINDS = [{ value: 'vcard', label: 'Business card (vCard)' }, { value: 'review', label: 'Review link' }, { value: 'redirect', label: 'Redirect link' }];
 const afterDisc = (price, t, v) => Math.max(0, t === 'percent' ? price * (1 - Math.min(100, Number(v) || 0) / 100) : t === 'fixed' ? price - (Number(v) || 0) : price);
 let lineId = 0;
-const newLine = () => ({ key: ++lineId, product_id: '', variant: '', quantity: 1, unit_price: '' });
+const newLink = () => ({ on: false, kind: 'vcard', plan_id: '', qty: '' });
+const mkLine = (o = {}) => ({ key: ++lineId, product_id: '', variant: '', quantity: 1, unit_price: '', sale_price: '', link: newLink(), ...o });
+const newLine = () => mkLine();
+const r2 = (n) => Math.round(Number(n || 0) * 100) / 100;
 const money = (cur, v) => `${cur} ${Number(v || 0).toLocaleString('en-US', { maximumFractionDigits: 2 })}`;
 const fetchList = (url) => (q) => api.get(url, { params: { q, search: q, per_page: 15 } }).then(({ data }) => data.data);
 const PersonLine = ({ p, sub }) => <div className="min-w-0"><p className="truncate font-medium">{p.name}</p><p className="truncate text-xs text-muted-foreground">{sub}</p></div>;
@@ -67,8 +70,8 @@ export default function OrderWizard() {
   const [lines, setLines] = useState([newLine()]);
   const [form, setValues] = useState({
     type_override: '', order_source_id: '', name: '', phone: '', email: '', customer: null, guest: null,
-    discount_type: 'fixed', discount_value: '', payment: 'cod', advance_amount: '', payment_account_id: '', admin_note: '', sample_order: null, plan_credit: '',
-    make_links: false, link_kind: 'vcard', link_plan_id: '', link_qty: '', more: false,
+    payment: 'cod', advance_amount: '', payment_account_id: '', admin_note: '', sample_order: null, plan_credit: '',
+    more: false,
   });
   const [errors, setErrors] = useState({});
   const [quote, setQuote] = useState(null);
@@ -76,7 +79,6 @@ export default function OrderWizard() {
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState(null);
   const [reorderOf, setReorderOf] = useState(null);
-  const [totalText, setTotalText] = useState(null); // what is being typed in the Total amount box
   const [subInfo, setSubInfo] = useState(undefined); // current plan of the customer being renewed
   const set = (k, v) => { setValues((f) => ({ ...f, [k]: v })); setErrors((e) => ({ ...e, [k]: undefined })); };
   useEffect(() => { api.get('/admin/orders-meta').then(({ data }) => setMeta(data)); }, []);
@@ -106,12 +108,16 @@ export default function OrderWizard() {
   }, [planChange, renewFor]);
   const pool = useMemo(() => (meta?.products || []).filter((p) => !planChange || (p.plan_id && (type !== 'upgrade' || !subInfo || (p.plan_id !== subInfo.plan_id && Number(p.plan?.price) > Number(subInfo.plan_price))))), [meta, planChange, type, subInfo]);
 
+  // the price per piece before any discount; the discounted price is what the client really pays per piece
+  const actualOf = (l) => (l.unit_price !== '' ? Number(l.unit_price) : r2(estimate(meta, products[l.product_id], l.variant, Number(l.quantity) || 1, type)));
+  const saleOf = (l) => (l.sale_price !== '' && Number(l.sale_price) < actualOf(l) ? Number(l.sale_price) : null);
+  const discountOf = (l) => (saleOf(l) === null ? 0 : (actualOf(l) - saleOf(l)) * (Number(l.quantity) || 1));
   const payload = () => ({
-    items: valid.map(({ product_id, variant, quantity, unit_price }) => ({ product_id, variant, quantity, unit_price, customization: false })),
+    items: valid.map((l) => ({ product_id: l.product_id, variant: l.variant, quantity: l.quantity, unit_price: saleOf(l) === null ? l.unit_price : actualOf(l), customization: false })),
     order_type: type, social_variant: type === 'social' ? SOCIAL_KIND[products[valid[0]?.product_id]?.product_kind] : undefined,
     sample_order_id: type === 'wholesale' ? form.sample_order?.id : undefined, plan_credit: type === 'upgrade' && form.plan_credit !== '' ? form.plan_credit : undefined,
     fulfilment: noShip ? 'digital' : cod ? 'delivery' : 'collection', is_cod: cod, delivery_charges: '', details_later: true,
-    discount_type: form.discount_type, discount_value: form.discount_value === '' ? 0 : form.discount_value,
+    discount_type: 'fixed', discount_value: r2(valid.reduce((a, l) => a + discountOf(l), 0)),
   });
   // live price from the server (the same rules as the saved order)
   useEffect(() => {
@@ -130,15 +136,15 @@ export default function OrderWizard() {
     if (params.get('reorder')) {
       api.get(`/admin/orders/${params.get('reorder')}`).then(({ data }) => {
         const o = data.data;
-        fill({ ...base(o), payment: o.is_cod ? 'cod' : 'online', discount_type: o.discount_type || 'fixed', discount_value: Number(o.discount) ? String(Number(o.discount_value) || Number(o.discount)) : '' });
-        setLines(o.items?.length ? o.items.map((it) => ({ key: ++lineId, product_id: it.nfc_card_id, variant: it.variant || '', quantity: it.quantity, unit_price: String(Number(it.unit_price)) })) : [newLine()]);
+        fill({ ...base(o), payment: o.is_cod ? 'cod' : 'online' });
+        setLines(o.items?.length ? o.items.map((it) => mkLine({ product_id: it.nfc_card_id, variant: it.variant || '', quantity: it.quantity, unit_price: String(Number(it.unit_price)) })) : [newLine()]);
         setReorderOf(o.order_number);
       }).catch(() => toast.error('Could not load the order to reorder'));
     } else if (params.get('bulk') || params.get('sample')) {
       api.get(`/admin/orders/${params.get('bulk') || params.get('sample')}`).then(({ data }) => {
         const o = data.data; const minQty = meta.wholesale_tiers?.[0]?.min || 25;
         fill({ ...base(o), type_override: 'wholesale', sample_order: o.order_type === 'sample' ? { id: o.id, order_number: o.order_number, credit: (o.items || []).reduce((a, i) => a + Number(i.total), 0) } : null });
-        setLines((o.items?.length ? o.items : []).map((it) => ({ key: ++lineId, product_id: it.nfc_card_id, variant: it.variant || '', quantity: minQty, unit_price: '' })));
+        setLines((o.items?.length ? o.items : []).map((it) => mkLine({ product_id: it.nfc_card_id, variant: it.variant || '', quantity: minQty })));
         setReorderOf(`bulk from ${o.order_number}`);
       }).catch(() => toast.error('Could not load the order'));
     } else if (params.get('guest')) {
@@ -159,24 +165,25 @@ export default function OrderWizard() {
     const t = q.trim().toLowerCase(); const taken = new Set(valid.filter((l) => l.key !== key).map((l) => String(l.product_id)));
     return Promise.resolve(pool.filter((p) => !taken.has(String(p.id)) && (!t || `${p.name} ${p.sku || ''} ${p.category || ''} ${srcName(p.order_source_id) || ''}`.toLowerCase().includes(t))).slice(0, 500));
   };
-  const first = valid[0];
-  const linkCount = Math.max(1, parseInt(form.link_qty, 10) || Number(first?.quantity) || 1);
-  const linkNeedsPlan = form.link_kind !== 'review';
-  const wantsLink = !planChange; // every order has its link; a renewal or upgrade changes the plan of someone who already has one
+  const setLink = (l, patch) => setLine(l.key, { link: { ...l.link, ...patch } });
+  // each product with its link switch on gets its own links (a renewal or an upgrade changes the plan of someone who already has a link)
+  const linkLines = planChange ? [] : valid.filter((l) => l.link?.on);
+  const linkCountOf = (l) => Math.max(1, parseInt(l.link.qty, 10) || Number(l.quantity) || 1);
+  const linkTotal = linkLines.reduce((a, l) => a + linkCountOf(l), 0);
 
   const validate = () => {
     const e = {};
     if (planChange) { if (!form.customer) e.customer = 'Search and choose the customer'; } else if (!form.name.trim()) e.name = 'Enter the name of the client';
     if (!valid.length) e.products = 'Select a product';
     else if (valid.some((l) => products[l.product_id]?.variants?.length && !l.variant)) e.products = 'Choose an option for every product';
-    else if (valid.some((l) => l.unit_price !== '' && Number(l.unit_price) < 0)) e.products = 'Prices cannot be negative';
+    else if (valid.some((l) => (l.unit_price !== '' && Number(l.unit_price) < 0) || (l.sale_price !== '' && Number(l.sale_price) < 0))) e.products = 'Prices cannot be negative';
+    else if (valid.some((l) => l.sale_price !== '' && Number(l.sale_price) > actualOf(l))) e.products = 'The discounted price cannot be higher than the actual price';
     else if (type === 'sample' && valid.some((l) => Number(l.quantity) > sampleMax)) e.products = `Samples are limited to ${sampleMax} pieces per product`;
     if (form.phone && !/^\+?[\d\s().-]{7,20}$/.test(String(form.phone).trim())) e.phone = 'Phone number is not valid. Use digits only, like 03001234567';
     if (tagType && String(form.phone).replace(/\D/g, '').length < 7) e.phone = 'The tag owner\'s phone number is needed: messages are sent there';
-    if (form.discount_type === 'percent' && Number(form.discount_value) > 100) e.discount_value = 'A percentage cannot be more than 100';
     if (form.payment === 'online' && !form.payment_account_id) e.payment_account_id = 'Choose where the money was received';
     if (form.payment === 'advance') { const a = Number(form.advance_amount); if (!(a > 0)) e.advance_amount = 'Enter the advance received'; else if (quote && !quote.error && a > Number(quote.total)) e.advance_amount = 'The advance is more than the order total'; }
-    if (wantsLink && linkNeedsPlan && !form.link_plan_id) e.link_plan_id = 'Choose the plan of the link';
+    if (linkLines.some((l) => l.link.kind !== 'review' && !l.link.plan_id)) e.products = 'Choose a plan for every link that needs one';
     return e;
   };
   const create = async () => {
@@ -191,11 +198,11 @@ export default function OrderWizard() {
         payment_status: form.payment === 'online' ? 'paid' : 'pending', payment_type: form.payment === 'cod' ? undefined : form.payment, advance_amount: form.payment === 'advance' ? form.advance_amount : undefined,
         payment_account_id: form.payment !== 'cod' && form.payment_account_id ? form.payment_account_id : undefined,
       };
-      const d = await run(api.post('/admin/orders', { ...body, link: wantsLink ? { kind: form.link_kind, plan_id: linkNeedsPlan ? Number(form.link_plan_id) : undefined, qty: linkCount } : undefined }));
+      const d = await run(api.post('/admin/orders', { ...body, links: linkLines.map((l) => ({ kind: l.link.kind, plan_id: l.link.kind === 'review' ? undefined : Number(l.link.plan_id), qty: linkCountOf(l), title: products[l.product_id]?.name })) }));
       setResult({ ...d, links: d.links });
     } catch (err) { setErrors(err.errors || {}); } finally { setBusy(false); }
   };
-  const restart = () => { setResult(null); setLines([newLine()]); setQuote(null); setReorderOf(null); setValues((f) => ({ ...f, customer: null, guest: null, name: '', phone: '', email: '', discount_value: '', advance_amount: '', admin_note: '', make_links: false, link_qty: '', sample_order: null })); };
+  const restart = () => { setResult(null); setLines([newLine()]); setQuote(null); setReorderOf(null); setValues((f) => ({ ...f, customer: null, guest: null, name: '', phone: '', email: '', advance_amount: '', admin_note: '', sample_order: null })); };
 
   if (!meta) return <div className="grid gap-6 lg:grid-cols-[1fr_340px]"><Skeleton className="h-[520px] rounded-3xl" /><Skeleton className="h-80 rounded-3xl" /></div>;
 
@@ -234,11 +241,6 @@ export default function OrderWizard() {
   }
 
   const typeInfo = ORDER_TYPES.find((t) => t.key === type);
-  const l0 = valid[0]; const ql0 = l0 ? quote?.lines?.[0] : null;
-  const unit0 = l0 ? (l0.unit_price !== '' ? Number(l0.unit_price) : ql0 ? Number(ql0.unit_price) : estimate(meta, products[l0.product_id], l0.variant, Number(l0.quantity) || 1, type)) : 0;
-  const totalDerived = valid.length === 1 ? Math.round(unit0 * (Number(l0.quantity) || 1) * 100) / 100 : Number(quote?.subtotal || 0);
-  const advance = Number(form.advance_amount) || 0;
-  const total = quote && !quote.error ? Number(quote.total) : 0;
   return (
     <>
       <div className="mb-4 flex flex-wrap items-center gap-3">
@@ -285,17 +287,38 @@ export default function OrderWizard() {
                       {lines.length > 1 && <Button size="icon" variant="ghost" onClick={() => setLines((ls) => ls.filter((x) => x.key !== l.key))} aria-label="Remove product"><Trash2 /></Button>}
                     </div>
                     {p && (
-                      <div className="grid gap-3 sm:grid-cols-3">
-                        {p.variants?.length > 0 && <Field label="Option" className="sm:col-span-3"><Select value={l.variant} onChange={(v) => setLine(l.key, { variant: v, unit_price: '' })} options={p.variants.map((v) => ({ value: v.name, label: `${v.name}${Number(v.price_delta) ? ` (+${v.price_delta})` : ''}` }))} /></Field>}
-                        <Field label="Qty"><Input type="text" inputMode="numeric" autoComplete="off" value={l.quantity} onChange={(e) => setQty(l, e.target.value)} /></Field>
-                        <Field label="Actual price" hint="Per piece. Leave as it is for the list price"><Input type="text" inputMode="decimal" autoComplete="off" value={l.unit_price} placeholder={String(Math.round(unit * 100) / 100)} onChange={(e) => setLine(l.key, { unit_price: decimal(e.target.value) })} /></Field>
-                        <div className="flex flex-wrap content-end items-end gap-1.5 pb-2 text-xs">
+                      <>
+                        <div className="grid gap-3 sm:grid-cols-4">
+                          {p.variants?.length > 0 && <Field label="Option" className="sm:col-span-4"><Select value={l.variant} onChange={(v) => setLine(l.key, { variant: v, unit_price: '' })} options={p.variants.map((v) => ({ value: v.name, label: `${v.name}${Number(v.price_delta) ? ` (+${v.price_delta})` : ''}` }))} /></Field>}
+                          <Field label="Qty"><Input type="text" inputMode="numeric" autoComplete="off" value={l.quantity} onChange={(e) => setQty(l, e.target.value)} /></Field>
+                          <Field label="Actual price" hint="Per piece"><Input type="text" inputMode="decimal" autoComplete="off" value={l.unit_price} placeholder={String(r2(estimate(meta, p, l.variant, qty, type)))} onChange={(e) => setLine(l.key, { unit_price: decimal(e.target.value) })} /></Field>
+                          <Field label="Discounted price" hint="Per piece. Empty = no discount"><Input type="text" inputMode="decimal" autoComplete="off" value={l.sale_price} placeholder="Same as actual" onChange={(e) => setLine(l.key, { sale_price: decimal(e.target.value) })} /></Field>
+                          <Field label="Line total"><Input readOnly value={money(cur, (saleOf(l) ?? actualOf(l)) * qty)} /></Field>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-1.5 text-xs">
                           {ql?.tier_percent > 0 && <Badge tone="success">Wholesale {ql.tier_percent}% off</Badge>}
                           {type === 'sample' && <Badge tone="warning">Sample price</Badge>}
                           {p.plan && <Badge tone="primary"><IdCard className="size-3" />Plan: {p.plan.name}</Badge>}
-                          {Number(p.discount_value) > 0 && type !== 'sample' && <Badge tone="success">Product discount {p.discount_type === 'percent' ? `${Number(p.discount_value)}%` : money(cur, p.discount_value)}</Badge>}
+                          {discountOf(l) > 0 && <Badge tone="success">Discount {money(cur, discountOf(l))}</Badge>}
                         </div>
-                      </div>
+                        {!planChange && (
+                          <div className="space-y-3 border-t border-border pt-3">
+                            <div className="flex flex-wrap items-center justify-between gap-3">
+                              <div><p className="text-sm font-semibold">Create link</p><p className="text-xs text-muted-foreground">A link for this product to write on the NFC card or print as a QR code</p></div>
+                              <Segmented id={`lk-${l.key}`} value={l.link.on ? 'yes' : 'no'} onChange={(v) => setLink(l, { on: v === 'yes' })} options={[{ value: 'no', label: 'No' }, { value: 'yes', label: 'Yes' }]} />
+                            </div>
+                            {l.link.on && (
+                              <div className="grid gap-3 sm:grid-cols-3">
+                                <Field label="Link type"><Select value={l.link.kind} onChange={(v) => setLink(l, { kind: v, plan_id: v === 'review' ? '' : l.link.plan_id })} options={LINK_KINDS} /></Field>
+                                {l.link.kind !== 'review'
+                                  ? <Field label="Plan" required hint="Counts from when the link is claimed"><Select value={l.link.plan_id} onChange={(v) => setLink(l, { plan_id: v })} placeholder="Choose a plan" options={(meta.plans || []).map((x) => ({ value: x.id, label: x.name }))} /></Field>
+                                  : <Field label="Plan" hint="A review link has no plan"><Input value="No plan" readOnly /></Field>}
+                                <Field label="How many links" hint="One per piece by default"><Input type="text" inputMode="numeric" value={l.link.qty} placeholder={String(qty)} onChange={(e) => setLink(l, { qty: e.target.value.replace(/\D/g, '').slice(0, 3) })} /></Field>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </>
                     )}
                     {i === 0 && errors.products && <p className="text-sm text-danger">{errors.products}</p>}
                   </div>
@@ -315,33 +338,6 @@ export default function OrderWizard() {
                 </Field>
               )}
             </div>
-
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="Total amount" hint={valid.length === 1 ? 'Quantity × price, before the discount. Type a total to set the price per piece.' : 'All products together, before the discount'}>
-                <Input type="text" inputMode="decimal" autoComplete="off" readOnly={valid.length !== 1} value={totalText ?? String(totalDerived)}
-                  onChange={(e) => { const t = decimal(e.target.value); setTotalText(t); const q = Number(valid[0]?.quantity) || 1; if (t !== '' && Number(t) >= 0) setLine(valid[0].key, { unit_price: String(Math.round((Number(t) / q) * 10000) / 10000) }); }}
-                  onBlur={() => setTotalText(null)} />
-              </Field>
-              <Field label="Discount" error={errors.discount_value} hint={quote?.discount > 0 ? `Takes off ${money(cur, quote.discount)}` : undefined}>
-                <div className="flex gap-2">
-                  <Input className="flex-1" type="text" inputMode="decimal" autoComplete="off" value={form.discount_value} placeholder="0" onChange={(e) => set('discount_value', decimal(e.target.value))} />
-                  <Segmented id="dt" value={form.discount_type} onChange={(v) => set('discount_type', v)} options={[{ value: 'fixed', label: cur }, { value: 'percent', label: '%' }]} />
-                </div>
-              </Field>
-            </div>
-
-            {wantsLink && (
-              <div className="space-y-3 rounded-2xl border border-border p-4">
-                <div><p className="text-sm font-semibold">Link</p><p className="text-xs text-muted-foreground">Every order comes with its link, to write on the NFC card or print as a QR code. The client becomes a user when they open it and confirm their e-mail.</p></div>
-                <div className="grid gap-3 sm:grid-cols-3">
-                  <Field label="Link type"><Select value={form.link_kind} onChange={(v) => { set('link_kind', v); if (v === 'review') set('link_plan_id', ''); }} options={LINK_KINDS} /></Field>
-                  {linkNeedsPlan
-                    ? <Field label="Plan" required error={errors.link_plan_id} hint="Its length counts from when the link is claimed"><Select value={form.link_plan_id} onChange={(v) => set('link_plan_id', v)} invalid={!!errors.link_plan_id} placeholder="Choose a plan" options={(meta.plans || []).map((x) => ({ value: x.id, label: x.name }))} /></Field>
-                    : <Field label="Plan" hint="A review link has no plan"><Input value="No plan" readOnly /></Field>}
-                  <Field label="How many links" hint="One per piece by default"><Input type="text" inputMode="numeric" value={form.link_qty} placeholder={String(Number(first?.quantity) || 1)} onChange={(e) => set('link_qty', e.target.value.replace(/\D/g, '').slice(0, 3))} /></Field>
-                </div>
-              </div>
-            )}
 
             <div className="space-y-3">
               <Field label="Payment" required>
@@ -397,7 +393,7 @@ export default function OrderWizard() {
             {quote?.error && <p className="text-xs text-danger">{quote.error}</p>}
             {(quote?.warnings || []).map((w) => <p key={w} className="rounded-xl bg-warning-soft px-3 py-2 text-xs text-warning">{w}</p>)}
             <Button size="lg" className="w-full" onClick={create} loading={busy}>Create order<ArrowRight /></Button>
-            {wantsLink && <p className="text-center text-xs text-muted-foreground">{linkCount} {form.link_kind === 'review' ? 'review' : form.link_kind === 'vcard' ? 'business card' : 'redirect'} link{linkCount === 1 ? '' : 's'} will be created</p>}
+            {linkTotal > 0 && <p className="text-center text-xs text-muted-foreground">{linkTotal} link{linkTotal === 1 ? '' : 's'} will be created with this order</p>}
           </CardBody>
         </Card>
       </div>
