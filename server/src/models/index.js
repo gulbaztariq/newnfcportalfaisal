@@ -513,6 +513,7 @@ const NfcOrder = sequelize.define('nfc_order', {
   payment_status: { type: T.ENUM('pending', 'paid', 'rejected'), defaultValue: 'pending' },
   payment_type: T.STRING(30), // cod | online | advance | collection | manual ...
   advance_amount: { type: T.DECIMAL(12, 2), defaultValue: 0 }, // paid in advance; the rest is still due
+  advance_account_id: T.INTEGER, // the finance account (cash, bank, wallet) the advance went into
   nfc_written: { type: T.BOOLEAN, defaultValue: false },
   // shop / checkout
   source: { type: T.STRING(20), defaultValue: 'portal' }, // portal | shop | admin

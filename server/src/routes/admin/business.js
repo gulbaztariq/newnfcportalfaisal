@@ -150,14 +150,15 @@ r.get('/nfc-orders', listOrders);
 r.get('/orders/:id', wrap(async (req, res) => {
   const o = await M.NfcOrder.findByPk(req.params.id, { include: ORDER_INCLUDE() });
   if (!o) fail(404, 'Not found');
-  const [invoice, messages, movements, links, vendors] = await Promise.all([
+  const [invoice, messages, movements, links, vendors, accounts] = await Promise.all([
     M.Invoice.findOne({ where: { nfc_order_id: o.id }, attributes: ['id', 'number', 'status', 'total', 'paid_amount', 'token'] }),
     M.MessageLog.findAll({ where: { nfc_order_id: o.id }, order: [['id', 'DESC']], limit: 50 }),
     M.StockMovement.findAll({ where: { nfc_order_id: o.id }, include: [{ model: M.InventoryItem, as: 'item', attributes: ['name'] }, { model: M.Vendor, as: 'location', attributes: ['name'] }] }),
     M.ShortLink.findAll({ where: { nfc_order_id: o.id } }),
     M.Vendor.findAll({ where: { status: true }, attributes: ['id', 'name', 'type'] }),
+    M.FinanceAccount.findAll({ where: { status: true }, attributes: ['id', 'name', 'type'], order: [['id', 'ASC']] }),
   ]);
-  res.json({ data: o, invoice, messages, movements, links: links.map((l) => ({ ...l.toJSON(), short_url: shortlinks.shortUrl(l.code) })), vendors, labels: orders.LABELS, steps: orders.STEPS, track_url: `${appUrl}/track/${o.order_number}?t=${o.access_token}` });
+  res.json({ accounts, data: o, invoice, messages, movements, links: links.map((l) => ({ ...l.toJSON(), short_url: shortlinks.shortUrl(l.code) })), vendors, labels: orders.LABELS, steps: orders.STEPS, track_url: `${appUrl}/track/${o.order_number}?t=${o.access_token}` });
 }));
 
 /* ---------------------------------------------- admin creates an order (wizard: phone / WhatsApp / walk-in / other websites) */
@@ -306,8 +307,11 @@ r.post('/orders', wrap(async (req, res) => {
     if (Number(target.price) <= Number(cur.plan_amount || 0)) fail(422, 'Validation failed', { items: 'That plan costs the same or less than the current one, so it is not an upgrade.' });
   }
   const isCod = !collection && !orders.NO_SHIP_TYPES.includes(b.order_type) && toBool(b.is_cod);
-  const advance = b.payment_type === 'advance' ? r2(b.advance_amount) : 0;
-  if (b.payment_type === 'advance' && (!(advance > 0) || advance > Number(q.total))) fail(422, 'Validation failed', { advance_amount: 'Enter the advance received: more than 0 and not more than the order total' });
+  // an advance is the only payment taken when the order is made; the rest (and how it is paid) is recorded when the order is completed
+  const advance = r2(b.advance_amount);
+  if (advance < 0 || advance > Number(q.total)) fail(422, 'Validation failed', { advance_amount: 'The advance cannot be more than the order total' });
+  const advAccount = advance > 0 && b.advance_account_id ? await M.FinanceAccount.findByPk(b.advance_account_id) : null;
+  if (advance > 0 && b.advance_account_id && !advAccount) fail(422, 'Validation failed', { advance_account_id: 'Choose a payment method from the list' });
   const payAccount = b.payment_account_id ? await M.FinanceAccount.findByPk(b.payment_account_id) : null;
   if (b.payment_account_id && !payAccount) fail(422, 'Validation failed', { payment_account_id: 'Choose a payment method from the list' });
   if (b.payment_status === 'paid' && !payAccount) fail(422, 'Validation failed', { payment_account_id: 'Choose the payment method the money was received in' });
@@ -317,7 +321,7 @@ r.post('/orders', wrap(async (req, res) => {
     email, user_id: user?.id || null, vcard_id: vcard?.id || null, guest_customer_id: guest?.id || null, organisation_id: orgOwner?.id || null,
     fulfilment: collection ? 'collection' : orders.NO_SHIP_TYPES.includes(b.order_type) ? 'digital' : 'delivery', is_cod: isCod,
     social_variant: ['static', 'dynamic', 'profile'].includes(b.social_variant) ? b.social_variant : null, parent_order_id: sampleOf?.id || null,
-    advance_amount: advance,
+    advance_amount: advance, advance_account_id: advAccount?.id || null,
     payment_type: isCod ? 'cod' : advance ? 'advance' : collection && b.payment_status !== 'paid' ? 'collection' : (b.payment_type || 'manual'),
     payment_status: b.payment_status === 'paid' && !advance ? 'paid' : 'pending', source: 'admin', design_type: 'standard',
     order_source_id: source?.id || null, created_by: req.user.id,
@@ -535,6 +539,19 @@ r.patch('/orders/:id', wrap(async (req, res) => {
   if (req.body.is_cod !== undefined) data.is_cod = toBool(req.body.is_cod);
   if (req.body.cod_settled !== undefined) { data.cod_settled = toBool(req.body.cod_settled); if (data.cod_settled && o.is_cod) { data.payment_status = 'paid'; await finance.settleCodOrders([o.tracking_number]).catch(() => {}); } }
   if (req.body.nfc_written !== undefined) data.nfc_written = toBool(req.body.nfc_written);
+  // the rest of the payment, and how it is paid, is decided when the order is closed: cod (the courier collects it) | cash | online | bank
+  const rp = req.body.remaining_payment;
+  if (rp && typeof rp === 'object') {
+    if (!['cod', 'cash', 'online', 'bank'].includes(rp.type)) fail(422, 'Validation failed', { remaining_payment: 'Choose how the remaining amount is paid' });
+    if (rp.type === 'cod') {
+      if (o.fulfilment !== 'delivery') fail(422, 'Validation failed', { remaining_payment: 'Cash on delivery needs a courier delivery' });
+      data.is_cod = true; data.payment_type = 'cod';
+    } else {
+      const acc = rp.account_id ? await M.FinanceAccount.findByPk(rp.account_id) : null;
+      if (!acc) fail(422, 'Validation failed', { remaining_payment: 'Choose the payment method the money was received in' });
+      data.payment_type = rp.type; data.payment_account_id = acc.id; data.payment_status = 'paid';
+    }
+  }
   if (Object.keys(data).length) await o.update(data);
   if (data.payment_status === 'paid') await orders.applyRenewal(o);
   if (req.body.order_status) {

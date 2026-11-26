@@ -70,7 +70,7 @@ export default function OrderWizard() {
   const [lines, setLines] = useState([newLine()]);
   const [form, setValues] = useState({
     type_override: '', order_source_id: '', name: '', phone: '', email: '', customer: null, guest: null,
-    payment: 'cod', advance_amount: '', payment_account_id: '', admin_note: '', sample_order: null, plan_credit: '',
+    advance_on: false, advance_amount: '', advance_account_id: '', delivery_charges: '', admin_note: '', sample_order: null, plan_credit: '',
     more: false,
   });
   const [errors, setErrors] = useState({});
@@ -91,14 +91,11 @@ export default function OrderWizard() {
   const planChange = PLAN_CHANGE.includes(type);
   const noShip = NO_SHIP.includes(type);
   const tagType = TAG_TYPES.includes(type);
-  const cod = form.payment === 'cod' && !noShip;
   const cur = meta?.currency;
   const sampleMax = meta?.sample_max_qty || 5;
 
-  // no cash on delivery for plan orders: a stale choice is corrected
-  useEffect(() => { if (noShip && form.payment === 'cod') setValues((f) => ({ ...f, payment: 'online' })); }, [noShip]); // eslint-disable-line
-  // online payment: the money went into one of your payment methods; the first one is chosen until told otherwise
-  useEffect(() => { if (meta?.accounts?.length) setValues((f) => (f.payment_account_id ? f : { ...f, payment_account_id: String(meta.accounts[0].id) })); }, [meta]);
+  // the advance went into one of your payment methods; the first one is chosen until told otherwise
+  useEffect(() => { if (meta?.accounts?.length) setValues((f) => (f.advance_account_id ? f : { ...f, advance_account_id: String(meta.accounts[0].id) })); }, [meta]);
 
   // every product added on the Products page is in the list; renewals and upgrades sell plans only (an upgrade only offers a dearer one)
   const renewFor = form.customer?.id;
@@ -116,7 +113,7 @@ export default function OrderWizard() {
     items: valid.map((l) => ({ product_id: l.product_id, variant: l.variant, quantity: l.quantity, unit_price: saleOf(l) === null ? l.unit_price : actualOf(l), customization: false })),
     order_type: type, social_variant: type === 'social' ? SOCIAL_KIND[products[valid[0]?.product_id]?.product_kind] : undefined,
     sample_order_id: type === 'wholesale' ? form.sample_order?.id : undefined, plan_credit: type === 'upgrade' && form.plan_credit !== '' ? form.plan_credit : undefined,
-    fulfilment: noShip ? 'digital' : cod ? 'delivery' : 'collection', is_cod: cod, delivery_charges: '', details_later: true,
+    fulfilment: noShip ? 'digital' : 'delivery', is_cod: false, delivery_charges: noShip ? '' : form.delivery_charges, details_later: true,
     discount_type: 'fixed', discount_value: r2(valid.reduce((a, l) => a + discountOf(l), 0)),
   });
   // live price from the server (the same rules as the saved order)
@@ -136,7 +133,7 @@ export default function OrderWizard() {
     if (params.get('reorder')) {
       api.get(`/admin/orders/${params.get('reorder')}`).then(({ data }) => {
         const o = data.data;
-        fill({ ...base(o), payment: o.is_cod ? 'cod' : 'online' });
+        fill({ ...base(o) });
         setLines(o.items?.length ? o.items.map((it) => mkLine({ product_id: it.nfc_card_id, variant: it.variant || '', quantity: it.quantity, unit_price: String(Number(it.unit_price)) })) : [newLine()]);
         setReorderOf(o.order_number);
       }).catch(() => toast.error('Could not load the order to reorder'));
@@ -181,8 +178,12 @@ export default function OrderWizard() {
     else if (type === 'sample' && valid.some((l) => Number(l.quantity) > sampleMax)) e.products = `Samples are limited to ${sampleMax} pieces per product`;
     if (form.phone && !/^\+?[\d\s().-]{7,20}$/.test(String(form.phone).trim())) e.phone = 'Phone number is not valid. Use digits only, like 03001234567';
     if (tagType && String(form.phone).replace(/\D/g, '').length < 7) e.phone = 'The tag owner\'s phone number is needed: messages are sent there';
-    if (form.payment === 'online' && !form.payment_account_id) e.payment_account_id = 'Choose where the money was received';
-    if (form.payment === 'advance') { const a = Number(form.advance_amount); if (!(a > 0)) e.advance_amount = 'Enter the advance received'; else if (quote && !quote.error && a > Number(quote.total)) e.advance_amount = 'The advance is more than the order total'; }
+    if (form.advance_on) {
+      const a = Number(form.advance_amount);
+      if (!(a > 0)) e.advance_amount = 'Enter the advance received';
+      else if (quote && !quote.error && a > Number(quote.total)) e.advance_amount = 'The advance is more than the order total';
+      if (meta.accounts?.length && !form.advance_account_id) e.advance_account_id = 'Choose how the advance was paid';
+    }
     if (linkLines.some((l) => l.link.kind !== 'review' && !l.link.plan_id)) e.products = 'Choose a plan for every link that needs one';
     return e;
   };
@@ -195,14 +196,13 @@ export default function OrderWizard() {
         ...payload(), name: planChange ? form.customer.name : form.name, phone: form.phone, email: form.email,
         order_source_id: form.order_source_id || undefined, admin_note: form.admin_note,
         customer_type: planChange ? 'existing' : 'guest', user_id: planChange ? form.customer.id : undefined, guest_customer_id: planChange ? undefined : form.guest?.id,
-        payment_status: form.payment === 'online' ? 'paid' : 'pending', payment_type: form.payment === 'cod' ? undefined : form.payment, advance_amount: form.payment === 'advance' ? form.advance_amount : undefined,
-        payment_account_id: form.payment !== 'cod' && form.payment_account_id ? form.payment_account_id : undefined,
+        advance_amount: form.advance_on ? form.advance_amount : undefined, advance_account_id: form.advance_on && form.advance_account_id ? form.advance_account_id : undefined,
       };
       const d = await run(api.post('/admin/orders', { ...body, links: linkLines.map((l) => ({ kind: l.link.kind, plan_id: l.link.kind === 'review' ? undefined : Number(l.link.plan_id), qty: linkCountOf(l), title: products[l.product_id]?.name })) }));
       setResult({ ...d, links: d.links });
     } catch (err) { setErrors(err.errors || {}); } finally { setBusy(false); }
   };
-  const restart = () => { setResult(null); setLines([newLine()]); setQuote(null); setReorderOf(null); setValues((f) => ({ ...f, customer: null, guest: null, name: '', phone: '', email: '', advance_amount: '', admin_note: '', sample_order: null })); };
+  const restart = () => { setResult(null); setLines([newLine()]); setQuote(null); setReorderOf(null); setValues((f) => ({ ...f, customer: null, guest: null, name: '', phone: '', email: '', advance_on: false, advance_amount: '', delivery_charges: '', admin_note: '', sample_order: null })); };
 
   if (!meta) return <div className="grid gap-6 lg:grid-cols-[1fr_340px]"><Skeleton className="h-[520px] rounded-3xl" /><Skeleton className="h-80 rounded-3xl" /></div>;
 
@@ -227,7 +227,7 @@ export default function OrderWizard() {
             </div>
           )}
           {result.renewed && <p className="relative mt-1 font-medium text-success">Plan {o.order_type === 'upgrade' ? 'upgraded, valid until' : 'renewed until'} {new Date(result.renewed.ends_at).toLocaleDateString()}</p>}
-          <p className="relative mt-1 text-muted-foreground">{planChange ? form.customer?.name : form.name} · {money(cur, o.amount)} · {o.fulfilment === 'digital' ? 'Digital, no shipping' : o.fulfilment === 'collection' ? 'No delivery' : o.is_cod ? 'Cash on delivery' : 'Courier delivery'}</p>
+          <p className="relative mt-1 text-muted-foreground">{planChange ? form.customer?.name : form.name} · {money(cur, o.amount)} · {o.fulfilment === 'digital' ? 'Digital, no shipping' : o.fulfilment === 'collection' ? 'No delivery' : 'Courier delivery'}</p>
           {result.links?.length > 0 && <div className="relative mt-6 space-y-2 rounded-2xl border border-border bg-muted/40 p-4 text-left text-sm"><p className="flex items-center gap-2 font-semibold"><Link2 className="size-4 text-primary" />{result.links.length} link{result.links.length === 1 ? '' : 's'} generated</p><MadeLinks made={result.links} /></div>}
           <div className="relative mt-6 flex flex-wrap justify-center gap-2">
             {o.order_type === 'sample' && <Button variant="outline" onClick={() => navigate(`/admin/orders/new?sample=${o.id}`)}><Boxes />Bulk order from this sample</Button>}
@@ -241,6 +241,8 @@ export default function OrderWizard() {
   }
 
   const typeInfo = ORDER_TYPES.find((t) => t.key === type);
+  const advance = Number(form.advance_amount) || 0;
+  const total = quote && !quote.error ? Number(quote.total) : 0;
   return (
     <>
       <div className="mb-4 flex flex-wrap items-center gap-3">
@@ -334,18 +336,22 @@ export default function OrderWizard() {
               )}
             </div>
 
-            <div className="space-y-3">
-              <Field label="Payment" required>
-                <Segmented id="pay" value={form.payment} onChange={(v) => set('payment', v)} options={[...(noShip ? [] : [{ value: 'cod', label: 'COD' }]), { value: 'online', label: 'Online payment' }, { value: 'advance', label: 'Advance' }]} />
-              </Field>
-              {form.payment === 'advance' && <Field label="Advance received" required error={errors.advance_amount} hint={total ? `Balance due: ${money(cur, Math.max(0, total - advance))}` : undefined}><Input type="text" inputMode="decimal" autoComplete="off" value={form.advance_amount} placeholder="0" onChange={(e) => set('advance_amount', decimal(e.target.value))} className="max-w-56" /></Field>}
-              {form.payment !== 'cod' && (
-                <Field label="Received in" required={form.payment === 'online'} error={errors.payment_account_id} hint={meta.accounts?.length ? 'The cash, bank or wallet account the money went into' : 'Add a payment method under Finance first'}>
-                  <Select value={form.payment_account_id} onChange={(v) => set('payment_account_id', v)} allowEmpty={form.payment === 'advance'} invalid={!!errors.payment_account_id} placeholder="Choose the account" options={(meta.accounts || []).map((a) => ({ value: a.id, label: a.name }))} />
-                </Field>
+            <div className="space-y-3 rounded-2xl border border-border p-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div><p className="text-sm font-semibold">Advance payment</p><p className="text-xs text-muted-foreground">Did the client already pay some amount? The rest, and how it is paid, is recorded when you complete the order.</p></div>
+                <Segmented id="adv" value={form.advance_on ? 'yes' : 'no'} onChange={(v) => set('advance_on', v === 'yes')} options={[{ value: 'no', label: 'No' }, { value: 'yes', label: 'Yes' }]} />
+              </div>
+              {form.advance_on && (
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <Field label="Advance received" required error={errors.advance_amount}><Input type="text" inputMode="decimal" autoComplete="off" value={form.advance_amount} placeholder="0" onChange={(e) => set('advance_amount', decimal(e.target.value))} /></Field>
+                  <Field label="Left to pay" hint="Worked out for you"><Input readOnly value={money(cur, Math.max(0, total - advance))} /></Field>
+                  <Field label="Advance paid by" required={!!meta.accounts?.length} error={errors.advance_account_id} hint={meta.accounts?.length ? 'The cash, bank or wallet account it went into' : 'Add a payment method under Finance first'}>
+                    <Select value={form.advance_account_id} onChange={(v) => set('advance_account_id', v)} invalid={!!errors.advance_account_id} placeholder="Choose the method" options={(meta.accounts || []).map((a) => ({ value: a.id, label: a.name }))} />
+                  </Field>
+                </div>
               )}
-              {tagType && <Field label="Tag owner's phone" required error={errors.phone} hint="Messages from whoever scans the tag are sent here. The number is never shown."><Input value={form.phone} onChange={(e) => set('phone', e.target.value)} placeholder="03xx xxxxxxx" className="max-w-64" /></Field>}
             </div>
+            {tagType && <Field label="Tag owner's phone" required error={errors.phone} hint="Messages from whoever scans the tag are sent here. The number is never shown."><Input value={form.phone} onChange={(e) => set('phone', e.target.value)} placeholder="03xx xxxxxxx" className="max-w-64" /></Field>}
             <Field label="Note"><Textarea rows={2} value={form.admin_note} onChange={(e) => set('admin_note', e.target.value)} placeholder="Optional: card details, delivery instructions..." /></Field>
             <Field label="Order source" hint="The website or channel this order came from">
               <Select value={form.order_source_id} onChange={(v) => set('order_source_id', v)} allowEmpty placeholder="Choose the source" options={meta.sources.map((x) => ({ value: x.id, label: x.name }))} />
@@ -373,13 +379,19 @@ export default function OrderWizard() {
               {quote?.plan_credit > 0 && <Row label="Credit for unused time" value={`- ${money(cur, quote.plan_credit)}`} className="font-medium text-success" />}
               {quote?.sample_credit > 0 && <Row label="Sample credit" value={`- ${money(cur, quote.sample_credit)}`} className="font-medium text-success" />}
               {quote?.tax > 0 && <Row label={`${quote.tax_name} (${quote.tax_rate}%)`} value={money(cur, quote.tax)} />}
-              <Row label="Delivery" value={noShip ? 'No shipping' : cod ? money(cur, quote?.delivery ?? meta.delivery_charges) : 'None'} />
-              {quote?.cod > 0 && <Row label="COD charges" value={money(cur, quote.cod)} />}
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-muted-foreground">Delivery fee</span>
+                {noShip ? <span>No shipping</span> : (
+                  <Tip content={`Leave empty for the default (${money(cur, quote?.delivery_default ?? meta.delivery_charges)}). Type 0 for free delivery.`}>
+                    <Input type="text" inputMode="decimal" autoComplete="off" aria-label="Delivery fee" value={form.delivery_charges} onChange={(e) => set('delivery_charges', decimal(e.target.value))} placeholder={String(quote?.delivery_default ?? meta.delivery_charges)} className="h-8 w-28 text-right" />
+                  </Tip>
+                )}
+              </div>
             </div>
             <div className={cn('flex items-center justify-between rounded-2xl bg-primary-soft px-4 py-3 text-primary transition-opacity', quoting && 'opacity-60')}>
               <span className="font-semibold">Total</span><span className="font-display text-xl font-bold">{money(cur, quote?.total)}</span>
             </div>
-            {form.payment === 'advance' && advance > 0 && total > 0 && <Row label="Balance after advance" value={money(cur, Math.max(0, total - advance))} className="font-medium" />}
+            {form.advance_on && advance > 0 && total > 0 && <><Row label="Advance received" value={`- ${money(cur, advance)}`} className="font-medium text-success" /><Row label="Left to pay" value={money(cur, Math.max(0, total - advance))} className="font-semibold" /></>}
             {quote?.error && <p className="text-xs text-danger">{quote.error}</p>}
             {(quote?.warnings || []).map((w) => <p key={w} className="rounded-xl bg-warning-soft px-3 py-2 text-xs text-warning">{w}</p>)}
             <Button size="lg" className="w-full" onClick={create} loading={busy}>Create order<ArrowRight /></Button>
