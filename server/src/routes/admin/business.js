@@ -240,6 +240,8 @@ r.post('/orders', wrap(async (req, res) => {
   if (b.order_source_id && !source) fail(422, 'Validation failed', { order_source_id: 'Unknown order source' });
   if (b.order_type && !orders.ORDER_TYPES[b.order_type]) fail(422, 'Validation failed', { order_type: 'Unknown order type' });
   if (TAG_TYPES.includes(b.order_type) && !contacttags.validPhone(contacttags.cleanPhone(b.phone))) fail(422, 'Validation failed', { phone: 'A tag needs the owner\'s phone number: that is who gets the messages' });
+  const linkSpec = b.link && typeof b.link === 'object' ? { kind: b.link.kind, planId: Number(b.link.plan_id) || null, qty: b.link.qty } : null;
+  if (linkSpec) await links.checkSpec(linkSpec); // refused before the order exists: no order without its link
   const sampleOf = (await sampleCreditFor(b)).order;
   if (['renewal', 'upgrade'].includes(b.order_type)) {
     // renewals and upgrades change the plan of an existing customer
@@ -323,9 +325,10 @@ r.post('/orders', wrap(async (req, res) => {
   // organisation orders appear in the organisation journey (services/organisation.js timeline) with the contact and the staff member
   // one tag per piece (a pack of 2 makes 2), owner = the customer
   const tags = TAG_TYPES.includes(b.order_type) ? await contacttags.createForOrder(o, q.lines.reduce((a, l) => a + l.quantity * Math.max(1, Number(l.product.tags_per_unit) || 1), 0), { userId: user?.id, kind: b.order_type === 'airport_tag' ? 'luggage' : 'vehicle' }) : null;
+  const madeLinks = linkSpec ? await links.generate({ ...linkSpec, orderedFor: user?.id || null, orderId: o.id }) : null;
   const renewed = await orders.applyRenewal(o); // paid renewals extend the subscription right away
   security.audit(req, 'order.create', 'nfc_order', o.id, { type, account: account?.created || undefined, renewed: renewed ? renewed.ends_at : undefined });
-  res.status(201).json({ data: o, account, tags: tags ? tags.map((t) => ({ id: t.id, code: t.code, url: contacttags.url(t), manage_url: contacttags.manageUrl(t) })) : null, renewed: renewed ? { ends_at: renewed.ends_at } : null, guest: guest ? { id: guest.id, name: guest.name } : null, message: `Order ${o.order_number} created${renewed ? `. Plan renewed until ${dayjs(renewed.ends_at).format('DD MMM YYYY')}` : ''}` });
+  res.status(201).json({ data: o, account, links: madeLinks ? madeLinks.map((l) => ({ ...l.toJSON(), short_url: shortlinks.shortUrl(l.code), state: links.stateOf(l) })) : null, tags: tags ? tags.map((t) => ({ id: t.id, code: t.code, url: contacttags.url(t), manage_url: contacttags.manageUrl(t) })) : null, renewed: renewed ? { ends_at: renewed.ends_at } : null, guest: guest ? { id: guest.id, name: guest.name } : null, message: `Order ${o.order_number} created${renewed ? `. Plan renewed until ${dayjs(renewed.ends_at).format('DD MMM YYYY')}` : ''}` });
 }));
 
 /* customer search for the order wizard: name, e-mail or phone in one box */

@@ -47,6 +47,13 @@ function checkDestination(kind, url, { required = false } = {}) {
   return u;
 }
 
+/** Check a link request (type and plan) before anything is created, so an order never ends up without the link it was meant to have. */
+async function checkSpec({ kind, planId }) {
+  if (!KINDS.includes(kind)) errs('link', 'Choose a link type');
+  const plan = planId ? await M.Plan.findOne({ where: { id: planId, status: true }, attributes: ['id'] }) : null;
+  if (!plan && kind !== 'review') errs('link_plan_id', 'Choose a plan for this link');
+}
+
 /** Create `qty` unclaimed links. `ordered_for` is only a reference to the customer; the owner is whoever claims the link. */
 async function generate({ kind, planId, qty = 1, templateId, presetUrl, orderedFor, orderId, title }) {
   if (!KINDS.includes(kind)) errs('kind', 'Choose a link type');
@@ -240,4 +247,4 @@ const publicInfo = async (link) => ({
   needs: link.kind === 'vcard' ? 'profile' : 'url', preset_url: link.preset_url || null,
 });
 
-module.exports = { validateDetails, KINDS, KIND_LABEL, OTP_MINUTES, stateOf, generate, startOtp, checkOtp, ensureUser, claim, completeDetails, reset, transfer, subFor, publicInfo, cleanEmail, checkDestination };
+module.exports = { checkSpec, validateDetails, KINDS, KIND_LABEL, OTP_MINUTES, stateOf, generate, startOtp, checkOtp, ensureUser, claim, completeDetails, reset, transfer, subFor, publicInfo, cleanEmail, checkDestination };

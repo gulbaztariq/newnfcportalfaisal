@@ -162,6 +162,7 @@ export default function OrderWizard() {
   const first = valid[0];
   const linkCount = Math.max(1, parseInt(form.link_qty, 10) || Number(first?.quantity) || 1);
   const linkNeedsPlan = form.link_kind !== 'review';
+  const wantsLink = !planChange; // every order has its link; a renewal or upgrade changes the plan of someone who already has one
 
   const validate = () => {
     const e = {};
@@ -175,7 +176,7 @@ export default function OrderWizard() {
     if (form.discount_type === 'percent' && Number(form.discount_value) > 100) e.discount_value = 'A percentage cannot be more than 100';
     if (form.payment === 'online' && !form.payment_account_id) e.payment_account_id = 'Choose where the money was received';
     if (form.payment === 'advance') { const a = Number(form.advance_amount); if (!(a > 0)) e.advance_amount = 'Enter the advance received'; else if (quote && !quote.error && a > Number(quote.total)) e.advance_amount = 'The advance is more than the order total'; }
-    if (form.make_links && linkNeedsPlan && !form.link_plan_id) e.link_plan_id = 'Choose the plan of the link';
+    if (wantsLink && linkNeedsPlan && !form.link_plan_id) e.link_plan_id = 'Choose the plan of the link';
     return e;
   };
   const create = async () => {
@@ -190,13 +191,8 @@ export default function OrderWizard() {
         payment_status: form.payment === 'online' ? 'paid' : 'pending', payment_type: form.payment === 'cod' ? undefined : form.payment, advance_amount: form.payment === 'advance' ? form.advance_amount : undefined,
         payment_account_id: form.payment !== 'cod' && form.payment_account_id ? form.payment_account_id : undefined,
       };
-      const d = await run(api.post('/admin/orders', body));
-      let made = null;
-      if (form.make_links) {
-        try { made = (await api.post('/admin/links/generate', { order_id: d.data.id, user_id: d.data.user_id || form.customer?.id || undefined, links: [{ kind: form.link_kind, plan_id: linkNeedsPlan ? Number(form.link_plan_id) : undefined, qty: linkCount }] })).data.data; }
-        catch (err) { toast.error(`The order was created, but the links were not: ${err.errors ? Object.values(err.errors)[0] : err.message}. Add them from the Short links page.`); }
-      }
-      setResult({ ...d, links: made });
+      const d = await run(api.post('/admin/orders', { ...body, link: wantsLink ? { kind: form.link_kind, plan_id: linkNeedsPlan ? Number(form.link_plan_id) : undefined, qty: linkCount } : undefined }));
+      setResult({ ...d, links: d.links });
     } catch (err) { setErrors(err.errors || {}); } finally { setBusy(false); }
   };
   const restart = () => { setResult(null); setLines([newLine()]); setQuote(null); setReorderOf(null); setValues((f) => ({ ...f, customer: null, guest: null, name: '', phone: '', email: '', discount_value: '', advance_amount: '', admin_note: '', make_links: false, link_qty: '', sample_order: null })); };
@@ -334,12 +330,9 @@ export default function OrderWizard() {
               </Field>
             </div>
 
-            <div className="space-y-3 rounded-2xl border border-border p-4">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div><p className="text-sm font-semibold">Create a link?</p><p className="text-xs text-muted-foreground">A link to write on the NFC card or print as a QR code. Whoever opens it first attaches it to their e-mail.</p></div>
-                <Segmented id="ml" value={form.make_links ? 'yes' : 'no'} onChange={(v) => set('make_links', v === 'yes')} options={[{ value: 'no', label: 'No' }, { value: 'yes', label: 'Yes' }]} />
-              </div>
-              {form.make_links && (
+            {wantsLink && (
+              <div className="space-y-3 rounded-2xl border border-border p-4">
+                <div><p className="text-sm font-semibold">Link</p><p className="text-xs text-muted-foreground">Every order comes with its link, to write on the NFC card or print as a QR code. The client becomes a user when they open it and confirm their e-mail.</p></div>
                 <div className="grid gap-3 sm:grid-cols-3">
                   <Field label="Link type"><Select value={form.link_kind} onChange={(v) => { set('link_kind', v); if (v === 'review') set('link_plan_id', ''); }} options={LINK_KINDS} /></Field>
                   {linkNeedsPlan
@@ -347,8 +340,8 @@ export default function OrderWizard() {
                     : <Field label="Plan" hint="A review link has no plan"><Input value="No plan" readOnly /></Field>}
                   <Field label="How many links" hint="One per piece by default"><Input type="text" inputMode="numeric" value={form.link_qty} placeholder={String(Number(first?.quantity) || 1)} onChange={(e) => set('link_qty', e.target.value.replace(/\D/g, '').slice(0, 3))} /></Field>
                 </div>
-              )}
-            </div>
+              </div>
+            )}
 
             <div className="space-y-3">
               <Field label="Payment" required>
@@ -404,7 +397,7 @@ export default function OrderWizard() {
             {quote?.error && <p className="text-xs text-danger">{quote.error}</p>}
             {(quote?.warnings || []).map((w) => <p key={w} className="rounded-xl bg-warning-soft px-3 py-2 text-xs text-warning">{w}</p>)}
             <Button size="lg" className="w-full" onClick={create} loading={busy}>Create order<ArrowRight /></Button>
-            {form.make_links && <p className="text-center text-xs text-muted-foreground">{linkCount} {form.link_kind === 'review' ? 'review' : form.link_kind === 'vcard' ? 'business card' : 'redirect'} link{linkCount === 1 ? '' : 's'} will be created</p>}
+            {wantsLink && <p className="text-center text-xs text-muted-foreground">{linkCount} {form.link_kind === 'review' ? 'review' : form.link_kind === 'vcard' ? 'business card' : 'redirect'} link{linkCount === 1 ? '' : 's'} will be created</p>}
           </CardBody>
         </Card>
       </div>
