@@ -182,6 +182,13 @@ form.enq label{font-size:13px;color:var(--muted)}
 .sticky a,.sticky button{width:46px;height:46px;border-radius:50%;display:grid;place-items:center;font-size:20px;background:var(--chip);color:var(--p);border:0;cursor:pointer;transition:transform .25s}
 .sticky a:hover,.sticky button:hover{transform:translateY(-2px)}
 .sticky .main{background:var(--p);color:var(--onp);width:54px}
+/* every card has an "Add to contact" button that stays at the bottom while scrolling; the quick-action docks sit just above it */
+.addbar{position:fixed;left:50%;bottom:calc(10px + env(safe-area-inset-bottom));transform:translateX(-50%);z-index:30;width:min(440px,calc(100% - 24px));height:50px;border-radius:999px;display:flex;align-items:center;justify-content:center;gap:8px;font-size:15px;font-weight:700;letter-spacing:.01em;text-decoration:none;background:var(--p);color:var(--onp);box-shadow:0 14px 30px -12px var(--p),0 4px 14px rgba(0,0,0,.18);transition:transform .2s}
+.addbar:active{transform:translateX(-50%) scale(.98)}
+.addbar i{font-size:19px}
+.addbar~.sticky{bottom:calc(72px + env(safe-area-inset-bottom))!important}
+.addbar~.x-dock:not(.x-static),.addbar~.x-tabbar:not(.x-static){bottom:calc(72px + env(safe-area-inset-bottom))!important}
+.addbar~.x-bar2:not(.x-static),.addbar~.x-bar3:not(.x-static){bottom:calc(66px + env(safe-area-inset-bottom))!important}
 .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%) translateY(140px);background:#111827;color:#fff;padding:11px 20px;border-radius:999px;font-size:14px;font-weight:500;transition:transform .35s cubic-bezier(.16,1,.3,1);z-index:60;box-shadow:0 12px 30px -10px rgba(0,0,0,.5)}
 .toast.show{transform:translateX(-50%) translateY(0)}
 .lb{position:fixed;inset:0;background:rgba(5,6,10,.92);backdrop-filter:blur(6px);z-index:50;display:none;align-items:center;justify-content:center;padding:20px}

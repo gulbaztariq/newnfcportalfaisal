@@ -27,6 +27,8 @@ const CSS_RULES = (() => {
     return { text, layouts };
   });
 })();
+/** designs whose own bottom bar has a visible, labelled save button (the others get the shared Add to Contact button) */
+const OWN_SAVE_BAR = new Set(['sxsheet', 'sxclinic']);
 const cssCache = new Map();
 function cssFor(layout) {
   let css = cssCache.get(layout);
@@ -309,6 +311,10 @@ function render({ v, template, services = [], gallery = [], testimonials = [], p
   // signature designs build their own header and decide how the sections are laid out (signature.js)
   const installBtn = v.pwa_enable ? `<button class="install" id="install" type="button"><i class="ri-download-cloud-2-line"></i>${L.install}</button>` : '';
   const sig = signature.ARCH[layout] ? signature.build({ layout, v, L, alias, fullName, initials, phone, wa, mapHref, socials, SOCIAL, BRAND, blocks, order, HEAD, sec, hasHours, todayHours, t12, services, gallery, testimonials, link, appName: app.app_name, install: installBtn }) : null;
+  // the Add to contact button at the bottom; a design whose own bottom bar already has a labelled save button keeps that one
+  const dockSaves = !!(sig && sig.dock && (sig.dock.includes('tp-dock') || (v.sticky_bar !== false && OWN_SAVE_BAR.has(layout) && sig.dock.includes(`>${L.save}<`))));
+  const addBar = dockSaves ? '' : `<a class="addbar" href="/${alias}/contact.vcf" data-save aria-label="${L.add || L.save}"><i class="ri-user-add-fill"></i>${L.add || L.save}</a>`;
+
 
   const html = `<!doctype html>
 <html lang="${esc(th.lang)}" dir="${th.dir}">
@@ -345,9 +351,10 @@ ${headTags({ v, th, title, desc: v.meta_description || v.description || v.occupa
   ${ordered}`}
 
   ${footer(v, app, appUrl, L, pages)}
-  ${v.sticky_bar !== false && (!sig || sig.dock) ? '<div style="height:70px"></div>' : ''}
+  <div style="height:${(v.sticky_bar !== false && (!sig || sig.dock) ? 70 : 0) + (addBar ? 70 : 10)}px"></div>
 </main>
 
+${addBar}
 ${sig ? sig.dock : v.sticky_bar !== false ? stickyBar : ''}
 
 ${menuViewer}
