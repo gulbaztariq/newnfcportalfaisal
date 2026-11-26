@@ -158,7 +158,7 @@ r.get('/orders/:id', wrap(async (req, res) => {
     M.Vendor.findAll({ where: { status: true }, attributes: ['id', 'name', 'type'] }),
     M.FinanceAccount.findAll({ where: { status: true }, attributes: ['id', 'name', 'type'], order: [['id', 'ASC']] }),
   ]);
-  res.json({ accounts, data: o, invoice, messages, movements, links: links.map((l) => ({ ...l.toJSON(), short_url: shortlinks.shortUrl(l.code) })), vendors, labels: orders.LABELS, steps: orders.STEPS, track_url: `${appUrl}/track/${o.order_number}?t=${o.access_token}` });
+  res.json({ accounts, delivery_default: Number((await settings.get('delivery_charges')) || 0), data: o, invoice, messages, movements, links: links.map((l) => ({ ...l.toJSON(), short_url: shortlinks.shortUrl(l.code) })), vendors, labels: orders.LABELS, steps: orders.STEPS, track_url: `${appUrl}/track/${o.order_number}?t=${o.access_token}` });
 }));
 
 /* ---------------------------------------------- admin creates an order (wizard: phone / WhatsApp / walk-in / other websites) */
@@ -539,6 +539,14 @@ r.patch('/orders/:id', wrap(async (req, res) => {
   if (req.body.is_cod !== undefined) data.is_cod = toBool(req.body.is_cod);
   if (req.body.cod_settled !== undefined) { data.cod_settled = toBool(req.body.cod_settled); if (data.cod_settled && o.is_cod) { data.payment_status = 'paid'; await finance.settleCodOrders([o.tracking_number]).catch(() => {}); } }
   if (req.body.nfc_written !== undefined) data.nfc_written = toBool(req.body.nfc_written);
+  // the delivery fee is decided when the order is completed; the order total follows it (not once the order is paid)
+  if (req.body.delivery_charges !== undefined && req.body.delivery_charges !== '') {
+    validate(req.body, { delivery_charges: 'numeric|minv:0' });
+    if (o.payment_status === 'paid') fail(422, 'Validation failed', { delivery_charges: 'This order is already paid, so its total can no longer change' });
+    const fee = r2(req.body.delivery_charges);
+    data.delivery_charges = fee; data.amount = r2(Number(o.amount) - Number(o.delivery_charges || 0) + fee);
+    if (Number(data.advance_amount ?? o.advance_amount) > data.amount) fail(422, 'Validation failed', { delivery_charges: 'The advance is already more than the new total' });
+  }
   // the rest of the payment, and how it is paid, is decided when the order is closed: cod (the courier collects it) | cash | online | bank
   const rp = req.body.remaining_payment;
   if (rp && typeof rp === 'object') {
