@@ -25,7 +25,7 @@ export const adminMenu = (user) => filterMenu([
       { label: 'Products', icon: Nfc, to: '/admin/products', perm: 'orders' },
       { label: 'Order sources', icon: Globe2, to: '/admin/order-sources', perm: 'orders' },
       { label: 'Invoices', icon: FileText, to: '/admin/invoices', perm: 'invoices' },
-      { label: 'Short links & QR', icon: QrCode, to: '/admin/short-links', perm: 'shortlinks' },
+      MODULES.shortLinksMenu && { label: 'Short links & QR', icon: QrCode, to: '/admin/short-links', perm: 'shortlinks' },
     ],
   },
   {
