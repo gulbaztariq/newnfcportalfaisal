@@ -89,3 +89,13 @@ test('admin order: the link is created with the order, and a bad link request st
   assert.ok(ok.body.links.every((l) => l.kind === 'review' && l.nfc_order_id === ok.body.data.id && l.state === 'unclaimed'));
   assert.equal(await M.ShortLink.count(), linksBefore + 3);
 });
+
+test('admin order: each product can ask for its own links', async () => {
+  const a = await product({ price: 100 }); const b2 = await product({ price: 200 });
+  const r = await admin.post('/api/admin/orders', base([{ product_id: a.id, quantity: 2 }, { product_id: b2.id, quantity: 1 }], { links: [{ kind: 'review', qty: 2, title: a.name }, { kind: 'review', qty: 1, title: b2.name }] }));
+  assert.equal(r.status, 201, r.text.slice(0, 200));
+  assert.equal(r.body.links.length, 3);
+  assert.deepEqual([...new Set(r.body.links.map((l) => l.title))].sort(), [a.name, b2.name].sort());
+  const none = await admin.post('/api/admin/orders', base([{ product_id: a.id, quantity: 1 }], { links: [] }));
+  assert.equal(none.status, 201); assert.equal(none.body.links, null);
+});

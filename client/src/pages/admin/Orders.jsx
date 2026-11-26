@@ -46,7 +46,7 @@ export function Orders() {
   return (
     <>
       <PageHeader title="Orders" description="Website shop, portal and manual orders: design, printing, Leopards dispatch, delivery and payment in one place.">
-        <Tip content="Refresh Leopards tracking for every dispatched order"><Button variant="outline" onClick={sync} loading={syncing}><RefreshCw />Sync courier</Button></Tip>
+        {MODULES.courierSync && <Tip content="Refresh Leopards tracking for every dispatched order"><Button variant="outline" onClick={sync} loading={syncing}><RefreshCw />Sync courier</Button></Tip>}
         <ButtonLink as={Link} to="/admin/order-sources" variant="outline"><Globe />Order sources</ButtonLink>
         <ButtonLink as={Link} to="/admin/orders/new"><Plus />New order</ButtonLink>
       </PageHeader>
