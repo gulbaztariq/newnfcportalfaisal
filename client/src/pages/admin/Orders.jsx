@@ -98,6 +98,24 @@ export function Orders() {
   );
 }
 
+/** the rest of the payment, and how it is paid, is decided when the order is closed */
+function RemainingPaymentDialog({ order, accounts, remaining, onClose, onSave, busy, closing }) {
+  const [type, setType] = useState(order.fulfilment === 'delivery' ? 'cod' : 'cash');
+  const [account, setAccount] = useState(accounts[0] ? String(accounts[0].id) : '');
+  const types = [...(order.fulfilment === 'delivery' ? [{ value: 'cod', label: 'Cash on delivery (the courier collects it)' }] : []), { value: 'cash', label: 'Cash' }, { value: 'online', label: 'Online payment' }, { value: 'bank', label: 'Bank transfer' }];
+  const needsAccount = type !== 'cod';
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()} size="sm" icon={Banknote} title={closing ? 'Complete the order' : 'Remaining payment'}
+      description={`${rs(remaining)} is still to be paid${Number(order.advance_amount) > 0 ? ` (advance ${rs(order.advance_amount)} already received)` : ''}. Choose how it is paid.`}
+      footer={<><Button variant="outline" onClick={onClose}>Cancel</Button><Button loading={busy} disabled={needsAccount && !account} onClick={() => onSave({ type, account_id: needsAccount ? Number(account) : undefined })}>{closing ? 'Save and complete' : 'Save'}</Button></>}>
+      <div className="space-y-4">
+        <Field label="Remaining payment option" required><Select value={type} onChange={setType} options={types} /></Field>
+        {needsAccount && <Field label="Payment method" required hint={accounts.length ? 'The cash, bank or wallet account the money went into' : 'Add a payment method under Finance first'}><Select value={account} onChange={setAccount} placeholder="Choose the method" options={accounts.map((a) => ({ value: a.id, label: a.name }))} /></Field>}
+      </div>
+    </Dialog>
+  );
+}
+
 /* ================================================================ detail */
 export function OrderDetail() {
   const { id } = useParams();
@@ -107,12 +125,18 @@ export function OrderDetail() {
   const [busy, setBusy] = useState('');
   const [note, setNote] = useState('');
   const [vendorId, setVendorId] = useState('');
+  const [payDlg, setPayDlg] = useState(null); // { then: the status to move to once the remaining payment is saved }
   const load = () => api.get(`/admin/orders/${id}`).then(({ data }) => setD(data));
   useEffect(() => { load(); }, [id]); // eslint-disable-line
   const o = d?.data;
   const act = async (key, fn) => { setBusy(key); try { await fn(); await load(); } catch { /* toast shown */ } finally { setBusy(''); } };
   const patch = (body, msg) => act('patch', () => run(api.patch(`/admin/orders/${id}`, body), msg));
   const setStatus = (order_status) => act(order_status, () => run(api.patch(`/admin/orders/${id}`, { order_status, note: note || undefined, stock_vendor_id: vendorId || undefined }), `Order moved to ${d.labels[order_status]}`).then(() => setNote('')));
+  const remaining = o ? Math.max(0, Number(o.amount) - Number(o.advance_amount || 0)) : 0;
+  const unpaid = o && o.payment_status !== 'paid' && !o.is_cod && o.payment_type !== 'collection' && remaining > 0;
+  // closing the order asks for the remaining payment first
+  const moveTo = (st) => { if (st === 'delivered' && unpaid) setPayDlg({ then: st }); else setStatus(st); };
+  const saveRemaining = (remaining_payment) => act('pay', async () => { await run(api.patch(`/admin/orders/${id}`, { remaining_payment }), 'Payment recorded'); const then = payDlg?.then; setPayDlg(null); if (then) await run(api.patch(`/admin/orders/${id}`, { order_status: then, note: note || undefined, stock_vendor_id: vendorId || undefined }), `Order moved to ${d.labels[then]}`); });
   const loadCities = () => { if (!cities) api.get('/admin/courier/cities').then(({ data }) => setCities(data.data)).catch((e) => { setCities([]); toast.error(e.message); }); };
   const copy = (t, msg = 'Copied') => { navigator.clipboard?.writeText(t); toast.success(msg); };
   const writeNfc = async () => {
@@ -135,6 +159,7 @@ export function OrderDetail() {
   const items = o.items?.length ? o.items : [{ id: 0, name: o.nfc_card?.name || 'NFC card', quantity: o.quantity, unit_price: o.unit_price, total: o.amount }];
   return (
     <>
+      {payDlg && <RemainingPaymentDialog order={o} accounts={d.accounts || []} remaining={remaining} closing={!!payDlg.then} busy={busy === 'pay'} onClose={() => setPayDlg(null)} onSave={saveRemaining} />}
       <Link to="/admin/orders" className="mb-4 inline-flex min-h-6 items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" />All orders</Link>
       <PageHeader eyebrow={`${SOURCE[o.source]?.[0] || 'Portal'} order${o.order_source ? ` · ${o.order_source.name}` : ''}${o.order_type && o.order_type !== 'nfc_profile' ? ` · ${ORDER_TYPE_LABEL[o.order_type]}` : ''}${Number(o.sample_credit) > 0 ? ` · sample credit ${Number(o.sample_credit)}` : ''}${Number(o.plan_credit) > 0 ? ` · plan credit ${Number(o.plan_credit)}` : ''} · ${fmtDateTime(o.created_at)} · by ${createdBy(o)}`} title={o.order_number} description={`${o.name} · ${rs(o.amount)} · ${paymentLabel(o)}${o.fulfilment === 'collection' ? ' · Office collection' : ''}`}>
         {!['digital', 'renewal', 'upgrade'].includes(o.order_type) && <Tip content="Same customer and products at wholesale prices"><ButtonLink as={Link} to={`/admin/orders/new?bulk=${o.id}`} variant="outline"><Boxes />Create bulk order</ButtonLink></Tip>}
@@ -157,7 +182,7 @@ export function OrderDetail() {
               return (
                 <div key={s} className="flex min-w-24 flex-1 items-center gap-1">
                   <Tip content={hist ? `${d.labels[s]} · ${fmtDateTime(hist.at)}${hist.by ? ` · ${hist.by}` : ''}` : `Move to ${d.labels[s]}`}>
-                    <button type="button" disabled={!!busy || i === idx} onClick={() => setStatus(s)} className="group flex flex-col items-center gap-1.5 text-center">
+                    <button type="button" disabled={!!busy || i === idx} onClick={() => moveTo(s)} className="group flex flex-col items-center gap-1.5 text-center">
                       <motion.span initial={false} animate={{ scale: i === idx ? 1.1 : 1 }} className={cn('grid size-11 cursor-pointer place-items-center rounded-2xl border-2 transition', done ? 'border-primary bg-primary text-primary-foreground shadow-glow' : 'border-border bg-card text-muted-foreground group-hover:border-primary/50')}>
                         <I className="size-5" />
                       </motion.span>
@@ -175,7 +200,7 @@ export function OrderDetail() {
             {!o.stock_consumed && (
               <Field label="Take stock from" className="w-52"><Select value={vendorId} onChange={setVendorId} placeholder="Main store" options={[{ value: '', label: 'Main store' }, ...d.vendors.map((v) => ({ value: v.id, label: v.name }))]} /></Field>
             )}
-            {next && <Button onClick={() => setStatus(next)} loading={busy === next}>Move to {d.labels[next]}</Button>}
+            {next && <Button onClick={() => moveTo(next)} loading={busy === next}>Move to {d.labels[next]}</Button>}
             {!terminal && <Button variant="danger-soft" onClick={async () => { if (await confirm({ title: 'Cancel this order?', description: 'Stock taken for it goes back to inventory.', confirmText: 'Cancel order' })) setStatus('cancelled'); }}>Cancel</Button>}
             {o.order_status === 'shipped' && <Button variant="outline" onClick={() => setStatus('returned')}>Mark returned</Button>}
           </div>
@@ -210,6 +235,9 @@ export function OrderDetail() {
             <CardHeader icon={Banknote} title="Payment" />
             <CardBody className="space-y-3">
               <div className="flex items-center justify-between text-sm"><span className="text-muted-foreground">Method</span><span className="font-medium">{paymentLabel(o)}</span></div>
+              {Number(o.advance_amount) > 0 && <div className="flex items-center justify-between text-sm"><span className="text-muted-foreground">Advance received</span><span className="font-medium">{rs(o.advance_amount)}{(d.accounts || []).find((a) => a.id === o.advance_account_id) ? ` · ${(d.accounts || []).find((a) => a.id === o.advance_account_id).name}` : ''}</span></div>}
+              {o.payment_status !== 'paid' && <div className="flex items-center justify-between text-sm"><span className="text-muted-foreground">Left to pay</span><span className="font-semibold">{rs(remaining)}</span></div>}
+              {unpaid && !terminal && <Button size="sm" variant="outline" onClick={() => setPayDlg({ then: null })}><Banknote />Record remaining payment</Button>}
               <div className="flex items-center justify-between text-sm"><span className="text-muted-foreground">Status</span><Select className="w-36" value={o.payment_status} onChange={(v) => patch({ payment_status: v }, 'Payment updated')} options={['pending', 'paid', 'rejected'].map((v) => ({ value: v, label: label(v) }))} /></div>
               {o.is_cod && !terminal && <SwitchRow title="COD settled by courier" description="Leopards has paid this amount to you" checked={o.cod_settled} onChange={(v) => patch({ cod_settled: v }, 'Updated')} />}
             </CardBody>

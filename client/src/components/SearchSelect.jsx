@@ -10,6 +10,7 @@ export default function SearchSelect({ value, onChange, search, renderItem, rend
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [active, setActive] = useState(0);
+  const [editing, setEditing] = useState(false); // a chosen value was clicked: the list opens again without clearing it first
   const box = useRef(null);
   const input = useRef(null);
   useEffect(() => {
@@ -20,22 +21,22 @@ export default function SearchSelect({ value, onChange, search, renderItem, rend
     return () => { live = false; clearTimeout(t); };
   }, [q, open]); // eslint-disable-line
   useEffect(() => {
-    const close = (e) => { if (box.current && !box.current.contains(e.target)) setOpen(false); };
+    const close = (e) => { if (box.current && !box.current.contains(e.target)) { setOpen(false); setEditing(false); } };
     document.addEventListener('pointerdown', close);
     return () => document.removeEventListener('pointerdown', close);
   }, []);
-  const pick = (item) => { onChange(item); setOpen(false); setQ(''); };
+  const pick = (item) => { onChange(item); setOpen(false); setEditing(false); setQ(''); };
   const onKey = (e) => {
     if (e.key === 'ArrowDown') { e.preventDefault(); setOpen(true); setActive((a) => Math.min(items.length - 1, a + 1)); }
     if (e.key === 'ArrowUp') { e.preventDefault(); setActive((a) => Math.max(0, a - 1)); }
     if (e.key === 'Enter' && open && items[active]) { e.preventDefault(); pick(items[active]); }
-    if (e.key === 'Escape') setOpen(false);
+    if (e.key === 'Escape') { setOpen(false); setEditing(false); }
   };
 
-  if (value && renderValue) {
+  if (value && renderValue && !editing) {
     return (
       <div className={cn('flex items-center gap-3 rounded-xl border border-primary/40 bg-primary-soft/40 px-3 py-2', className)}>
-        <div className="min-w-0 flex-1">{renderValue(value)}</div>
+        <div role="button" tabIndex={0} aria-label="Change" className="min-w-0 flex-1 cursor-pointer" onClick={() => { setEditing(true); setOpen(true); setTimeout(() => input.current?.focus(), 0); }} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setEditing(true); setOpen(true); setTimeout(() => input.current?.focus(), 0); } }}>{renderValue(value)}</div>
         <button type="button" onClick={() => { onChange(null); setTimeout(() => input.current?.focus(), 0); }} className="grid size-7 shrink-0 cursor-pointer place-items-center rounded-lg text-muted-foreground transition hover:bg-muted hover:text-foreground" aria-label="Change"><X className="size-4" /></button>
       </div>
     );
