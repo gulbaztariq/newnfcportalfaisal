@@ -18,14 +18,14 @@ before(async () => {
 after(async () => { ctx.server.close(); await M.sequelize.close(); });
 
 test('translations: saved wording shows on the card; empty goes back to the standard text', async () => {
-  const list = await admin.get('/api/admin/translations?lang=en'); assert.equal(list.status, 200); const save = list.body.data.find((r) => r.key === 'save'); assert.equal(save.english, 'Save Contact');
-  assert.equal((await admin.put('/api/admin/translations', { lang: 'en', values: { save: 'Add me to your phone', nonsense_key: 'x', share: '<b>Send</b>' } })).status, 200);
+  const list = await admin.get('/api/admin/translations?lang=en'); assert.equal(list.status, 200); const save = list.body.data.find((r) => r.key === 'add'); assert.equal(save.english, 'Add to Contact');
+  assert.equal((await admin.put('/api/admin/translations', { lang: 'en', values: { add: 'Add me to your phone', nonsense_key: 'x', share: '<b>Send</b>' } })).status, 200);
   const html = await (await fetch(`${ctx.base}/${card.url_alias}`)).text();
   assert.match(html, /Add me to your phone/); assert.ok(!html.includes('<b>Send</b>'), 'markup is stripped from translations'); assert.match(html, /bSend\/b/);
-  const again = await admin.get('/api/admin/translations?lang=en'); assert.equal(again.body.data.find((r) => r.key === 'save').value, 'Add me to your phone'); assert.ok(!again.body.data.some((r) => r.key === 'nonsense_key'));
+  const again = await admin.get('/api/admin/translations?lang=en'); assert.equal(again.body.data.find((r) => r.key === 'add').value, 'Add me to your phone'); assert.ok(!again.body.data.some((r) => r.key === 'nonsense_key'));
   assert.equal((await admin.put('/api/admin/translations', { lang: 'DROP TABLE', values: {} })).status, 422);
   await admin.put('/api/admin/translations', { lang: 'en', values: {} });
-  assert.match(await (await fetch(`${ctx.base}/${card.url_alias}`)).text(), /Save Contact/);
+  assert.match(await (await fetch(`${ctx.base}/${card.url_alias}`)).text(), /Add to Contact/);
   assert.equal((await client(ctx.base).get('/api/admin/translations')).status, 401);
 });
 

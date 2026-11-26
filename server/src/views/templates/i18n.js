@@ -41,7 +41,8 @@ function overrides() {
   }
   return ov;
 }
-const base = (lang) => ({ ...L.en, ...EXTRA.en, ...(L[lang] || {}), ...(EXTRA[lang] || {}) });
+// a language without its own "Add to Contact" wording uses its "Save contact" text, never English
+const base = (lang) => { const b = { ...L.en, ...EXTRA.en, ...(L[lang] || {}), ...(EXTRA[lang] || {}) }; if (L[lang] && !L[lang].add) b.add = L[lang].save; return b; };
 const t = (lang) => ({ ...base(lang), ...(overrides()[lang] || {}) });
 
 module.exports = { t, base, clean, RTL, LANGS: Object.keys(L), KEYS: Object.keys({ ...L.en, ...EXTRA.en }) };

@@ -316,6 +316,8 @@ function render({ v, template, services = [], gallery = [], testimonials = [], p
   const addBar = dockSaves ? '' : `<a class="addbar" href="/${alias}/contact.vcf" data-save aria-label="${L.add || L.save}"><i class="ri-user-add-fill"></i>${L.add || L.save}</a>`;
 
 
+  // one Add to contact button only: the sticky one; the copy inside the page is dropped
+  const dropSave = (h) => (addBar ? h.replace(/<a\b[^>]*(?:\bid="save"|contact\.vcf)[^>]*>[\s\S]*?<\/a>/g, '') : h);
   const html = `<!doctype html>
 <html lang="${esc(th.lang)}" dir="${th.dir}">
 <head>
@@ -323,7 +325,7 @@ ${headTags({ v, th, title, desc: v.meta_description || v.description || v.occupa
 </head>
 <body>
 <main class="wrap l-${layout}${linkLayout ? ' lk' : ''} ${th.dark ? 'is-dark' : 'is-light'}${th.lowp ? ' lowp' : ''} ${v.profile_image ? 'has-av' : 'no-av'}${v.cover_image || (v.cover_type && v.cover_type !== 'image') ? ' has-cov' : ''}${th.cls ? ` ${th.cls}` : ''}${preview?.still ? ' pv-still' : ''}"${th.radius ? ` style="--r:${th.radius}"` : ''}>
-  ${sig ? sig.main : `<header class="hero">
+  ${sig ? (dockSaves ? sig.main.replace(/<a\b[^>]*(?:\bid="save"|contact\.vcf)[^>]*>[\s\S]*?<\/a>/g, '') : dropSave(sig.main)) : `<header class="hero">
     ${cover}
     <div class="deco" aria-hidden="true"><span>${esc(initials)}</span></div>
     <div class="hero-main">
@@ -345,7 +347,7 @@ ${headTags({ v, th, title, desc: v.meta_description || v.description || v.occupa
     ${mapHref ? `<a class="act" href="${url(mapHref)}" target="_blank" rel="noopener"><i class="ri-map-pin-2-line"></i><span>${L.directions}</span></a>` : ''}
     <button class="act" type="button" id="share"><i class="ri-share-line"></i><span>${L.share}</span></button>
   </nav>
-  <a class="save" id="save" href="/${alias}/contact.vcf"><i class="ri-user-add-line"></i>${L.save}</a>
+  ${addBar ? '' : `<a class="save" id="save" href="/${alias}/contact.vcf"><i class="ri-user-add-line"></i>${L.save}</a>`}
   ${v.pwa_enable ? `<button class="install" id="install" type="button"><i class="ri-download-cloud-2-line"></i>${L.install}</button>` : ''}
 
   ${ordered}`}
@@ -355,7 +357,7 @@ ${headTags({ v, th, title, desc: v.meta_description || v.description || v.occupa
 </main>
 
 ${addBar}
-${sig ? sig.dock : v.sticky_bar !== false ? stickyBar : ''}
+${sig ? dropSave(sig.dock) : v.sticky_bar !== false ? dropSave(stickyBar) : ''}
 
 ${menuViewer}
 <div class="lb" id="lb"><button class="x" type="button" aria-label="Close">&times;</button><div id="lbc"></div></div>
@@ -390,7 +392,7 @@ ${v.newsletter_popup ? `<div class="modal" id="nlm"><div class="sheet"><h4>${L.n
     if(!fd.get('name')||!fd.get('message')){m.textContent='Please fill in your name and message.';return}var ag=f.querySelector('[name=accept_terms]');if(ag&&!ag.checked){m.textContent='Please accept the terms first.';return}b.disabled=true;
     post(API+'/enquiry',fd,true).then(function(x){m.textContent=x.j.message||'';if(x.ok)f.reset()}).catch(function(){m.textContent='Could not send, please try again.'}).finally(function(){b.disabled=false})});
   /* ask details before saving contact */
-  var askm=$('#askm');if(askm){var go=function(e){e.preventDefault();askm.classList.add('show')};$('#save').addEventListener('click',go);$$('[data-save]').forEach(function(a){a.addEventListener('click',go)});
+  var askm=$('#askm');if(askm){var go=function(e){e.preventDefault();askm.classList.add('show')};var sv=$('#save');if(sv)sv.addEventListener('click',go);$$('[data-save]').forEach(function(a){a.addEventListener('click',go)});
     askm.addEventListener('click',function(e){if(e.target===askm)askm.classList.remove('show')});
     $('#ask').addEventListener('submit',function(e){e.preventDefault();var d=Object.fromEntries(new FormData(e.target));d.message='Downloaded the contact card';post(API+'/enquiry',d).finally(function(){askm.classList.remove('show');location.href='/'+A+'/contact.vcf'})})}
   /* newsletter popup */
