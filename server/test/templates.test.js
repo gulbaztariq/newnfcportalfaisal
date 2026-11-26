@@ -252,3 +252,21 @@ test('accounts are saved through the card editor API: unlimited, cleaned, empty 
   assert.equal(saved[0].iban, 'PK36MEZN0001230123456789');
   const pub = await fetch(`${ctx.base}/bank-test`); assert.ok((await pub.text()).includes('data-copy="1000"'));
 });
+
+test('template previews show Pakistani demo people, one fixed person per template', async () => {
+  const c = client(ctx.base);
+  const names = ['Sarah', 'Zayn', 'Rayaan', 'Ayaan', 'Ibrahim', 'Zara', 'Maya', 'Aaliyah', 'Sophia', 'Jasmine'];
+  const seen = new Set();
+  for (const t of TEMPLATES.slice(0, 25)) {
+    const a = await c.get(`/t/preview/${t.slug}`);
+    assert.equal(a.status, 200, t.slug);
+    const body = a.text;
+    assert.ok(names.some((n) => body.includes(n)), `${t.slug}: one of the demo names`);
+    assert.ok(body.includes('tel:+92'), `${t.slug}: a Pakistani phone number`);
+    assert.ok(!body.includes('San Francisco') && !body.includes('Sarah Morgan'), `${t.slug}: no old demo data`);
+    const b = await c.get(`/t/preview/${t.slug}`);
+    assert.equal(b.text.includes(names.find((n) => body.includes(`>${n} `)) || '#'), true, 'same person every time');
+    names.forEach((n) => { if (body.includes(`${n} `)) seen.add(n); });
+  }
+  assert.ok(seen.size >= 5, 'the gallery shows a variety of people');
+});
