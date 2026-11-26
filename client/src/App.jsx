@@ -179,11 +179,11 @@ export default function App() {
                 <Route path="finance/expenses" element={<FN.Expenses />} />
                 <Route path="finance/settlements" element={<FN.CourierSettlements />} />
                 <Route path="finance/setup" element={<FN.FinanceSetup />} />
-                <Route path="inventory" element={<FN.InventoryItems />} />
-                <Route path="inventory/movements" element={<FN.StockMovements />} />
-                <Route path="purchases" element={<FN.Purchases />} />
-                <Route path="vendors" element={<FN.Vendors />} />
-                <Route path="vendors/:id" element={<FN.VendorDetail />} />
+                <Route path="inventory" element={MODULES.inventory ? <FN.InventoryItems /> : <Navigate to="/admin/dashboard" replace />} />
+                <Route path="inventory/movements" element={MODULES.inventory ? <FN.StockMovements /> : <Navigate to="/admin/dashboard" replace />} />
+                <Route path="purchases" element={MODULES.inventory ? <FN.Purchases /> : <Navigate to="/admin/dashboard" replace />} />
+                <Route path="vendors" element={MODULES.inventory ? <FN.Vendors /> : <Navigate to="/admin/dashboard" replace />} />
+                <Route path="vendors/:id" element={MODULES.inventory ? <FN.VendorDetail /> : <Navigate to="/admin/dashboard" replace />} />
                 <Route path="invoices" element={<FN.Invoices />} />
                 <Route path="invoices/create" element={<FN.InvoiceEditor />} />
                 <Route path="invoices/:id/edit" element={<FN.InvoiceEditor />} />
