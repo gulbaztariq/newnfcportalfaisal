@@ -11,9 +11,9 @@ import { Button, Input, Field, Checkbox, Ripples, Aurora } from '@/components/ui
 
 /* ------------------------------------------------------------- showcase */
 const CARDS = [
-  { name: 'Sarah Chen', role: 'Product Designer', grad: 'from-fuchsia-500 to-violet-600', initials: 'SC' },
-  { name: 'Omar Farooq', role: 'Real Estate Advisor', grad: 'from-emerald-500 to-teal-600', initials: 'OF' },
-  { name: 'Dr. Lena Park', role: 'Dentist', grad: 'from-sky-500 to-indigo-600', initials: 'LP' },
+  { name: 'Sarah Malik', role: 'Interior Designer', grad: 'from-fuchsia-500 to-violet-600', initials: 'SM' },
+  { name: 'Zayn Ahmed', role: 'Software Engineer', grad: 'from-emerald-500 to-teal-600', initials: 'ZA' },
+  { name: 'Dr. Maya Sheikh', role: 'Dentist', grad: 'from-sky-500 to-indigo-600', initials: 'MS' },
 ];
 function MiniCard({ c, className, delay }) {
   return (

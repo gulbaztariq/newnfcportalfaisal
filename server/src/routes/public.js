@@ -325,29 +325,45 @@ api.post('/stores/:alias/orders', orderLimiter, wrap(async (req, res) => {
 }));
 
 /* ======================================================= vCard pages */
-const SAMPLE = {
-  url_alias: 'preview', profile_image: '/brand/sample-portrait.svg', name: 'Sarah Morgan', first_name: 'Sarah', last_name: 'Morgan', occupation: 'Product Designer', company: 'Acme Studio',
-  description: 'I design delightful digital products and brand experiences. Let’s build something great together.',
-  email: 'sarah@example.com', phone: '5550100', region_code: '1', location: 'San Francisco, CA', is_verified: true, show_qr_code: false, enable_enquiry_form: true, sticky_bar: false,
-  social_links: { website: 'https://example.com', linkedin: 'https://linkedin.com', instagram: 'https://instagram.com', twitter: 'https://x.com', whatsapp: 'https://wa.me/15550100' },
-  custom_links: [{ label: 'My Portfolio', url: 'https://example.com', desc: 'Selected work and case studies' }, { label: 'Book a table', url: 'https://example.com', desc: 'Reserve in 30 seconds', badge: 'New', icon: 'ri-calendar-event-line', featured: true }],
-  business_hours: { mon: { open: true, from: '09:00', to: '17:00' }, tue: { open: true, from: '09:00', to: '17:00' }, wed: { open: true, from: '09:00', to: '17:00' }, thu: { open: true, from: '09:00', to: '17:00' }, fri: { open: true, from: '09:00', to: '15:00' } },
+/* the demo people shown on template previews (the picker clients choose from): Pakistani names, cities, numbers and businesses.
+   Each template shows one of them, always the same one, so the gallery looks varied. */
+const DEMO_PEOPLE = [
+  { first: 'Sarah', last: 'Malik', job: 'Interior Designer', company: 'Malik Interiors', city: 'DHA Phase 6, Karachi', phone: '3001234567', site: 'malikinteriors.com.pk', about: 'I design warm, practical homes and offices across Karachi. Let’s plan your space together.', services: [['Home Interiors', 'Complete design for apartments and bungalows.'], ['Office Fit-outs', 'Modern, budget-friendly workspaces.']], by: ['Hamza Tariq', 'Sarah transformed our flat, delivered on time and within budget.'] },
+  { first: 'Zayn', last: 'Ahmed', job: 'Software Engineer', company: 'TechNova Solutions', city: 'Gulberg III, Lahore', phone: '3211234567', site: 'technova.com.pk', about: 'I build web and mobile apps for growing Pakistani businesses. Happy to talk about your idea.', services: [['Web Development', 'Fast, secure websites and web apps.'], ['Mobile Apps', 'Android and iOS apps for your customers.']], by: ['Usman Ali', 'Zayn understood our needs and shipped a great product.'] },
+  { first: 'Rayaan', last: 'Khan', job: 'Real Estate Consultant', company: 'Khan Estates', city: 'F-7 Markaz, Islamabad', phone: '3331234567', site: 'khanestates.com.pk', about: 'Buying, selling and renting in Islamabad and Rawalpindi, with honest advice at every step.', services: [['Property Sales', 'Plots, houses and apartments in prime areas.'], ['Rentals', 'Verified homes and offices for rent.']], by: ['Bilal Ahmed', 'Rayaan found us the perfect house in just two weeks.'] },
+  { first: 'Ayaan', last: 'Siddiqui', job: 'Digital Marketing Lead', company: 'Pixel Perfect Agency', city: 'Clifton, Karachi', phone: '3451234567', site: 'pixelperfect.pk', about: 'We help Pakistani brands grow online with ads, social media and search that bring real customers.', services: [['Social Media', 'Content and campaigns that get noticed.'], ['Google & Meta Ads', 'Ads that bring leads, not just clicks.']], by: ['Fatima Noor', 'Our sales doubled in three months with Ayaan’s team.'] },
+  { first: 'Ibrahim', last: 'Qureshi', job: 'Chartered Accountant', company: 'Qureshi & Associates', city: 'Model Town, Lahore', phone: '3001237654', site: 'qureshiassociates.com.pk', about: 'Tax, audit and business advice for companies and individuals, with clear and timely service.', services: [['Tax Returns', 'FBR filing for individuals and companies.'], ['Audit & Accounts', 'Bookkeeping and annual audits.']], by: ['Saad Mehmood', 'Professional and always on time. Highly recommended.'] },
+  { first: 'Zara', last: 'Hussain', job: 'Fashion Designer', company: 'Zara Couture', city: 'Bahria Town, Rawalpindi', phone: '3121234567', site: 'zaracouture.pk', about: 'Bridal and formal wear with a modern Pakistani touch, made to measure for your special day.', services: [['Bridal Wear', 'Custom lehngas, gharara and sharara.'], ['Formal Wear', 'Eid and party outfits, stitched to fit.']], by: ['Hira Aslam', 'My wedding dress was exactly what I dreamed of.'] },
+  { first: 'Maya', last: 'Sheikh', job: 'Dentist', company: 'Smile Care Clinic', city: 'Johar Town, Lahore', phone: '3151234567', site: 'smilecare.com.pk', about: 'Gentle, modern dental care for the whole family. Book a check-up and keep your smile healthy.', services: [['Check-ups & Cleaning', 'Regular care for healthy teeth.'], ['Braces & Whitening', 'Straighter, brighter smiles.']], by: ['Ayesha Khan', 'Painless treatment and very friendly staff.'] },
+  { first: 'Aaliyah', last: 'Raza', job: 'Wedding Photographer', company: 'Aaliyah Raza Photography', city: 'Hayatabad, Peshawar', phone: '3461234567', site: 'aaliyahraza.pk', about: 'Natural, candid photos and films of your biggest day, for weddings, mehndi and engagements.', services: [['Wedding Coverage', 'Full-day photo and video.'], ['Pre-wedding Shoots', 'Relaxed shoots in beautiful locations.']], by: ['Mariam Shah', 'The photos captured every emotion perfectly.'] },
+  { first: 'Sophia', last: 'Iqbal', job: 'Corporate Lawyer', company: 'Iqbal Law Associates', city: 'I-8 Markaz, Islamabad', phone: '3011234567', site: 'iqballaw.com.pk', about: 'Company registration, contracts and dispute resolution for businesses of every size.', services: [['Company Registration', 'SECP, NTN and compliance.'], ['Contracts & Disputes', 'Clear agreements and strong representation.']], by: ['Omar Farooq', 'Sophia handled our case with great care and skill.'] },
+  { first: 'Jasmine', last: 'Farooq', job: 'Boutique Owner', company: 'Jasmine’s Boutique', city: 'D Ground, Faisalabad', phone: '3211239876', site: 'jasmineboutique.pk', about: 'Ready-to-wear and unstitched collections, delivered across Pakistan. Visit us or order on WhatsApp.', services: [['Ready-to-Wear', 'New arrivals every week.'], ['Unstitched Fabric', 'Lawn, cotton and festive collections.']], by: ['Noor Fatima', 'Lovely quality and quick delivery to Karachi.'] },
+];
+/** the same template always shows the same demo person */
+const demoFor = (slug) => DEMO_PEOPLE[[...String(slug)].reduce((a, c) => a + c.charCodeAt(0), 0) % DEMO_PEOPLE.length];
+const sampleFor = (d) => ({
+  url_alias: 'preview', profile_image: '/brand/sample-portrait.svg', name: `${d.first} ${d.last}`, first_name: d.first, last_name: d.last, occupation: d.job, company: d.company,
+  description: d.about, email: `${d.first.toLowerCase()}@${d.site}`, phone: d.phone, region_code: '92', location: d.city, is_verified: true, show_qr_code: false, enable_enquiry_form: true, sticky_bar: false,
+  social_links: { website: `https://${d.site}`, linkedin: 'https://linkedin.com', instagram: 'https://instagram.com', facebook: 'https://facebook.com', whatsapp: `https://wa.me/92${d.phone}` },
+  custom_links: [{ label: 'Our Website', url: `https://${d.site}`, desc: 'Services, prices and past work' }, { label: 'Book an appointment', url: `https://wa.me/92${d.phone}`, desc: 'Message us on WhatsApp', badge: 'New', icon: 'ri-calendar-event-line', featured: true }],
+  business_hours: Object.fromEntries(['mon', 'tue', 'wed', 'thu', 'fri', 'sat'].map((k) => [k, { open: true, from: '10:00', to: k === 'fri' ? '14:00' : '19:00' }])),
   sections: {}, theme: {},
-};
+});
 const setCsp = (res) => res.set('Content-Security-Policy', vcardCsp(res.locals.nonce, clientUrl));
 
 pages.get('/t/preview/:slug', wrap(async (req, res) => {
   const tpl = await M.Template.findOne({ where: { slug: req.params.slug } }) || TEMPLATES.find((t) => t.slug === req.params.slug);
   if (!tpl) fail(404, 'Not found');
   const s = await settings.all();
-  const services = [{ name: 'Brand Identity', description: 'Logos, colour systems and guidelines.' }, { name: 'UI / UX Design', description: 'Web and mobile product design.' }];
-  const testimonials = [{ name: 'Jamie Lee', description: 'Wonderful to work with, delivered beyond expectations.' }];
+  const demo = demoFor(req.params.slug); const SAMPLE = sampleFor(demo);
+  const services = demo.services.map(([name, description]) => ({ name, description }));
+  const testimonials = [{ name: demo.by[0], description: demo.by[1] }];
   res.set('X-Robots-Tag', 'noindex');
   setCsp(res);
   // ?full=1 shows the quick-action bar and a sample gallery (the picker thumbnails leave them out)
   const full = req.query.full === '1';
   const gallery = full ? Array.from({ length: 6 }, (_, i) => ({ image: '/brand/sample-portrait.svg', caption: `Sample ${i + 1}` })) : [];
-  res.send(render({ v: { ...SAMPLE, sticky_bar: full, menu_pages: full ? ['/brand/sample-portrait.svg', '/brand/sample-portrait.svg', '/brand/sample-portrait.svg'] : [], menu_desc: 'Burgers, pizzas and deals', social_links: { ...SAMPLE.social_links, telegram: 'https://t.me/example' }, theme: req.query.primary ? { primary: `#${String(req.query.primary).replace(/[^0-9a-f]/gi, '')}` } : {} }, template: tpl, services, gallery, testimonials, app: s, appUrl, nonce: res.locals.nonce }));
+  res.send(render({ v: { ...SAMPLE, sticky_bar: full, menu_pages: full ? ['/brand/sample-portrait.svg', '/brand/sample-portrait.svg', '/brand/sample-portrait.svg'] : [], menu_desc: 'Biryani, karahi and family deals', social_links: { ...SAMPLE.social_links, telegram: 'https://t.me/example' }, theme: req.query.primary ? { primary: `#${String(req.query.primary).replace(/[^0-9a-f]/gi, '')}` } : {} }, template: tpl, services, gallery, testimonials, app: s, appUrl, nonce: res.locals.nonce }));
 }));
 
 const unlockSig = (v) => crypto.createHmac('sha256', jwtSecret).update(`${v.id}:${v.password}`).digest('hex').slice(0, 32);
