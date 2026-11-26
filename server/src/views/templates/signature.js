@@ -18,7 +18,7 @@ const { esc, url } = require('../../utils/html');
 const ARCH = { sxcard: 'card', sxsheet: 'sheet', sxbento: 'bento', sxeditorial: 'editorial', sxpass: 'pass', sxorbit: 'orbit' };
 
 // more designs live in their own files; each exports { designs: { layout: (kit) => ({ main, dock?, script? }) }, CSS }
-const PACKS = [require('./signature2'), require('./signature3'), require('./signature4'), require('./signature5')];
+const PACKS = [require('./signature2'), require('./signature3'), require('./signature4'), require('./signature5'), require('./signature6')];
 const EXTRA = Object.assign({}, ...PACKS.map((p) => p.designs));
 for (const k of Object.keys(EXTRA)) ARCH[k] = k;
 
