@@ -16,7 +16,7 @@ function available(p, variantName) {
   if (vs.length) { const v = vs.find((x) => x.name === variantName); return { tracked: true, qty: whole(v?.stock) }; }
   return { tracked: true, qty: whole(p.stock_qty) };
 }
-const statusOf = (qty, p) => (qty <= 0 ? (p.allow_backorder ? 'backorder' : 'out') : qty <= whole(p.low_stock_threshold) ? 'low' : 'in');
+const statusOf = (qty, p) => (qty <= 0 ? 'out' : qty <= whole(p.low_stock_threshold) ? 'low' : 'in');
 
 /** per product: the overall state for lists (a variable product is out only when every variation is) */
 function summary(p) {
@@ -51,7 +51,7 @@ async function take(lines, order, t) {
     const p = await M().NfcCard.findByPk(n.id, { transaction: t, lock: t.LOCK.UPDATE }); // two orders at once cannot both take the last piece
     if (!p || !p.manage_stock) continue;
     const cur = available(p, n.variant).qty;
-    if (n.qty > cur && !p.allow_backorder) throw new HttpError(422, cur > 0 ? `Only ${cur} left of ${p.name}${n.variant ? ` (${n.variant})` : ''}` : `${p.name}${n.variant ? ` (${n.variant})` : ''} is out of stock`);
+    if (n.qty > cur) throw new HttpError(422, cur > 0 ? `Only ${cur} left of ${p.name}${n.variant ? ` (${n.variant})` : ''}` : `${p.name}${n.variant ? ` (${n.variant})` : ''} is out of stock`);
     await move(p, n.variant, -n.qty, { reason: 'order', order, t }); any = true;
   }
   if (any) await order.update({ sellable_stock_taken: true }, { transaction: t });

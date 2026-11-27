@@ -28,16 +28,14 @@ test('a simple product: orders take pieces off, too many is refused, cancel give
   assert.deepEqual(log.map((x) => [x.reason, x.change, x.balance]).reverse(), [['set', 5, 5], ['order', -3, 2], ['cancel', 3, 5]]);
 });
 
-test('variations count their own stock; a disabled variation cannot be ordered; backorders keep selling', async () => {
+test('variations count their own stock; a disabled variation cannot be ordered; there are no backorders', async () => {
   const p = await make({ manage_stock: true, variants: JSON.stringify([{ name: 'Black / PVC', sku: 'bp-1', price_delta: 0, stock: 2 }, { name: 'White / Metal', price_delta: 500, stock: 10 }, { name: 'Gold / Wood', stock: 9, enabled: false }]) });
   assert.equal((await order([{ product_id: p.id, quantity: 3, variant: 'Black / PVC' }])).status, 422);
   assert.equal((await order([{ product_id: p.id, quantity: 2, variant: 'Black / PVC' }])).status, 201);
-  let vs = (await fresh(p.id)).variants; assert.equal(vs.find((v) => v.name === 'Black / PVC').stock, 0); assert.equal(vs.find((v) => v.name === 'White / Metal').stock, 10, 'other variations untouched');
+  const vs = (await fresh(p.id)).variants; assert.equal(vs.find((v) => v.name === 'Black / PVC').stock, 0); assert.equal(vs.find((v) => v.name === 'White / Metal').stock, 10, 'other variations untouched');
   assert.equal(vs[0].sku, 'BP-1');
   assert.equal((await order([{ product_id: p.id, quantity: 1, variant: 'Gold / Wood' }])).status, 422, 'a disabled variation is not for sale');
-  assert.equal((await admin.put(`/api/admin/nfc-cards/${p.id}`, { allow_backorder: '1' })).status, 200);
-  assert.equal((await order([{ product_id: p.id, quantity: 4, variant: 'Black / PVC' }])).status, 201, 'backorder allowed');
-  vs = (await fresh(p.id)).variants; assert.equal(vs.find((v) => v.name === 'Black / PVC').stock, -4);
+  assert.equal((await order([{ product_id: p.id, quantity: 1, variant: 'Black / PVC' }])).status, 422, 'out of stock: no backorders');
   assert.equal((await admin.put(`/api/admin/nfc-cards/${p.id}`, { variants: JSON.stringify([{ name: 'A', stock: 1 }, { name: 'a', stock: 1 }]) })).status, 422, 'duplicate variation names');
 });
 
