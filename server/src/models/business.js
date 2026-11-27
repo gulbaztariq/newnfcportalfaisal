@@ -21,6 +21,15 @@ module.exports = function defineBusiness(sequelize, json, M) {
   });
   NfcOrder.hasMany(NfcOrderItem, { as: 'items', foreignKey: 'nfc_order_id', onDelete: 'CASCADE' }); NfcOrderItem.belongsTo(NfcOrder, { foreignKey: 'nfc_order_id' });
   NfcOrderItem.belongsTo(NfcCard, { as: 'product', foreignKey: 'nfc_card_id' });
+  // every change of a product's (or variation's) stock, with the balance after it
+  const ProductStockLog = sequelize.define('product_stock_log', {
+    variant: T.STRING(80), change: { type: T.INTEGER, allowNull: false }, balance: { type: T.INTEGER, allowNull: false },
+    reason: { type: T.STRING(20), allowNull: false }, // order | cancel | adjust | set
+    note: T.STRING(300),
+  });
+  ProductStockLog.belongsTo(NfcCard, { foreignKey: 'nfc_card_id' }); NfcCard.hasMany(ProductStockLog, { as: 'stock_log', foreignKey: 'nfc_card_id', onDelete: 'CASCADE' });
+  ProductStockLog.belongsTo(NfcOrder, { foreignKey: 'nfc_order_id' });
+  ProductStockLog.belongsTo(User, { as: 'creator', foreignKey: 'created_by' });
 
   /* ------------------------------------------------ order sources (websites, marketplaces, social pages ...) */
   const OrderSource = sequelize.define('order_source', {
@@ -317,7 +326,7 @@ module.exports = function defineBusiness(sequelize, json, M) {
 
   return {
     ContactTag, ContactTagMessage,
-    NfcOrderItem, ShortLink, ShortLinkClick, LinkOtp, Invoice, InvoicePayment, FinanceAccount, Partner, FinanceCategory, FinanceEntry,
+    NfcOrderItem, ProductStockLog, ShortLink, ShortLinkClick, LinkOtp, Invoice, InvoicePayment, FinanceAccount, Partner, FinanceCategory, FinanceEntry,
     Vendor, InventoryItem, ProductComponent, Purchase, StockMovement, VendorBill, VendorPayment, CourierSettlement,
     GuestCustomer, OrganisationEvent,
     OrderSource,

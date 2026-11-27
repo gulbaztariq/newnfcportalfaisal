@@ -47,6 +47,13 @@ function deriveType(p) {
   if (k && k.startsWith('social_')) return 'social';
   return 'nfc_profile';
 }
+/** pieces left of a product / variation (null = not tracked, unlimited) */
+const leftOf = (p, variant) => {
+  if (!p?.manage_stock) return null;
+  if (p.variants?.length) return Number(p.variants.find((v) => v.name === variant)?.stock) || 0;
+  return Number(p.stock_qty) || 0;
+};
+const sellable = (p) => (p.variants || []).filter((v) => v.enabled !== false);
 const decimal = (v) => v.replace(/[^\d.]/g, '').replace(/(\..*)\./g, '$1');
 
 /** price per piece shown before the server quotes it (type, tier, product discount) */
@@ -155,8 +162,8 @@ export default function OrderWizard() {
     setValues((f) => ({ ...f, type_override: key, sample_order: next === 'wholesale' ? f.sample_order : null, customer: PLAN_CHANGE.includes(next) ? f.customer : null }));
   };
   const setLine = (key, patch) => setLines((ls) => ls.map((l) => (l.key === key ? { ...l, ...patch } : l)));
-  const pickProduct = (key, p) => setLine(key, { product_id: p ? p.id : '', variant: p?.variants?.[0]?.name ?? '', unit_price: '', quantity: type === 'sample' ? 1 : (type === 'wholesale' && p ? Number(meta.wholesale_tiers?.[0]?.min) || 1 : 1) });
-  const setQty = (l, raw) => { let n = Math.min(200, Math.max(1, parseInt(raw, 10) || 1)); if (type === 'sample') n = Math.min(sampleMax, n); setLine(l.key, { quantity: n }); };
+  const pickProduct = (key, p) => setLine(key, { product_id: p ? p.id : '', variant: (sellable(p || {}).find((v) => !p.manage_stock || p.allow_backorder || Number(v.stock) > 0) || sellable(p || {})[0])?.name ?? '', unit_price: '', quantity: type === 'sample' ? 1 : (type === 'wholesale' && p ? Number(meta.wholesale_tiers?.[0]?.min) || 1 : 1) });
+  const setQty = (l, raw) => { let n = Math.min(200, Math.max(1, parseInt(raw, 10) || 1)); const left = leftOf(products[l.product_id], l.variant); if (left !== null && left > 0 && !products[l.product_id]?.allow_backorder) n = Math.min(n, left); if (type === 'sample') n = Math.min(sampleMax, n); setLine(l.key, { quantity: n }); };
   const srcName = (id) => meta.sources.find((x) => x.id === id)?.name;
   const searchProducts = (key) => (q) => {
     const t = q.trim().toLowerCase(); const taken = new Set(valid.filter((l) => l.key !== key).map((l) => String(l.product_id)));
@@ -282,7 +289,7 @@ export default function OrderWizard() {
                       <div className="min-w-0 flex-1">
                         <SearchSelect value={p || null} onChange={(x) => pickProduct(l.key, x)} search={searchProducts(l.key)} invalid={!!errors.products && !p}
                           placeholder={`Select a product (${pool.length} available)...`} empty="No product found"
-                          renderItem={(x) => <div className="flex items-center justify-between gap-3"><div className="min-w-0"><p className="truncate font-medium">{x.name}</p><p className="truncate text-xs text-muted-foreground">{where(x)}</p></div><span className="shrink-0 text-xs text-muted-foreground tabular-nums">{money(cur, x.price)}</span></div>}
+                          renderItem={(x) => <div className="flex items-center justify-between gap-3"><div className="min-w-0"><p className="truncate font-medium">{x.name}</p><p className="truncate text-xs text-muted-foreground">{where(x)}</p></div><span className="shrink-0 text-right text-xs text-muted-foreground tabular-nums">{money(cur, x.price)}{x.manage_stock && !x.variants?.length && <span className={Number(x.stock_qty) > 0 ? 'block' : 'block text-danger'}>{Number(x.stock_qty) > 0 ? `${x.stock_qty} in stock` : x.allow_backorder ? 'Backorder' : 'Out of stock'}</span>}</span></div>}
                           renderValue={(x) => <div className="min-w-0"><p className="truncate font-medium">{x.name}</p><p className="truncate text-xs text-muted-foreground">{where(x)}</p></div>} />
                       </div>
                       {lines.length > 1 && <Button size="icon" variant="ghost" onClick={() => setLines((ls) => ls.filter((x) => x.key !== l.key))} aria-label="Remove product"><Trash2 /></Button>}
@@ -290,12 +297,12 @@ export default function OrderWizard() {
                     {p && (
                       <>
                         <div className="grid gap-3 sm:grid-cols-4">
-                          {p.variants?.length > 0 && <Field label="Option" className="sm:col-span-4"><Select value={l.variant} onChange={(v) => setLine(l.key, { variant: v, unit_price: '' })} options={p.variants.map((v) => ({ value: v.name, label: `${v.name}${Number(v.price_delta) ? ` (+${v.price_delta})` : ''}` }))} /></Field>}
+                          {p.variants?.length > 0 && <Field label="Option" className="sm:col-span-4"><Select value={l.variant} onChange={(v) => setLine(l.key, { variant: v, unit_price: '' })} options={sellable(p).map((v) => ({ value: v.name, label: `${v.name}${Number(v.price_delta) ? ` (${Number(v.price_delta) > 0 ? '+' : ''}${v.price_delta})` : ''}${p.manage_stock ? (Number(v.stock) > 0 ? ` · ${v.stock} in stock` : p.allow_backorder ? ' · backorder' : ' · out of stock') : ''}` }))} /></Field>}
                           <Field label="Qty">
                             <div className="flex items-center gap-1">
                               <Button type="button" size="icon" variant="outline" onClick={() => setQty(l, qty - 1)} disabled={qty <= 1} aria-label="Decrease quantity"><Minus /></Button>
                               <Input type="text" inputMode="numeric" autoComplete="off" className="text-center" value={l.quantity} onChange={(e) => setQty(l, e.target.value)} />
-                              <Button type="button" size="icon" variant="outline" onClick={() => setQty(l, qty + 1)} disabled={type === 'sample' && qty >= sampleMax} aria-label="Increase quantity"><Plus /></Button>
+                              <Button type="button" size="icon" variant="outline" onClick={() => setQty(l, qty + 1)} disabled={(type === 'sample' && qty >= sampleMax) || (leftOf(p, l.variant) !== null && !p.allow_backorder && qty >= leftOf(p, l.variant))} aria-label="Increase quantity"><Plus /></Button>
                             </div>
                           </Field>
                           <Field label="Actual price" hint="Per piece"><Input type="text" inputMode="decimal" autoComplete="off" value={l.unit_price} placeholder={String(r2(estimate(meta, p, l.variant, qty, type)))} onChange={(e) => setLine(l.key, { unit_price: decimal(e.target.value) })} /></Field>
@@ -305,6 +312,7 @@ export default function OrderWizard() {
                         <div className="flex flex-wrap items-center gap-1.5 text-xs">
                           {ql?.tier_percent > 0 && <Badge tone="success">Wholesale {ql.tier_percent}% off</Badge>}
                           {type === 'sample' && <Badge tone="warning">Sample price</Badge>}
+                          {leftOf(p, l.variant) !== null && (leftOf(p, l.variant) > 0 ? <Badge tone={leftOf(p, l.variant) <= Number(p.low_stock_threshold) ? 'warning' : 'success'}>{leftOf(p, l.variant)} in stock</Badge> : <Badge tone="danger">{p.allow_backorder ? 'Backorder' : 'Out of stock'}</Badge>)}
                           {p.plan && <Badge tone="primary"><IdCard className="size-3" />Plan: {p.plan.name}</Badge>}
                           {discountOf(l) > 0 && <Badge tone="success">Discount {money(cur, discountOf(l))}</Badge>}
                         </div>

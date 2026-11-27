@@ -9,6 +9,7 @@ const { Op } = require('sequelize');
 const settings = require('./settings');
 const messaging = require('./messaging');
 const inventory = require('./inventory');
+const stock = require('./stock');
 const mail = require('./mail');
 const { HttpError } = require('../utils/http');
 
@@ -79,8 +80,9 @@ async function quote(lines, { is_cod = false, discount = 0, discountType, discou
     const p = await NfcCard.findOne({ where: { id: l.product_id, status: true }, include: [{ model: Plan, as: 'plan', attributes: ['id', 'name', 'frequency'] }] });
     if (!p) throw new HttpError(422, 'A product in your cart is no longer available');
     const qty = Math.min(1000, Math.max(1, parseInt(l.quantity, 10) || 1));
-    const variant = (p.variants || []).find((v) => v.name === l.variant) || null;
+    const variant = (p.variants || []).find((v) => v.name === l.variant && v.enabled !== false) || null;
     if ((p.variants || []).length && !variant) throw new HttpError(422, `Choose an option for ${p.name}`);
+    { const av = stock.available(p, variant?.name); if (av.tracked && qty > av.qty && !p.allow_backorder) throw new HttpError(422, av.qty > 0 ? `Only ${av.qty} left of ${p.name}${variant ? ` (${variant.name})` : ''}` : `${p.name}${variant ? ` (${variant.name})` : ''} is out of stock`); }
     const basePrice = r2(Number(p.price) + Number(variant?.price_delta || 0));
     const discounted = afterDiscount(basePrice, p.discount_type, p.discount_value); // the product's own discount
     let listPrice = discounted; let tierPercent = 0;
@@ -140,6 +142,7 @@ async function create(data, q) {
     for (const l of q.lines) {
       await NfcOrderItem.create({ nfc_order_id: o.id, nfc_card_id: l.product.id, name: l.name, variant: l.variant, quantity: l.quantity, unit_price: l.unit_price, customization: l.customization, customization_price: l.customization_price, total: l.total }, { transaction: t });
     }
+    await stock.take(q.lines, o, t); // pieces leave the product / variation stock; refused when there are not enough
     return o;
   });
   let order;
@@ -169,6 +172,7 @@ async function setStatus(order, status, { actor, note, vendorId } = {}) {
   }
   if (status === 'shipped' && !order.stock_consumed) await inventory.consumeForOrder(order, vendorId ?? order.stock_vendor_id, actor?.id);
   if ((status === 'cancelled' || status === 'returned') && order.stock_consumed) await inventory.restoreForOrder(order, actor?.id);
+  if (status === 'cancelled' || status === 'returned') await stock.give(order, actor);
   const history = [...(order.status_history || []), { status, at: new Date(), by: actor ? `${actor.first_name} ${actor.last_name}`.trim() : 'system', note: note || undefined }];
   const data = { order_status: status, status_history: history };
   if (status === 'shipped') data.dispatched_at = new Date();

@@ -24,6 +24,7 @@ const shortlinks = require('../../services/shortlinks');
 const perms = require('../../services/permissions');
 const security = require('../../services/security');
 const links = require('../../services/links');
+const stock = require('../../services/stock');
 const mail = require('../../services/mail');
 const docs = require('../../services/documents');
 const { appUrl, clientUrl } = require('../../config');
@@ -47,7 +48,7 @@ r.get('/security/bans', (_req, res) => res.json({ data: security.bannedList() })
 r.delete('/security/bans/:ip', (req, res) => { security.unban(req.params.ip); res.json({ message: 'IP unbanned' }); });
 
 /* ============================================================== products (shop) */
-const PRODUCT_FIELDS = ['name', 'description', 'price', 'status', 'slug', 'category', 'sku', 'short_description', 'compare_price', 'customization_price', 'size_label', 'variants', 'featured', 'show_in_shop', 'sort', 'weight_grams', 'extra_cost', 'track_stock', 'plan_id', 'product_kind', 'discount_type', 'discount_value', 'sample_price', 'wholesale_tiers', 'no_wholesale_tiers', 'tags_per_unit', 'order_source_id'];
+const PRODUCT_FIELDS = ['name', 'description', 'price', 'status', 'slug', 'category', 'sku', 'short_description', 'compare_price', 'customization_price', 'size_label', 'variants', 'featured', 'show_in_shop', 'sort', 'weight_grams', 'extra_cost', 'track_stock', 'plan_id', 'product_kind', 'discount_type', 'discount_value', 'sample_price', 'wholesale_tiers', 'no_wholesale_tiers', 'tags_per_unit', 'order_source_id', 'manage_stock', 'stock_qty', 'low_stock_threshold', 'allow_backorder'];
 const PRODUCT_KINDS = ['plan', 'reprint', 'airport_tag', 'contact_tag', 'blank_card', 'nfc_profile', 'social_static', 'social_dynamic', 'social_profile', 'printing', 'digital'];
 const slugify = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 140);
 r.get('/nfc-cards/:id/components', wrap(async (req, res) => {
@@ -67,6 +68,17 @@ r.put('/nfc-cards/:id/components', wrap(async (req, res) => {
   res.json({ message: 'Costing saved', unit_cost: await inventory.productUnitCost(p.id) });
 }));
 /** paginated, searchable product list (the shop catalogue and items synced from order sources are different things); `all=1` keeps the full list for dropdowns */
+/** manual stock change: { variant, change: +5 / -2 } adds or removes pieces, { variant, set: 40 } counts them again; always logged */
+r.post('/nfc-cards/:id/stock', wrap(async (req, res) => {
+  const p = await M.NfcCard.findByPk(req.params.id); if (!p) fail(404, 'Not found');
+  await stock.adjust(p, { variant: req.body.variant, change: req.body.change, set: req.body.set, note: req.body.note }, req.user);
+  const fresh = await M.NfcCard.findByPk(p.id);
+  res.json({ data: { id: fresh.id, stock_qty: fresh.stock_qty, variants: fresh.variants, stock: stock.summary(fresh) }, message: 'Stock updated' });
+}));
+r.get('/nfc-cards/:id/stock-log', wrap(async (req, res) => {
+  const rows = await M.ProductStockLog.findAll({ where: { nfc_card_id: req.params.id }, include: [{ model: M.NfcOrder, attributes: ['id', 'order_number'] }, { model: M.User, as: 'creator', attributes: ['first_name', 'last_name'] }], order: [['id', 'DESC']], limit: 100 });
+  res.json({ data: rows });
+}));
 r.get('/nfc-cards', (req, res, next) => (req.query.all === '1' ? next() : wrap(async () => {
   const p = paginate(req, 24);
   const where = {};
@@ -84,9 +96,17 @@ r.get('/nfc-cards', (req, res, next) => (req.query.all === '1' ? next() : wrap(a
   res.json({ ...paged(rows, count, p), totals: { all: total, synced, shop: total - synced } });
 })(req, res, next)));
 r.use('/nfc-cards', crud(M.NfcCard, {
-  fields: PRODUCT_FIELDS, booleans: ['status', 'featured', 'show_in_shop', 'track_stock', 'no_wholesale_tiers'], files: ['front_image', 'back_image'], folder: 'nfc',
+  fields: PRODUCT_FIELDS, booleans: ['status', 'featured', 'show_in_shop', 'track_stock', 'no_wholesale_tiers', 'manage_stock', 'allow_backorder'], files: ['front_image', 'back_image'], folder: 'nfc',
   rules: { name: 'required|max:120', price: 'required|numeric|minv:0', compare_price: 'numeric|minv:0', customization_price: 'numeric|minv:0', sku: 'max:80' }, search: ['name', 'sku', 'category'], order: [['id', 'DESC']],
   include: [{ model: M.Plan, as: 'plan', attributes: ['id', 'name', 'frequency'] }],
+  afterSave: async (row, req) => {
+    if (!row.manage_stock) return;
+    const b = req._stockBefore; const vs = row.variants || [];
+    const rows = [];
+    if (vs.length) for (const v of vs) { const was = b?.manage ? Number((b.variants.find((x) => x.name === v.name) || {}).stock || 0) : 0; if (Number(v.stock || 0) !== was) rows.push({ variant: v.name, change: Number(v.stock || 0) - was, balance: Number(v.stock || 0) }); }
+    else { const was = b?.manage ? Number(b.qty || 0) : 0; if (Number(row.stock_qty) !== was) rows.push({ variant: null, change: Number(row.stock_qty) - was, balance: Number(row.stock_qty) }); }
+    for (const x of rows) await M.ProductStockLog.create({ nfc_card_id: row.id, ...x, reason: b ? 'adjust' : 'set', note: b ? 'Edited on the product' : 'Opening stock', created_by: req.user?.id || null });
+  },
   beforeSave: async (data, _req, row) => {
     if (data.sku !== undefined) {
       data.sku = String(data.sku || '').trim().toUpperCase() || null;
@@ -103,7 +123,19 @@ r.use('/nfc-cards', crud(M.NfcCard, {
     if (data.sample_price !== undefined) data.sample_price = data.sample_price === '' || data.sample_price === null ? null : Math.max(0, r2(data.sample_price));
     if (data.wholesale_tiers !== undefined) { const t = orders.parseTiers(data.wholesale_tiers); data.wholesale_tiers = t.length ? t : null; } // empty = use the global tiers
     if (row?.order_source_id && data.price !== undefined && r2(data.price) !== r2(row.price)) data.price_locked = true; // hand-edited price: the sync keeps it
-    if (data.variants !== undefined) data.variants = jsonList(data.variants).filter((v) => v && v.name).map((v) => ({ name: String(v.name).slice(0, 60), price_delta: r2(v.price_delta) }));
+    if (data.variants !== undefined) {
+      const seen = new Set();
+      data.variants = jsonList(data.variants).filter((v) => v && String(v.name || '').trim()).map((v) => {
+        const name = String(v.name).trim().slice(0, 60);
+        if (seen.has(name.toLowerCase())) fail(422, 'Validation failed', { variants: `The variation "${name}" is listed twice` });
+        seen.add(name.toLowerCase());
+        return { name, sku: String(v.sku || '').trim().toUpperCase().slice(0, 60) || undefined, price_delta: r2(v.price_delta), stock: Math.max(0, parseInt(v.stock, 10) || 0), enabled: v.enabled === false || v.enabled === 'false' ? false : undefined };
+      });
+    }
+    if (data.stock_qty !== undefined) data.stock_qty = Math.max(0, parseInt(data.stock_qty, 10) || 0);
+    if (data.low_stock_threshold !== undefined) data.low_stock_threshold = Math.max(0, parseInt(data.low_stock_threshold, 10) || 0);
+    // quantities typed in the form are logged afterwards (afterSave) so the stock history shows who changed what
+    _req._stockBefore = row ? { manage: row.manage_stock, qty: row.stock_qty, variants: row.variants || [] } : null;
     const base = slugify(data.slug || data.name || row?.name) || `product-${Date.now()}`;
     if (!row || (data.slug !== undefined && data.slug !== row.slug) || !row.slug) {
       let slug = base; let i = 1;
@@ -192,7 +224,7 @@ r.get('/orders-meta', wrap(async (_req, res) => {
   const s = await settings.all();
   const [sources, products, plans, accounts] = await Promise.all([
     M.OrderSource.findAll({ where: { status: true }, attributes: ['id', 'name', 'url', 'last_synced_at', 'platform'], order: [['name', 'ASC']] }),
-    M.NfcCard.findAll({ where: { status: true }, attributes: ['id', 'name', 'category', 'source_price', 'sku', 'images', 'price', 'variants', 'customization_price', 'plan_id', 'front_image', 'product_kind', 'order_source_id', 'discount_type', 'discount_value', 'sample_price', 'wholesale_tiers', 'no_wholesale_tiers', 'tags_per_unit'], include: [{ model: M.Plan, as: 'plan', attributes: ['id', 'name', 'price', 'frequency'] }], order: [['sort', 'ASC'], ['id', 'ASC']] }),
+    M.NfcCard.findAll({ where: { status: true }, attributes: ['id', 'name', 'category', 'source_price', 'sku', 'images', 'price', 'variants', 'customization_price', 'plan_id', 'front_image', 'product_kind', 'order_source_id', 'discount_type', 'discount_value', 'sample_price', 'wholesale_tiers', 'no_wholesale_tiers', 'tags_per_unit', 'manage_stock', 'stock_qty', 'low_stock_threshold', 'allow_backorder'], include: [{ model: M.Plan, as: 'plan', attributes: ['id', 'name', 'price', 'frequency'] }], order: [['sort', 'ASC'], ['id', 'ASC']] }),
     M.Plan.findAll({ where: { status: true }, attributes: ['id', 'name'] }),
     M.FinanceAccount.findAll({ where: { status: true }, attributes: ['id', 'name', 'type'], order: [['id', 'ASC']] }),
   ]);
