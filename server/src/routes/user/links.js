@@ -19,7 +19,7 @@ async function card(l) {
   const v = l.vcard_id ? await M.Vcard.findByPk(l.vcard_id, { attributes: ['id', 'name', 'url_alias', 'profile_image', 'occupation', 'company', 'status', 'views'] }) : null;
   return {
     id: l.id, code: l.code, short_url: shortlinks.shortUrl(l.code), kind: l.kind, kind_label: links.KIND_LABEL[l.kind], state: links.stateOf(l), title: l.title,
-    target_url: l.target_type === 'url' ? l.target_url : null, clicks: l.clicks, last_clicked_at: l.last_clicked_at, claimed_at: l.claimed_at, expires_at: l.expires_at, locked: l.locked,
+    target_url: l.target_type === 'url' ? l.target_url : null, redirect_url: l.redirect_url || null, clicks: l.clicks, last_clicked_at: l.last_clicked_at, claimed_at: l.claimed_at, expires_at: l.expires_at, locked: l.locked,
     plan: plan ? { id: plan.id, name: plan.name } : null,
     vcard: v ? { id: v.id, name: v.name, url: `${appUrl}/${v.url_alias}`, image: v.profile_image, occupation: v.occupation, company: v.company, status: v.status, views: v.views } : null,
   };
@@ -49,6 +49,17 @@ r.put('/links/:id/destination', wrap(async (req, res) => {
   const url = links.checkDestination(l.kind, req.body.url, { required: true });
   await l.update({ target_type: 'url', target_url: url, details_pending: false });
   res.json({ data: await card(l), message: 'Destination updated. Your QR codes and NFC tags now open the new address.' });
+}));
+/** a business-card link can be sent to another address (e.g. google.com) and brought back to the card; the card itself stays as it is */
+r.put('/links/:id/redirect', wrap(async (req, res) => {
+  const l = await own(req);
+  if (l.kind !== 'vcard') fail(422, 'Use the destination for this link.');
+  if (links.stateOf(l) === 'unclaimed') fail(422, 'This link is not active.');
+  if (l.locked) fail(403, 'This link is managed by the administrator');
+  const raw = String(req.body.url || '').trim();
+  const url = raw ? links.checkDestination('redirect', raw, { required: true }) : null;
+  await l.update({ redirect_url: url });
+  res.json({ data: await card(l), message: url ? 'Done. This link now opens the new address.' : 'Done. This link opens your card again.' });
 }));
 r.post('/links/:id/pause', wrap(async (req, res) => {
   const l = await own(req);

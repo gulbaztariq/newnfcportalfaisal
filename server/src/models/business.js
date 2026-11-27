@@ -80,6 +80,7 @@ module.exports = function defineBusiness(sequelize, json, M) {
     claimed_email: T.STRING(191),
     ordered_for: T.INTEGER, // the customer the admin generated it for (reference only; the owner is whoever claims it)
     template_id: T.INTEGER, // vCard links: the template the card starts with
+    redirect_url: T.STRING(1000), // a business-card link whose owner sent it somewhere else (e.g. google.com); empty = opens the card
     preset_url: T.STRING(1000), // redirect / review links: a destination the admin already knows
     details_pending: { type: T.BOOLEAN, defaultValue: false }, // moved with its data wiped: the new owner adds the card details first
   });

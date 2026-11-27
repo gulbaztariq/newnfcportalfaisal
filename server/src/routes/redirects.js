@@ -36,7 +36,7 @@ async function redirect(req, res, next) {
     }
     res.set('Cache-Control', 'no-store'); // destinations can change at any time
     // cards and stores keep counting how they were opened: ?via=qr from a QR image, otherwise an NFC tag / short link, plus any utm_* tags
-    if (['vcard', 'store'].includes(link.target_type)) {
+    if (!link.redirect_url && ['vcard', 'store'].includes(link.target_type)) {
       const t = require('../services/analytics').trackingOf(req.query); const u = new URL(to);
       u.searchParams.set('via', t.via || 'nfc');
       for (const k of ['utm_source', 'utm_medium', 'utm_campaign']) if (t[k]) u.searchParams.set(k, t[k]);
