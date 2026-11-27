@@ -82,7 +82,7 @@ async function quote(lines, { is_cod = false, discount = 0, discountType, discou
     const qty = Math.min(1000, Math.max(1, parseInt(l.quantity, 10) || 1));
     const variant = (p.variants || []).find((v) => v.name === l.variant && v.enabled !== false) || null;
     if ((p.variants || []).length && !variant) throw new HttpError(422, `Choose an option for ${p.name}`);
-    { const av = stock.available(p, variant?.name); if (av.tracked && qty > av.qty && !p.allow_backorder) throw new HttpError(422, av.qty > 0 ? `Only ${av.qty} left of ${p.name}${variant ? ` (${variant.name})` : ''}` : `${p.name}${variant ? ` (${variant.name})` : ''} is out of stock`); }
+    { const av = stock.available(p, variant?.name); if (av.tracked && qty > av.qty) throw new HttpError(422, av.qty > 0 ? `Only ${av.qty} left of ${p.name}${variant ? ` (${variant.name})` : ''}` : `${p.name}${variant ? ` (${variant.name})` : ''} is out of stock`); }
     // a variation carries its own price; older ones only have a change from the product price
     const vBase = variant && variant.price !== undefined && variant.price !== null && variant.price !== '' ? Number(variant.price) : Number(p.price) + Number(variant?.price_delta || 0);
     const basePrice = r2(vBase);

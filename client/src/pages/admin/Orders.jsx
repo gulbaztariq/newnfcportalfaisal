@@ -414,7 +414,7 @@ export function stockInfo(p) {
   const vs = p.variants || []; const low = Number(p.low_stock_threshold) || 0;
   const qs = vs.length ? vs.map((v) => Number(v.stock) || 0) : [Number(p.stock_qty) || 0];
   const total = qs.reduce((a, b) => a + b, 0);
-  const status = qs.every((q) => q <= 0) ? (p.allow_backorder ? 'backorder' : 'out') : qs.some((q) => q > 0 && q <= low) ? 'low' : 'in';
+  const status = qs.every((q) => q <= 0) ? 'out' : qs.some((q) => q > 0 && q <= low) ? 'low' : 'in';
   return { total, status };
 }
 const STOCK_TONE = { in: 'success', low: 'warning', out: 'danger', backorder: 'warning' };
@@ -480,10 +480,8 @@ export function Products() {
 function ProductForm({ product, onClose, onSaved }) {
   const form = useForm({ ...blankProduct, ...product, variants: (product.variants || []).map((x) => ({ ...x, price: x.price ?? (Number(product.price || 0) + Number(x.price_delta || 0)) })) });
   const [busy, setBusy] = useState(false);
-  const [plans, setPlans] = useState([]);
   const [cats, setCats] = useState([]);
   const [attrs, setAttrs] = useState([]);
-  useEffect(() => { api.get('/admin/lookups').then(({ data }) => setPlans(data.plans.map((x) => ({ value: x.id, label: x.name })))); }, []);
   useEffect(() => { api.get('/admin/product-categories', { params: { all: 1 } }).then(({ data }) => setCats(data.data.filter((c) => c.status).map((c) => ({ value: c.name, label: c.name })))).catch(() => {}); }, []);
   const v = form.values;
   const hasVars = v.variants.length > 0;
@@ -506,7 +504,7 @@ function ProductForm({ product, onClose, onSaved }) {
   };
   const addVariation = () => { form.set('variants', [...v.variants, { name: '', price: v.price || '', stock: 0 }]); form.set('manage_stock', true); };
   const setVar = (i, k, val) => form.set('variants', v.variants.map((x, j) => (j === i ? { ...x, [k]: val } : x)));
-  const grid = 'sm:grid-cols-[1fr_6.5rem_5rem_9rem_3rem_2.5rem]';
+  const grid = 'sm:grid-cols-[1fr_7rem_5.5rem_3.5rem_2.5rem]';
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()} size="xl" icon={Package} title={product.id ? `Edit ${product.name}` : 'New product'}
       footer={<><Button variant="outline" onClick={onClose}>Cancel</Button><Button onClick={save} loading={busy}>Save product</Button></>}>
@@ -523,13 +521,12 @@ function ProductForm({ product, onClose, onSaved }) {
             <div className="grid gap-3 sm:grid-cols-3">
               {!hasVars && <Field label="Quantity in stock"><Input type="number" value={v.stock_qty} onChange={(e) => form.set('stock_qty', e.target.value)} /></Field>}
               <Field label="Low stock at" hint="Shown as low when this many are left"><Input type="number" min="0" value={v.low_stock_threshold} onChange={(e) => form.set('low_stock_threshold', e.target.value)} /></Field>
-              <div className="sm:col-span-3"><SwitchRow title="Allow backorders" description="Keep selling when it is out of stock" {...{ checked: !!v.allow_backorder, onChange: (x) => form.set('allow_backorder', x) }} /></div>
             </div>
           )}
         </div>
         <div className="space-y-3 rounded-2xl border border-border p-4 sm:col-span-2">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <div><p className="text-sm font-semibold">Variations</p><p className="text-xs text-muted-foreground">Sizes, colours, materials, plans. Write the price and quantity of each; the SKU is written for you.</p></div>
+            <div><p className="text-sm font-semibold">Variations</p><p className="text-xs text-muted-foreground">Sizes, colours, materials, plans: add each one yourself. Write the price and quantity of each; the SKU is written for you.</p></div>
             <Button size="xs" variant="soft" onClick={addVariation}><Plus />Add variation</Button>
           </div>
           <div className="space-y-2 rounded-xl bg-muted/40 p-3">
@@ -549,7 +546,7 @@ function ProductForm({ product, onClose, onSaved }) {
           {form.errors.variants && <p className="text-sm text-danger">{form.errors.variants}</p>}
           {hasVars && (
             <div className="space-y-2">
-              <div className={cn('hidden gap-2 px-1 text-xs font-medium text-muted-foreground sm:grid', grid)}><span>Variation</span><span>Price (Rs)</span><span>Qty</span><span>Plan</span><span>On sale</span><span /></div>
+              <div className={cn('hidden gap-2 px-1 text-xs font-medium text-muted-foreground sm:grid', grid)}><span>Variation</span><span>Price (Rs)</span><span>Qty</span><span>On sale</span><span /></div>
               {v.variants.map((x, i) => (
                 <div key={i} className={cn('grid gap-2 sm:items-center', grid, x.enabled === false && 'opacity-60')}>
                   <div className="min-w-0">
@@ -558,7 +555,6 @@ function ProductForm({ product, onClose, onSaved }) {
                   </div>
                   <Input type="number" min="0" value={x.price ?? ''} onChange={(e) => setVar(i, 'price', e.target.value)} placeholder="Price" aria-label="Price" />
                   <Input type="number" min="0" value={x.stock ?? 0} onChange={(e) => setVar(i, 'stock', e.target.value)} aria-label="Quantity" />
-                  <Select value={x.plan_id || ''} onChange={(val) => setVar(i, 'plan_id', val)} allowEmpty placeholder="No plan" options={plans} />
                   <Switch size="sm" checked={x.enabled !== false} onChange={(on) => setVar(i, 'enabled', on)} />
                   <Button variant="ghost" size="icon" onClick={() => form.set('variants', v.variants.filter((_, j) => j !== i))} aria-label="Remove variation"><Trash2 /></Button>
                 </div>
@@ -568,8 +564,7 @@ function ProductForm({ product, onClose, onSaved }) {
         </div>
         <Field label="Customisation price" hint="0 = not offered"><Input {...form.input('customization_price')} type="number" min="0" /></Field>
         <Field label="Sort order"><Input {...form.input('sort')} type="number" /></Field>
-        <Field label="Main image"><ImageUpload value={v.front_image} onChange={(f) => form.set('front_image', f)} /></Field>
-        <Field label="Second image"><ImageUpload value={v.back_image} onChange={(f) => form.set('back_image', f)} /></Field>
+        <Field label="Image" className="sm:col-span-2"><ImageUpload value={v.front_image} onChange={(f) => form.set('front_image', f)} /></Field>
         <div className="sm:col-span-2"><SwitchRow title="Active" description="Inactive products cannot be ordered" {...{ checked: v.status, onChange: (x) => form.set('status', x) }} /></div>
       </div>
     </Dialog>
