@@ -482,6 +482,11 @@ const NfcCard = sequelize.define('nfc_card', {
   weight_grams: { type: T.INTEGER, defaultValue: 50 },
   extra_cost: { type: T.DECIMAL(12, 2), defaultValue: 0 }, // printing / labour per unit on top of inventory components
   track_stock: { type: T.BOOLEAN, defaultValue: true },
+  // sellable stock (like WooCommerce): manage_stock counts the pieces of this product, or of each variation when it has some
+  manage_stock: { type: T.BOOLEAN, defaultValue: false },
+  stock_qty: { type: T.INTEGER, defaultValue: 0 },
+  low_stock_threshold: { type: T.INTEGER, defaultValue: 2 },
+  allow_backorder: { type: T.BOOLEAN, defaultValue: false }, // keep selling when it runs out
   plan_id: T.INTEGER, // subscription plan that comes with this product (null = non-plan product)
   // order types and sources
   product_kind: T.STRING(20), // nfc_profile | social_static | social_dynamic | social_profile | printing | digital (drives the order wizard)
@@ -536,6 +541,7 @@ const NfcOrder = sequelize.define('nfc_order', {
   payment_account_id: T.INTEGER, // the finance account (cash, bank, wallet) the money goes into
   // inventory + workflow
   stock_vendor_id: T.INTEGER, stock_consumed: { type: T.BOOLEAN, defaultValue: false },
+  sellable_stock_taken: { type: T.BOOLEAN, defaultValue: false }, // the pieces of this order were taken off the product / variation stock
   cost_amount: { type: T.DECIMAL(12, 2), defaultValue: 0 },
   status_history: json('status_history', []),
   dispatched_at: T.DATE, delivered_at: T.DATE,

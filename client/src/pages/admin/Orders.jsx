@@ -406,13 +406,28 @@ const PRODUCT_KINDS = [
   { value: 'social_profile', label: 'Social profile (all-in-one)' }, { value: 'contact_tag', label: 'Car contact tag (number hidden)' }, { value: 'airport_tag', label: 'Airport tag (luggage)' },
 ];
 const KIND_LABEL = Object.fromEntries(PRODUCT_KINDS.map((k) => [k.value, k.label]));
-const blankProduct = { product_kind: '', order_source_id: '', discount_type: 'fixed', discount_value: '', plan_id: '', name: '', category: '', sku: '', price: '', compare_price: '', customization_price: 0, size_label: '', short_description: '', description: '', variants: [], featured: false, show_in_shop: true, status: true, sort: 0, weight_grams: 50, extra_cost: 0, track_stock: true, front_image: null, back_image: null };
+const blankProduct = { product_kind: '', order_source_id: '', discount_type: 'fixed', discount_value: '', plan_id: '', name: '', category: '', sku: '', price: '', compare_price: '', customization_price: 0, size_label: '', short_description: '', description: '', variants: [], featured: false, show_in_shop: true, status: true, sort: 0, weight_grams: 50, extra_cost: 0, track_stock: true, manage_stock: false, stock_qty: 0, low_stock_threshold: 2, allow_backorder: false, front_image: null, back_image: null };
+
+/** same rules as the server (services/stock.js): what a product shows in the list */
+export function stockInfo(p) {
+  if (!p.manage_stock) return null;
+  const vs = p.variants || []; const low = Number(p.low_stock_threshold) || 0;
+  const qs = vs.length ? vs.map((v) => Number(v.stock) || 0) : [Number(p.stock_qty) || 0];
+  const total = qs.reduce((a, b) => a + b, 0);
+  const status = qs.every((q) => q <= 0) ? (p.allow_backorder ? 'backorder' : 'out') : qs.some((q) => q > 0 && q <= low) ? 'low' : 'in';
+  return { total, status };
+}
+const STOCK_TONE = { in: 'success', low: 'warning', out: 'danger', backorder: 'warning' };
+const STOCK_LABEL = { in: 'In stock', low: 'Low stock', out: 'Out of stock', backorder: 'On backorder' };
+/** every combination of the attributes: [[Black, White], [PVC, Metal]] -> Black / PVC, Black / Metal, White / PVC, White / Metal */
+const combos = (lists) => lists.reduce((acc, vals) => acc.flatMap((a) => vals.map((v) => (a ? `${a} / ${v}` : v))), ['']);
 
 export function Products() {
   const [rows, setRows] = useState(null);
   const [q, setQ] = useState('');
   const [editing, setEditing] = useState(null);
   const [costing, setCosting] = useState(null);
+  const [stocking, setStocking] = useState(null);
   const [page, setPage] = useState(1);
   const [source, setSource] = useState('');
   const [visibility, setVisibility] = useState('');
@@ -425,7 +440,7 @@ export function Products() {
   }).catch(() => setRows([]));
   useEffect(() => { load(); }, [page, q, source, visibility]); // eslint-disable-line
   useEffect(() => { setPage(1); }, [q, source, visibility]);
-  const toggle = async (p, k, v) => { setRows((r) => r.map((x) => (x.id === p.id ? { ...x, [k]: v } : x))); await run(api.put(`/admin/nfc-cards/${p.id}`, { ...p, variants: JSON.stringify(p.variants || []), [k]: v, front_image: undefined, back_image: undefined })).catch(load); };
+  const toggle = async (p, k, v) => { setRows((r) => r.map((x) => (x.id === p.id ? { ...x, [k]: v } : x))); await run(api.put(`/admin/nfc-cards/${p.id}`, { [k]: v })).catch(load); };  // only the switch is sent: a stale copy must never overwrite the stock
   const remove = async (p) => { if (await confirm({ title: `Delete ${p.name}?` })) { await run(api.delete(`/admin/nfc-cards/${p.id}`)).catch(() => {}); load(); } };
   const shown = rows || [];
   return (
@@ -448,10 +463,12 @@ export function Products() {
           { key: 'src', label: 'Source', render: (p) => p.order_source?.name || <span className="text-xs text-muted-foreground">Own product</span> },
           { key: 'price', label: 'Price', render: (p) => (
             <div><span className="font-semibold">{rs(p.price)}</span>{Number(p.discount_value) > 0 && <p className="text-xs text-success">Discount {p.discount_type === 'percent' ? `${Number(p.discount_value)}%` : rs(p.discount_value)}</p>}{p.plan && <p className="text-xs text-muted-foreground">Plan: {p.plan.name}</p>}</div>) },
+          { key: 'stock', label: 'Stock', render: (p) => { const si = stockInfo(p); return si ? (<button type="button" className="cursor-pointer text-left" onClick={() => setStocking(p)}><Badge tone={STOCK_TONE[si.status]}>{STOCK_LABEL[si.status]}</Badge><p className="mt-0.5 text-xs text-muted-foreground tabular-nums">{si.total} piece{si.total === 1 ? '' : 's'}{p.variants?.length ? ` · ${p.variants.length} variations` : ''}</p></button>) : <span className="text-xs text-muted-foreground">{p.variants?.length ? `${p.variants.length} variations · ` : ''}Not tracked</span>; } },
           { key: 'active', label: 'Active', render: (p) => <Tip content={p.status ? 'Can be ordered' : 'Hidden from orders'}><span><Switch size="sm" checked={!!p.status} onChange={(v) => toggle(p, 'status', v)} /></span></Tip> },
           { key: 'shop', label: 'In shop', render: (p) => <Switch size="sm" checked={!!p.show_in_shop} onChange={(v) => toggle(p, 'show_in_shop', v)} /> },
           { key: 'actions', label: '', align: 'right', render: (p) => (
             <div className="flex justify-end gap-0.5">
+              {p.manage_stock && <Tip content="Stock: add, remove, history"><Button size="icon-sm" variant="ghost" onClick={() => setStocking(p)}><Boxes /></Button></Tip>}
               {MODULES.inventory && <Tip content="Costing: inventory components + printing cost"><Button size="icon-sm" variant="ghost" onClick={() => setCosting(p)}><Calculator /></Button></Tip>}
               <Tip content="Edit"><Button size="icon-sm" variant="ghost" onClick={() => setEditing(p)}><Pencil /></Button></Tip>
               <Tip content="Delete"><Button size="icon-sm" variant="ghost" onClick={() => remove(p)}><Trash2 /></Button></Tip>
@@ -460,6 +477,7 @@ export function Products() {
       </Card>
       {meta && meta.last_page > 1 && <Card className="mt-5"><Pagination meta={meta} onPage={(n) => { setPage(n); window.scrollTo({ top: 0, behavior: 'smooth' }); }} /></Card>}
       {editing && <ProductForm product={editing} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); load(); }} />}
+      {stocking && <StockDialog product={stocking} onClose={() => setStocking(null)} onChanged={load} />}
       {costing && <ProductCosting product={costing} onClose={() => setCosting(null)} onSaved={load} />}
     </>
   );
@@ -479,6 +497,14 @@ function ProductForm({ product, onClose, onSaved }) {
     for (const k of ['front_image', 'back_image']) if (!(body[k] instanceof File)) delete body[k];
     for (const k of ['id', 'created_at', 'updated_at', 'components', 'images', 'slug', 'plan']) delete body[k];
     try { await run(product.id ? api.put(`/admin/nfc-cards/${product.id}`, toFormData(body)) : api.post('/admin/nfc-cards', toFormData(body))); onSaved(); } catch (e) { form.setErrors(e.errors || {}); } finally { setBusy(false); }
+  };
+  const [attrs, setAttrs] = useState([]);
+  const generate = () => {
+    const lists = attrs.map((a) => a.values.split(',').map((x) => x.trim()).filter(Boolean)).filter((l) => l.length);
+    if (!lists.length) return;
+    const have = new Map(v.variants.map((x) => [x.name.toLowerCase(), x]));
+    form.set('variants', combos(lists).map((name) => have.get(name.toLowerCase()) || { name, sku: '', price_delta: 0, stock: 0 }).concat(v.variants.filter((x) => !combos(lists).some((n) => n.toLowerCase() === x.name.toLowerCase()))));
+    toast.success(`${combos(lists).length} variations ready. Set the SKU, price and stock of each.`);
   };
   const setVar = (i, k, val) => form.set('variants', v.variants.map((x, j) => (j === i ? { ...x, [k]: val } : x)));
   return (
@@ -505,11 +531,52 @@ function ProductForm({ product, onClose, onSaved }) {
         {['contact_tag', 'airport_tag'].includes(v.product_kind) && <Field label="Tags per unit" hint="A pack of 2 makes 2 tags when it is ordered"><Input {...form.input('tags_per_unit')} type="number" min="1" max="50" /></Field>}
         <Field label="Short description" className="sm:col-span-2"><Input {...form.input('short_description')} maxLength={500} /></Field>
         <Field label="Description" className="sm:col-span-2"><Textarea {...form.input('description')} rows={3} /></Field>
-        <div className="space-y-2 sm:col-span-2">
-          <div className="flex items-center justify-between"><p className="text-sm font-medium">Options (sizes, colours)</p><Button size="xs" variant="soft" onClick={() => form.set('variants', [...v.variants, { name: '', price_delta: 0 }])}><Plus />Add option</Button></div>
-          {v.variants.map((x, i) => (
-            <div key={i} className="flex gap-2"><Input value={x.name} onChange={(e) => setVar(i, 'name', e.target.value)} placeholder="e.g. Medium" /><Input type="number" className="w-36" value={x.price_delta} onChange={(e) => setVar(i, 'price_delta', e.target.value)} placeholder="+ price" /><Button variant="ghost" size="icon" onClick={() => form.set('variants', v.variants.filter((_, j) => j !== i))}><Trash2 /></Button></div>
-          ))}
+        <div className="space-y-3 rounded-2xl border border-border p-4 sm:col-span-2">
+          <div><p className="text-sm font-semibold">Inventory</p><p className="text-xs text-muted-foreground">Count the pieces you have. Orders take them off, a cancelled order gives them back.</p></div>
+          <SwitchRow title="Manage stock" description={v.variants.length ? 'Each variation below has its own quantity' : 'Track the quantity of this product'} {...{ checked: !!v.manage_stock, onChange: (x) => form.set('manage_stock', x) }} />
+          {v.manage_stock && (
+            <div className="grid gap-3 sm:grid-cols-3">
+              {!v.variants.length && <Field label="Quantity in stock"><Input type="number" value={v.stock_qty} onChange={(e) => form.set('stock_qty', e.target.value)} /></Field>}
+              <Field label="Low stock at" hint="Shown as low when this many are left"><Input type="number" min="0" value={v.low_stock_threshold} onChange={(e) => form.set('low_stock_threshold', e.target.value)} /></Field>
+              <div className="sm:col-span-3"><SwitchRow title="Allow backorders" description="Keep selling when it is out of stock" {...{ checked: !!v.allow_backorder, onChange: (x) => form.set('allow_backorder', x) }} /></div>
+            </div>
+          )}
+        </div>
+        <div className="space-y-3 rounded-2xl border border-border p-4 sm:col-span-2">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div><p className="text-sm font-semibold">Variations</p><p className="text-xs text-muted-foreground">Sizes, colours, materials. Each variation has its own SKU, price change and stock.</p></div>
+            <Button size="xs" variant="soft" onClick={() => form.set('variants', [...v.variants, { name: '', sku: '', price_delta: 0, stock: 0 }])}><Plus />Add variation</Button>
+          </div>
+          <div className="space-y-2 rounded-xl bg-muted/40 p-3">
+            <p className="text-xs font-medium text-muted-foreground">Make them from attributes: give each attribute its values, separated by commas</p>
+            {attrs.map((a, i) => (
+              <div key={i} className="flex gap-2">
+                <Input className="w-36 shrink-0" value={a.name} onChange={(e) => setAttrs(attrs.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)))} placeholder="Colour" aria-label="Attribute" />
+                <Input value={a.values} onChange={(e) => setAttrs(attrs.map((x, j) => (j === i ? { ...x, values: e.target.value } : x)))} placeholder="Black, White, Gold" aria-label="Values" />
+                <Button variant="ghost" size="icon" onClick={() => setAttrs(attrs.filter((_, j) => j !== i))} aria-label="Remove attribute"><Trash2 /></Button>
+              </div>
+            ))}
+            <div className="flex flex-wrap gap-2">
+              <Button size="xs" variant="outline" onClick={() => setAttrs([...attrs, { name: '', values: '' }])}><Plus />Add attribute</Button>
+              <Button size="xs" onClick={generate} disabled={!attrs.some((a) => a.values.trim())}>Make variations</Button>
+            </div>
+          </div>
+          {form.errors.variants && <p className="text-sm text-danger">{form.errors.variants}</p>}
+          {v.variants.length > 0 && (
+            <div className="space-y-2">
+              <div className="hidden gap-2 px-1 text-xs font-medium text-muted-foreground sm:grid sm:grid-cols-[1fr_8rem_6rem_6rem_3.5rem_2.5rem]"><span>Variation</span><span>SKU</span><span>Price +/-</span><span>{v.manage_stock ? 'Stock' : ''}</span><span>On sale</span><span /></div>
+              {v.variants.map((x, i) => (
+                <div key={i} className={cn('grid gap-2 sm:grid-cols-[1fr_8rem_6rem_6rem_3.5rem_2.5rem] sm:items-center', x.enabled === false && 'opacity-60')}>
+                  <Input value={x.name} onChange={(e) => setVar(i, 'name', e.target.value)} placeholder="e.g. Black / PVC" aria-label="Variation" />
+                  <Input value={x.sku || ''} onChange={(e) => setVar(i, 'sku', e.target.value)} placeholder="SKU" aria-label="SKU" />
+                  <Input type="number" value={x.price_delta} onChange={(e) => setVar(i, 'price_delta', e.target.value)} placeholder="+ price" aria-label="Price change" />
+                  {v.manage_stock ? <Input type="number" min="0" value={x.stock ?? 0} onChange={(e) => setVar(i, 'stock', e.target.value)} aria-label="Stock" /> : <span />}
+                  <Switch size="sm" checked={x.enabled !== false} onChange={(on) => setVar(i, 'enabled', on)} />
+                  <Button variant="ghost" size="icon" onClick={() => form.set('variants', v.variants.filter((_, j) => j !== i))} aria-label="Remove variation"><Trash2 /></Button>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
         <Field label="Main image"><ImageUpload value={v.front_image} onChange={(f) => form.set('front_image', f)} /></Field>
         <Field label="Second image"><ImageUpload value={v.back_image} onChange={(f) => form.set('back_image', f)} /></Field>
@@ -521,6 +588,56 @@ function ProductForm({ product, onClose, onSaved }) {
           <SwitchRow title="Active" description="Inactive products cannot be ordered" {...{ checked: v.status, onChange: (x) => form.set('status', x) }} />
           {MODULES.inventory && <SwitchRow title="Track stock" description="Take components from inventory on dispatch" {...{ checked: v.track_stock, onChange: (x) => form.set('track_stock', x) }} />}
           <SwitchRow title="Already a wholesale price" description="Wholesale orders get no quantity-tier discount on this product" {...{ checked: !!v.no_wholesale_tiers, onChange: (x) => form.set('no_wholesale_tiers', x) }} />
+        </div>
+      </div>
+    </Dialog>
+  );
+}
+
+/** add or remove pieces (or count them again), and the history of every change */
+function StockDialog({ product, onClose, onChanged }) {
+  const [p, setP] = useState(product);
+  const [log, setLog] = useState(null);
+  const vs = p.variants || [];
+  const [variant, setVariant] = useState(vs[0]?.name || '');
+  const [mode, setMode] = useState('add');
+  const [n, setN] = useState('');
+  const [note, setNote] = useState('');
+  const [busy, setBusy] = useState(false);
+  const loadLog = () => api.get(`/admin/nfc-cards/${p.id}/stock-log`).then(({ data }) => setLog(data.data)).catch(() => setLog([]));
+  useEffect(() => { loadLog(); }, []); // eslint-disable-line
+  const current = vs.length ? Number(vs.find((x) => x.name === variant)?.stock) || 0 : Number(p.stock_qty) || 0;
+  const save = async () => {
+    if (n === '' || Number.isNaN(Number(n))) { toast.error('Enter a number'); return; }
+    setBusy(true);
+    try {
+      const body = { variant, note, ...(mode === 'set' ? { set: Number(n) } : { change: mode === 'remove' ? -Math.abs(Number(n)) : Math.abs(Number(n)) }) };
+      const { data } = await api.post(`/admin/nfc-cards/${p.id}/stock`, body);
+      setP((x) => ({ ...x, stock_qty: data.data.stock_qty, variants: data.data.variants })); setN(''); setNote(''); toast.success('Stock updated'); loadLog(); onChanged();
+    } catch (e) { toast.error(e.message); } finally { setBusy(false); }
+  };
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()} size="lg" icon={Boxes} title={`Stock: ${p.name}`} description="Orders take pieces off by themselves. Use this when you receive new pieces, lose some or count the shelf.">
+      <div className="space-y-4">
+        {vs.length > 0 && <Field label="Variation"><Select value={variant} onChange={setVariant} options={vs.map((x) => ({ value: x.name, label: `${x.name} (${Number(x.stock) || 0} in stock)` }))} /></Field>}
+        <div className="flex flex-wrap items-end gap-3">
+          <Segmented id="stk-mode" value={mode} onChange={setMode} options={[{ value: 'add', label: 'Add' }, { value: 'remove', label: 'Remove' }, { value: 'set', label: 'Count' }]} />
+          <Field label={mode === 'set' ? 'Pieces on the shelf' : 'Pieces'} hint={`Now ${current}`} className="w-40"><Input type="number" min="0" value={n} onChange={(e) => setN(e.target.value)} /></Field>
+          <Field label="Note" className="min-w-40 flex-1"><Input value={note} onChange={(e) => setNote(e.target.value)} placeholder="e.g. New delivery" maxLength={200} /></Field>
+          <Button onClick={save} loading={busy}>Save</Button>
+        </div>
+        <div>
+          <p className="mb-2 text-sm font-semibold">History</p>
+          {!log ? <Skeleton className="h-24 rounded-xl" /> : !log.length ? <p className="text-sm text-muted-foreground">No changes yet.</p> : (
+            <ul className="max-h-64 divide-y divide-border overflow-auto rounded-xl border border-border text-sm">
+              {log.map((x) => (
+                <li key={x.id} className="flex items-center justify-between gap-3 px-3 py-2">
+                  <span className="min-w-0"><span className="font-medium">{x.variant ? `${x.variant} · ` : ''}{x.reason === 'order' ? `Order ${x.nfc_order?.order_number || ''}` : x.reason === 'cancel' ? `Back from ${x.nfc_order?.order_number || 'order'}` : x.reason === 'set' ? 'Counted' : 'Adjusted'}</span><span className="block truncate text-xs text-muted-foreground">{[x.note, x.creator && `${x.creator.first_name} ${x.creator.last_name}`.trim(), new Date(x.created_at).toLocaleString()].filter(Boolean).join(' · ')}</span></span>
+                  <span className="shrink-0 tabular-nums"><b className={x.change < 0 ? 'text-danger' : 'text-success'}>{x.change > 0 ? '+' : ''}{x.change}</b> <span className="text-muted-foreground">→ {x.balance}</span></span>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       </div>
     </Dialog>
