@@ -1,3 +1,4 @@
+import { MODULES } from '@/lib/modules';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { motion, AnimatePresence, useScroll, useSpring, useMotionValueEvent } from 'motion/react';
@@ -27,7 +28,7 @@ export function Navbar({ settings, home = true }) {
   const { scrollY } = useScroll();
   useMotionValueEvent(scrollY, 'change', (v) => setScrolled(v > 24));
   const href = (id) => (home ? `#${id}` : `/#${id}`);
-  const shop = settings.shop_enable !== '0';
+  const shop = MODULES.publicShop && settings.shop_enable !== '0';
   const cart = useCart();
   return (
     <header className="fixed inset-x-0 top-3 z-50 px-3">
@@ -106,7 +107,7 @@ export function Footer({ settings }) {
             <li><a href="/#contact" className="inline-flex min-h-8 items-center hover:text-foreground">Contact</a></li>
             {settings.front_blog_enable !== '0' && <li><Link to="/blog" className="inline-flex min-h-8 items-center hover:text-foreground">Blog</Link></li>}
             {settings.business_directory_enable !== '0' && <li><Link to="/directory" className="inline-flex min-h-8 items-center hover:text-foreground">Directory</Link></li>}
-            {settings.shop_enable !== '0' && <li><Link to="/shop" className="inline-flex min-h-8 items-center hover:text-foreground">Shop</Link></li>}
+            {MODULES.publicShop && settings.shop_enable !== '0' && <li><Link to="/shop" className="inline-flex min-h-8 items-center hover:text-foreground">Shop</Link></li>}
             {settings.shop_enable !== '0' && <li><Link to="/track" className="inline-flex min-h-8 items-center hover:text-foreground">Track order</Link></li>}
             <li><Link to="/terms-conditions" className="inline-flex min-h-8 items-center hover:text-foreground">Terms</Link></li>
             <li><Link to="/privacy-policy" className="inline-flex min-h-8 items-center hover:text-foreground">Privacy</Link></li>

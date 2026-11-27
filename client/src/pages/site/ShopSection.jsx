@@ -1,4 +1,5 @@
 /* Landing-page "Shop NFC products" section: featured products with quick add. Renders nothing when the shop is off or empty. */
+import { MODULES } from '@/lib/modules';
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowRight, Truck, Banknote, Wand2 } from 'lucide-react';
@@ -9,7 +10,7 @@ import { ProductCard, QuickView, sortProducts } from './Shop';
 
 export function ShopSection({ limit = 4 }) {
   const { settings } = useAuth() || {};
-  if (settings?.shop_enable === '0') return null;
+  if (!MODULES.publicShop || settings?.shop_enable === '0') return null;
   return <EnsureCart><ShopSectionInner limit={limit} /></EnsureCart>;
 }
 

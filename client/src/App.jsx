@@ -140,9 +140,9 @@ export default function App() {
               <Route path="/verify-email" element={<Verify />} />
               <Route path="/directory" element={<Directory />} />
               <Route path="/blog" element={<BlogList />} />
-              <Route path="/shop" element={<SH.ShopPage />} />
-              <Route path="/shop/:slug" element={<SH.ProductPage />} />
-              <Route path="/checkout" element={<SH.CheckoutPage />} />
+              <Route path="/shop" element={MODULES.publicShop ? <SH.ShopPage /> : <Navigate to="/" replace />} />
+              <Route path="/shop/:slug" element={MODULES.publicShop ? <SH.ProductPage /> : <Navigate to="/" replace />} />
+              <Route path="/checkout" element={MODULES.publicShop ? <SH.CheckoutPage /> : <Navigate to="/" replace />} />
               <Route path="/track" element={<SH.TrackPage />} />
               <Route path="/track/:number" element={<SH.TrackPage />} />
               <Route path="/blog/:slug" element={<BlogPost />} />

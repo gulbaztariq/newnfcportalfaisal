@@ -449,7 +449,7 @@ export function Products() {
         <SearchInput value={q} onChange={setQ} placeholder="Search name, SKU or category..." />
         <FilterSelect value={source} onChange={setSource} placeholder={`All products (${totals.all})`} options={[{ value: 'shop', label: `Shop products (${totals.shop})` }, { value: 'synced', label: `Synced from order sources (${totals.synced})` }]} />
         <FilterSelect value={visibility} onChange={setVisibility} placeholder="Shown and hidden" options={[{ value: 'shown', label: 'Shown in shop' }, { value: 'hidden', label: 'Hidden in shop' }]} />
-        <ButtonLink href="/shop" target="_blank" rel="noreferrer" variant="outline"><ExternalLink />View shop</ButtonLink>
+        {MODULES.publicShop && <ButtonLink href="/shop" target="_blank" rel="noreferrer" variant="outline"><ExternalLink />View shop</ButtonLink>}
         <Button onClick={() => setEditing(blankProduct)}><Plus />Add product</Button>
       </PageHeader>
       <Card>

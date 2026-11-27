@@ -1,4 +1,5 @@
 /* User portal: NFC product orders + tracking, dynamic links / QR, invoices */
+import { MODULES } from '@/lib/modules';
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { motion } from 'motion/react';
@@ -26,7 +27,7 @@ export function UserOrders() {
   return (
     <>
       <PageHeader title="NFC orders" description="Order NFC cards, standees, tags and more for your vCard, then follow every step until delivery.">
-        <ButtonLink as={Link} to="/shop"><ShoppingBag />Shop NFC products</ButtonLink>
+        {MODULES.publicShop && <ButtonLink as={Link} to="/shop"><ShoppingBag />Shop NFC products</ButtonLink>}
       </PageHeader>
       <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="relative mb-6 overflow-hidden rounded-3xl bg-linear-to-br from-violet-600 via-fuchsia-600 to-pink-500 p-6 text-white md:p-8">
         <div className="bg-grid absolute inset-0 opacity-20" />
@@ -36,7 +37,7 @@ export function UserOrders() {
             <p className="font-display text-xl font-bold">Your card, on every surface</p>
             <p className="mt-1 text-sm text-white/80">Every product is programmed with your dynamic link, so it always opens your latest vCard. Design it yourself, upload your artwork or let our AI design it.</p>
           </div>
-          <ButtonLink as={Link} to="/shop" variant="white">Browse products</ButtonLink>
+          {MODULES.publicShop && <ButtonLink as={Link} to="/shop" variant="white">Browse products</ButtonLink>}
         </div>
       </motion.div>
       <TableCard title="My orders">
