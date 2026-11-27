@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { motion } from 'motion/react';
 import { toast } from 'sonner';
-import { ArrowLeft, ArrowRight, Check, Plus, Trash2, Copy, ShoppingBag, ShieldCheck, Link2, IdCard, Boxes, UserRound, Repeat } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Check, Plus, Minus, Trash2, Copy, ShoppingBag, ShieldCheck, Link2, IdCard, Boxes, UserRound, Repeat } from 'lucide-react';
 import api from '@/lib/api';
 import { MadeLinks } from './LinkGenerator';
 import SearchSelect from '@/components/SearchSelect';
@@ -32,7 +32,7 @@ const SOCIAL_KIND = { social_static: 'static', social_dynamic: 'dynamic', social
 const LINK_KINDS = [{ value: 'vcard', label: 'Business card (vCard)' }, { value: 'review', label: 'Review link' }, { value: 'redirect', label: 'Redirect link' }];
 const afterDisc = (price, t, v) => Math.max(0, t === 'percent' ? price * (1 - Math.min(100, Number(v) || 0) / 100) : t === 'fixed' ? price - (Number(v) || 0) : price);
 let lineId = 0;
-const newLink = () => ({ on: false, kind: 'vcard', plan_id: '', qty: '' });
+const newLink = () => ({ on: false, kind: 'vcard', plan_id: '', names: [] });
 const mkLine = (o = {}) => ({ key: ++lineId, product_id: '', variant: '', quantity: 1, unit_price: '', sale_price: '', link: newLink(), ...o });
 const newLine = () => mkLine();
 const r2 = (n) => Math.round(Number(n || 0) * 100) / 100;
@@ -156,7 +156,7 @@ export default function OrderWizard() {
   };
   const setLine = (key, patch) => setLines((ls) => ls.map((l) => (l.key === key ? { ...l, ...patch } : l)));
   const pickProduct = (key, p) => setLine(key, { product_id: p ? p.id : '', variant: p?.variants?.[0]?.name ?? '', unit_price: '', quantity: type === 'sample' ? 1 : (type === 'wholesale' && p ? Number(meta.wholesale_tiers?.[0]?.min) || 1 : 1) });
-  const setQty = (l, raw) => { let n = Math.max(1, parseInt(raw, 10) || 1); if (type === 'sample') n = Math.min(sampleMax, n); setLine(l.key, { quantity: n }); };
+  const setQty = (l, raw) => { let n = Math.min(200, Math.max(1, parseInt(raw, 10) || 1)); if (type === 'sample') n = Math.min(sampleMax, n); setLine(l.key, { quantity: n }); };
   const srcName = (id) => meta.sources.find((x) => x.id === id)?.name;
   const searchProducts = (key) => (q) => {
     const t = q.trim().toLowerCase(); const taken = new Set(valid.filter((l) => l.key !== key).map((l) => String(l.product_id)));
@@ -165,7 +165,10 @@ export default function OrderWizard() {
   const setLink = (l, patch) => setLine(l.key, { link: { ...l.link, ...patch } });
   // each product with its link switch on gets its own links (a renewal or an upgrade changes the plan of someone who already has a link)
   const linkLines = planChange ? [] : valid.filter((l) => l.link?.on);
-  const linkCountOf = (l) => Math.max(1, parseInt(l.link.qty, 10) || Number(l.quantity) || 1);
+  // one person = one card = one link: as many names as pieces
+  const linkCountOf = (l) => Math.max(1, Number(l.quantity) || 1);
+  const namesOf = (l) => Array.from({ length: linkCountOf(l) }, (_, i) => l.link.names?.[i] || '');
+  const setName = (l, i, v) => { const n = namesOf(l); n[i] = v; setLink(l, { names: n }); };
   const linkTotal = linkLines.reduce((a, l) => a + linkCountOf(l), 0);
 
   const validate = () => {
@@ -185,6 +188,7 @@ export default function OrderWizard() {
       if (meta.accounts?.length && !form.advance_account_id) e.advance_account_id = 'Choose how the advance was paid';
     }
     if (linkLines.some((l) => l.link.kind !== 'review' && !l.link.plan_id)) e.products = 'Choose a plan for every link that needs one';
+    else if (linkLines.some((l) => namesOf(l).some((n) => !n.trim()))) e.products = 'Enter the full name of every user who gets a link';
     return e;
   };
   const create = async () => {
@@ -198,7 +202,7 @@ export default function OrderWizard() {
         customer_type: planChange ? 'existing' : 'guest', user_id: planChange ? form.customer.id : undefined, guest_customer_id: planChange ? undefined : form.guest?.id,
         advance_amount: form.advance_on ? form.advance_amount : undefined, advance_account_id: form.advance_on && form.advance_account_id ? form.advance_account_id : undefined,
       };
-      const d = await run(api.post('/admin/orders', { ...body, links: linkLines.map((l) => ({ kind: l.link.kind, plan_id: l.link.kind === 'review' ? undefined : Number(l.link.plan_id), qty: linkCountOf(l), title: products[l.product_id]?.name })) }));
+      const d = await run(api.post('/admin/orders', { ...body, links: linkLines.map((l) => ({ kind: l.link.kind, plan_id: l.link.kind === 'review' ? undefined : Number(l.link.plan_id), names: namesOf(l).map((n) => n.trim()), title: products[l.product_id]?.name })) }));
       setResult({ ...d, links: d.links });
     } catch (err) { setErrors(err.errors || {}); } finally { setBusy(false); }
   };
@@ -287,7 +291,13 @@ export default function OrderWizard() {
                       <>
                         <div className="grid gap-3 sm:grid-cols-4">
                           {p.variants?.length > 0 && <Field label="Option" className="sm:col-span-4"><Select value={l.variant} onChange={(v) => setLine(l.key, { variant: v, unit_price: '' })} options={p.variants.map((v) => ({ value: v.name, label: `${v.name}${Number(v.price_delta) ? ` (+${v.price_delta})` : ''}` }))} /></Field>}
-                          <Field label="Qty"><Input type="text" inputMode="numeric" autoComplete="off" value={l.quantity} onChange={(e) => setQty(l, e.target.value)} /></Field>
+                          <Field label="Qty">
+                            <div className="flex items-center gap-1">
+                              <Button type="button" size="icon" variant="outline" onClick={() => setQty(l, qty - 1)} disabled={qty <= 1} aria-label="Decrease quantity"><Minus /></Button>
+                              <Input type="text" inputMode="numeric" autoComplete="off" className="text-center" value={l.quantity} onChange={(e) => setQty(l, e.target.value)} />
+                              <Button type="button" size="icon" variant="outline" onClick={() => setQty(l, qty + 1)} disabled={type === 'sample' && qty >= sampleMax} aria-label="Increase quantity"><Plus /></Button>
+                            </div>
+                          </Field>
                           <Field label="Actual price" hint="Per piece"><Input type="text" inputMode="decimal" autoComplete="off" value={l.unit_price} placeholder={String(r2(estimate(meta, p, l.variant, qty, type)))} onChange={(e) => setLine(l.key, { unit_price: decimal(e.target.value) })} /></Field>
                           <Field label="Discounted price" hint="Per piece. Empty = no discount"><Input type="text" inputMode="decimal" autoComplete="off" value={l.sale_price} placeholder="Same as actual" onChange={(e) => setLine(l.key, { sale_price: decimal(e.target.value) })} /></Field>
                           <Field label="Line total"><Input readOnly value={money(cur, (saleOf(l) ?? actualOf(l)) * qty)} /></Field>
@@ -301,16 +311,23 @@ export default function OrderWizard() {
                         {!planChange && (
                           <div className="space-y-3 border-t border-border pt-3">
                             <div className="flex flex-wrap items-center justify-between gap-3">
-                              <div><p className="text-sm font-semibold">Create link</p><p className="text-xs text-muted-foreground">A link for this product to write on the NFC card or print as a QR code</p></div>
+                              <div><p className="text-sm font-semibold">Create links for users</p><p className="text-xs text-muted-foreground">One user = one card = one link. Each piece gets its own link to write on the NFC card or print as a QR code.</p></div>
                               <Segmented id={`lk-${l.key}`} value={l.link.on ? 'yes' : 'no'} onChange={(v) => setLink(l, { on: v === 'yes' })} options={[{ value: 'no', label: 'No' }, { value: 'yes', label: 'Yes' }]} />
                             </div>
                             {l.link.on && (
-                              <div className="grid gap-3 sm:grid-cols-3">
-                                <Field label="Link type"><Select value={l.link.kind} onChange={(v) => setLink(l, { kind: v, plan_id: v === 'review' ? '' : l.link.plan_id })} options={LINK_KINDS} /></Field>
-                                {l.link.kind !== 'review'
-                                  ? <Field label="Plan" required hint="Counts from when the link is claimed"><Select value={l.link.plan_id} onChange={(v) => setLink(l, { plan_id: v })} placeholder="Choose a plan" options={(meta.plans || []).map((x) => ({ value: x.id, label: x.name }))} /></Field>
-                                  : <Field label="Plan" hint="A review link has no plan"><Input value="No plan" readOnly /></Field>}
-                                <Field label="How many links" hint="One per piece by default"><Input type="text" inputMode="numeric" value={l.link.qty} placeholder={String(qty)} onChange={(e) => setLink(l, { qty: e.target.value.replace(/\D/g, '').slice(0, 3) })} /></Field>
+                              <div className="space-y-3">
+                                <div className="grid gap-3 sm:grid-cols-2">
+                                  <Field label="Link type"><Select value={l.link.kind} onChange={(v) => setLink(l, { kind: v, plan_id: v === 'review' ? '' : l.link.plan_id })} options={LINK_KINDS} /></Field>
+                                  {l.link.kind !== 'review'
+                                    ? <Field label="Plan" required hint="Counts from when the link is claimed"><Select value={l.link.plan_id} onChange={(v) => setLink(l, { plan_id: v })} placeholder="Choose a plan" options={(meta.plans || []).map((x) => ({ value: x.id, label: x.name }))} /></Field>
+                                    : <Field label="Plan" hint="A review link has no plan"><Input value="No plan" readOnly /></Field>}
+                                </div>
+                                <div className="space-y-2">
+                                  <p className="text-xs font-medium text-muted-foreground">Full name of each user ({qty}). The link is made in this name; the user redirects it later from their profile.</p>
+                                  <div className="grid gap-2 sm:grid-cols-2">
+                                    {namesOf(l).map((n, k) => <Input key={k} value={n} autoComplete="off" onChange={(e) => setName(l, k, e.target.value)} placeholder={`User ${k + 1} full name`} aria-label={`User ${k + 1} full name`} />)}
+                                  </div>
+                                </div>
                               </div>
                             )}
                           </div>

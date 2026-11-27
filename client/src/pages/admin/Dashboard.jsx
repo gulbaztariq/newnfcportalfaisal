@@ -35,7 +35,7 @@ export default function Dashboard() {
     <>
       <PageHeader eyebrow="Overview" title={`${greet}, ${user.first_name}`} description="Here's what's happening across your platform today.">
         <ButtonLink as={Link} to="/admin/users" variant="outline"><Plus />Add user</ButtonLink>
-        <ButtonLink as={Link} to="/admin/plans/create"><Package />New plan</ButtonLink>
+        <ButtonLink as={Link} to="/admin/orders/new"><ShoppingBag />New order</ButtonLink>
       </PageHeader>
 
       {d.business && (

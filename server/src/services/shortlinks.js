@@ -30,6 +30,7 @@ async function forVcard(v) {
 async function destination(link) {
   const M = require('../models');
   if (!link.status) return null;
+  if (link.redirect_url && /^https?:\/\//i.test(link.redirect_url)) return link.redirect_url; // the owner sent this link somewhere else
   if (link.target_type === 'vcard' && link.vcard_id) {
     const v = await M.Vcard.findByPk(link.vcard_id, { attributes: ['url_alias', 'status', 'custom_domain', 'custom_domain_status'] });
     return v && v.status ? `${appUrl}/${v.url_alias}` : null;

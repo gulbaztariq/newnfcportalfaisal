@@ -48,16 +48,27 @@ function checkDestination(kind, url, { required = false } = {}) {
 }
 
 /** Check a link request (type and plan) before anything is created, so an order never ends up without the link it was meant to have. */
-async function checkSpec({ kind, planId }) {
+async function checkSpec({ kind, planId, names }) {
+  cleanNames(names);
   if (!KINDS.includes(kind)) errs('link', 'Choose a link type');
   const plan = planId ? await M.Plan.findOne({ where: { id: planId, status: true }, attributes: ['id'] }) : null;
   if (!plan && kind !== 'review') errs('link_plan_id', 'Choose a plan for this link');
 }
 
 /** Create `qty` unclaimed links. `ordered_for` is only a reference to the customer; the owner is whoever claims the link. */
-async function generate({ kind, planId, qty = 1, templateId, presetUrl, orderedFor, orderId, title }) {
+/** the full names typed for a product's links (one person = one link); empty when the caller only gave a count */
+function cleanNames(names) {
+  if (!Array.isArray(names)) return null;
+  const out = names.map((x) => String(x ?? '').replace(/[\u0000-\u001f]/g, ' ').trim().slice(0, 100));
+  if (!out.length || out.length > 200) errs('names', 'Add between 1 and 200 people');
+  if (out.some((x) => !x)) errs('names', 'Enter the full name of every person');
+  return out;
+}
+
+async function generate({ kind, planId, qty = 1, names, templateId, presetUrl, orderedFor, orderId, title }) {
   if (!KINDS.includes(kind)) errs('kind', 'Choose a link type');
-  const n = Math.min(200, Math.max(1, parseInt(qty, 10) || 1));
+  const who = cleanNames(names);
+  const n = who ? who.length : Math.min(200, Math.max(1, parseInt(qty, 10) || 1));
   // a review link may have no plan (it then never expires); a business card or a redirect link needs one
   const plan = planId ? await M.Plan.findOne({ where: { id: planId, status: true } }) : null;
   if (!plan && kind !== 'review') errs('plan_id', 'Choose a plan for this link');
@@ -71,7 +82,7 @@ async function generate({ kind, planId, qty = 1, templateId, presetUrl, orderedF
   const out = [];
   for (let i = 0; i < n; i += 1) {
     out.push(await M.ShortLink.create({
-      code: await shortlinks.uniqueCode(M), title: String(title || KIND_LABEL[kind]).slice(0, 150), target_type: 'unassigned', kind, plan_id: plan ? plan.id : null,
+      code: await shortlinks.uniqueCode(M), title: String(who ? who[i] : title || KIND_LABEL[kind]).slice(0, 150), target_type: 'unassigned', kind, plan_id: plan ? plan.id : null,
       template_id: template?.id || null, preset_url: preset || null, ordered_for: orderedFor || null, nfc_order_id: orderId || null,
     }));
   }
@@ -247,4 +258,4 @@ const publicInfo = async (link) => ({
   needs: link.kind === 'vcard' ? 'profile' : 'url', preset_url: link.preset_url || null,
 });
 
-module.exports = { checkSpec, validateDetails, KINDS, KIND_LABEL, OTP_MINUTES, stateOf, generate, startOtp, checkOtp, ensureUser, claim, completeDetails, reset, transfer, subFor, publicInfo, cleanEmail, checkDestination };
+module.exports = { cleanNames, checkSpec, validateDetails, KINDS, KIND_LABEL, OTP_MINUTES, stateOf, generate, startOtp, checkOtp, ensureUser, claim, completeDetails, reset, transfer, subFor, publicInfo, cleanEmail, checkDestination };

@@ -246,3 +246,33 @@ test('a review link needs no plan and never expires; a business card or redirect
   assert.equal((await admin.post('/api/admin/links/generate', { links: [{ kind: 'redirect' }] })).status, 422);
   assert.equal((await admin.post('/api/admin/links/generate', { links: [{ kind: 'vcard' }] })).status, 422);
 });
+
+test('one user = one link: an order asks for the full name of each user; one e-mail can own many of them; the owner redirects a card link and brings it back', async () => {
+  await clearCooldown();
+  assert.equal((await admin.post('/api/admin/links/generate', { links: [{ kind: 'vcard', plan_id: planMonthly.id, names: ['Zohaib', ' '] }] })).status, 422, 'every user needs a name');
+  assert.equal((await admin.post('/api/admin/links/generate', { links: [{ kind: 'vcard', plan_id: planMonthly.id, names: [] }] })).status, 422);
+  const made = await gen([{ kind: 'vcard', plan_id: planMonthly.id, names: ['Zohaib Khan', 'Hina Shah'] }], { user_id: customer.id });
+  assert.deepEqual(made.map((l) => l.title), ['Zohaib Khan', 'Hina Shah']); assert.notEqual(made[0].code, made[1].code);
+
+  // the same e-mail claims both: one e-mail, many users; each link belongs to exactly one e-mail
+  const addr = email();
+  const first = await claimAs(made[0].code, { first_name: 'Zohaib', last_name: 'Khan' }, addr);
+  await clearCooldown();
+  await claimAs(made[1].code, { first_name: 'Hina', last_name: 'Shah' }, addr);
+  const rows = await M.ShortLink.findAll({ where: { id: made.map((l) => l.id) } });
+  assert.equal(new Set(rows.map((r) => r.user_id)).size, 1); assert.ok(rows.every((r) => r.claimed_email === addr));
+
+  // later the owner sends Zohaib's link to google.com; the card stays, and an empty address brings it back
+  const go = async () => (await client(ctx.base).get(`/r/${made[0].code}`)).headers.get('location');
+  assert.match(await go(), /\/zohaib/i);
+  assert.equal((await first.v.put(`/api/user/links/${made[0].id}/redirect`, { url: 'javascript:alert(1)' })).status, 422);
+  const ok = await first.v.put(`/api/user/links/${made[0].id}/redirect`, { url: 'https://www.google.com' }); assert.equal(ok.status, 200, ok.text);
+  assert.equal(await go(), 'https://www.google.com');
+  assert.ok((await M.ShortLink.findByPk(made[0].id)).vcard_id, 'the card is not deleted');
+  assert.equal((await first.v.put(`/api/user/links/${made[0].id}/redirect`, { url: '' })).status, 200);
+  assert.match(await go(), /\/zohaib/i);
+  await clearCooldown();
+  const [other] = await gen([{ kind: 'vcard', plan_id: planMonthly.id, names: ['Someone Else'] }]);
+  await claimAs(other.code, { first_name: 'Someone', last_name: 'Else' });
+  assert.equal((await first.v.put(`/api/user/links/${other.id}/redirect`, { url: 'https://x.test' })).status, 404, 'another e-mail’s link cannot be redirected');
+});

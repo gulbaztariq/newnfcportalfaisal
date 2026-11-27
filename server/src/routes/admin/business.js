@@ -242,7 +242,7 @@ r.post('/orders', wrap(async (req, res) => {
   if (b.order_type && !orders.ORDER_TYPES[b.order_type]) fail(422, 'Validation failed', { order_type: 'Unknown order type' });
   if (TAG_TYPES.includes(b.order_type) && !contacttags.validPhone(contacttags.cleanPhone(b.phone))) fail(422, 'Validation failed', { phone: 'A tag needs the owner\'s phone number: that is who gets the messages' });
   // links asked for with the order (one set per product that has its link switch on): all checked before the order exists, so none is lost
-  const linkSpecs = (Array.isArray(b.links) ? b.links : b.link && typeof b.link === 'object' ? [b.link] : []).slice(0, 20).map((l) => ({ kind: l.kind, planId: Number(l.plan_id) || null, qty: l.qty, title: l.title }));
+  const linkSpecs = (Array.isArray(b.links) ? b.links : b.link && typeof b.link === 'object' ? [b.link] : []).slice(0, 20).map((l) => ({ kind: l.kind, planId: Number(l.plan_id) || null, qty: l.qty, names: l.names, title: l.title }));
   for (const sp of linkSpecs) await links.checkSpec(sp);
   const sampleOf = (await sampleCreditFor(b)).order;
   if (['renewal', 'upgrade'].includes(b.order_type)) {
@@ -680,7 +680,7 @@ r.post('/links/generate', wrap(async (req, res) => {
   let forUser = userId;
   if (orderId) { const o = await M.NfcOrder.findByPk(orderId, { attributes: ['id', 'user_id'] }); if (!o) fail(404, 'Order not found'); forUser = forUser || o.user_id || null; }
   const made = [];
-  for (const sp of specs) made.push(...(await links.generate({ kind: sp.kind, planId: Number(sp.plan_id) || null, qty: sp.qty, templateId: Number(sp.template_id) || null, presetUrl: sp.preset_url, orderedFor: forUser, orderId, title: sp.title })));
+  for (const sp of specs) made.push(...(await links.generate({ kind: sp.kind, planId: Number(sp.plan_id) || null, qty: sp.qty, names: sp.names, templateId: Number(sp.template_id) || null, presetUrl: sp.preset_url, orderedFor: forUser, orderId, title: sp.title })));
   security.audit(req, 'link.generate', 'short_link', made[0]?.id, { count: made.length, user: forUser, order: orderId });
   res.status(201).json({ data: made.map((l) => ({ ...l.toJSON(), short_url: shortlinks.shortUrl(l.code), state: links.stateOf(l) })), message: `${made.length} link${made.length === 1 ? '' : 's'} generated. Write each one to an NFC chip or print it as a QR code.` });
 }));

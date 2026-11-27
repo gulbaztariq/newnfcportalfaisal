@@ -38,10 +38,11 @@ function DetailsDialog({ link, onClose, onSaved }) {
 function DestinationDialog({ link, onClose, onSaved }) {
   const [url, setUrl] = useState('');
   const [busy, setBusy] = useState(false);
-  useEffect(() => setUrl(link?.target_url || ''), [link?.id]);
-  const save = async () => { setBusy(true); try { const { data } = await api.put(`/user/links/${link.id}/destination`, { url }); toast.success(data.message); onSaved(); onClose(); } catch (e) { err(e); } finally { setBusy(false); } };
+  const card = link?.kind === 'vcard'; // a business-card link is sent elsewhere with an override; empty = back to the card
+  useEffect(() => setUrl((card ? link?.redirect_url : link?.target_url) || ''), [link?.id]);
+  const save = async () => { setBusy(true); try { const { data } = await api.put(`/user/links/${link.id}/${card ? 'redirect' : 'destination'}`, { url }); toast.success(data.message); onSaved(); onClose(); } catch (e) { err(e); } finally { setBusy(false); } };
   return (
-    <Dialog open={!!link} onOpenChange={(o) => !o && onClose()} size="sm" icon={Pencil} title="Change where this link opens" description="Printed QR codes and NFC tags keep working: they open the new address."
+    <Dialog open={!!link} onOpenChange={(o) => !o && onClose()} size="sm" icon={Pencil} title={card ? `Redirect ${link?.vcard?.name || 'this link'}` : 'Change where this link opens'} description={card ? 'Send this link to another address, for example google.com. Leave it empty to open your card again. Your card is not deleted.' : 'Printed QR codes and NFC tags keep working: they open the new address.'}
       footer={<><Button variant="outline" onClick={onClose}>Cancel</Button><Button onClick={save} loading={busy}>Save</Button></>}>
       <Field label={link?.kind === 'review' ? 'Google review link' : 'Web address'}><Input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://" autoFocus /></Field>
     </Dialog>
@@ -99,6 +100,7 @@ function LinkCard({ l, reload, ask }) {
         <Badge tone={tone} dot>{label}</Badge>
       </div>
       <p className="mt-4 truncate font-display text-lg font-semibold">{title}</p>
+      {l.redirect_url && <p className="truncate text-xs font-medium text-warning">Redirected to {l.redirect_url}</p>}
       <p className="truncate text-xs text-muted-foreground">{l.kind_label}{l.vcard?.occupation ? ` · ${l.vcard.occupation}` : ''}</p>
       <button type="button" onClick={copy} className="mt-3 flex cursor-pointer items-center gap-1.5 truncate text-left font-mono text-xs font-semibold text-primary hover:underline"><Copy className="size-3 shrink-0" />{l.short_url.replace(/^https?:\/\//, '')}</button>
       {l.target_url && <p className="mt-1 truncate text-xs text-muted-foreground">Opens {l.target_url}</p>}
@@ -117,6 +119,7 @@ function LinkCard({ l, reload, ask }) {
           <MenuTrigger asChild><button type="button" className="ml-auto grid size-8 cursor-pointer place-items-center rounded-lg text-muted-foreground hover:bg-muted" aria-label="More"><MoreHorizontal className="size-4" /></button></MenuTrigger>
           <MenuContent>
             <MenuItem icon={Copy} onSelect={copy}>Copy link</MenuItem>
+            {l.kind === 'vcard' && l.state !== 'details_pending' && <MenuItem icon={ExternalLink} onSelect={() => ask('destination', l)} disabled={l.locked}>{l.redirect_url ? 'Change the redirect' : 'Redirect this link'}</MenuItem>}
             <MenuItem icon={QrCode} onSelect={() => { window.location.href = `/api/user/short-links/${l.id}/qrcode?download=1&size=800`; }}>Download QR code</MenuItem>
             <MenuItem icon={l.state === 'paused' ? Play : Pause} onSelect={pause}>{l.state === 'paused' ? 'Resume' : 'Pause'}</MenuItem>
             <MenuSeparator />
