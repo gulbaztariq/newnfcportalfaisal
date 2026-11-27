@@ -57,3 +57,22 @@ test('the last piece goes to one order only', async () => {
   assert.equal((await order([{ product_id: p.id, quantity: 1 }])).status, 201);
   assert.equal((await order([{ product_id: p.id, quantity: 1 }])).status, 422); assert.equal((await fresh(p.id)).stock_qty, 0);
 });
+
+test('SKUs write themselves; a variation carries its own price and the product shows the lowest; categories are a list of their own', async () => {
+  const a = await make({ name: 'Metal Gold Card', price: 0, variants: JSON.stringify([{ name: 'Gold', price: 2500, stock: 3 }, { name: 'Black', price: 1800, stock: 1 }]) });
+  assert.match(a.sku, /^MGC-\d{3}$/); assert.equal(Number(a.price), 1800, 'lowest variation price');
+  assert.deepEqual(a.variants.map((v) => v.sku), [`${a.sku}-01`, `${a.sku}-02`]);
+  const b = await make({ name: 'Metal Gold Card', price: 10 }); assert.notEqual(b.sku, a.sku); assert.match(b.sku, /^MGC-\d{3}$/);
+  const edited = await admin.put(`/api/admin/nfc-cards/${a.id}`, { variants: JSON.stringify([...a.variants, { name: 'Silver', price: 2000, stock: 2 }]) });
+  assert.equal(edited.status, 200); const vs = (await fresh(a.id)).variants;
+  assert.deepEqual(vs.map((v) => v.sku), [`${a.sku}-01`, `${a.sku}-02`, `${a.sku}-03`], 'existing SKUs stay, the new one follows');
+  // the order uses the variation price
+  const o = await order([{ product_id: a.id, quantity: 1, variant: 'Gold' }]); assert.equal(o.status, 201); assert.equal(Number(o.body.data.amount) >= 2500, true);
+  // categories
+  const c = await admin.post('/api/admin/product-categories', { name: 'Metal cards' }); assert.equal(c.status, 201, c.text);
+  assert.equal((await admin.post('/api/admin/product-categories', { name: 'Metal cards' })).status, 422, 'no duplicates');
+  const p = await make({ name: 'Cat test', price: 5, category: 'Metal cards' });
+  assert.equal((await admin.put(`/api/admin/product-categories/${c.body.data.id}`, { name: 'Metal' })).status, 200);
+  assert.equal((await fresh(p.id)).category, 'Metal', 'products follow a renamed category');
+  assert.ok((await admin.get('/api/admin/product-categories?all=1')).body.data.some((x) => x.name === 'Metal'));
+});

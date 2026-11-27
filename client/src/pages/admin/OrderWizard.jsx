@@ -58,8 +58,9 @@ const decimal = (v) => v.replace(/[^\d.]/g, '').replace(/(\..*)\./g, '$1');
 
 /** price per piece shown before the server quotes it (type, tier, product discount) */
 function estimate(meta, p, variant, qty, type) {
-  const delta = Number((p.variants || []).find((v) => v.name === variant)?.price_delta || 0);
-  const base = Number(p.price || 0) + delta;
+  const vr = (p.variants || []).find((v) => v.name === variant);
+  const base = vr && vr.price !== undefined && vr.price !== null && vr.price !== '' ? Number(vr.price) : Number(p.price || 0) + Number(vr?.price_delta || 0); // a variation has its own price
+  const delta = base - Number(p.price || 0);
   const disc = afterDisc(base, p.discount_type, p.discount_value);
   if (type === 'sample') return Number(p.sample_price) > 0 ? Number(p.sample_price) + delta : base * (1 + Number(meta.sample_markup_percent || 0) / 100);
   if (type === 'wholesale') {
@@ -297,7 +298,7 @@ export default function OrderWizard() {
                     {p && (
                       <>
                         <div className="grid gap-3 sm:grid-cols-4">
-                          {p.variants?.length > 0 && <Field label="Option" className="sm:col-span-4"><Select value={l.variant} onChange={(v) => setLine(l.key, { variant: v, unit_price: '' })} options={sellable(p).map((v) => ({ value: v.name, label: `${v.name}${Number(v.price_delta) ? ` (${Number(v.price_delta) > 0 ? '+' : ''}${v.price_delta})` : ''}${p.manage_stock ? (Number(v.stock) > 0 ? ` · ${v.stock} in stock` : p.allow_backorder ? ' · backorder' : ' · out of stock') : ''}` }))} /></Field>}
+                          {p.variants?.length > 0 && <Field label="Option" className="sm:col-span-4"><Select value={l.variant} onChange={(v) => setLine(l.key, { variant: v, unit_price: '', link: { ...l.link, plan_id: l.link.plan_id || String(p.variants.find((x) => x.name === v)?.plan_id || '') } })} options={sellable(p).map((v) => ({ value: v.name, label: `${v.name}${v.price !== undefined && v.price !== null ? ` · ${money(cur, v.price)}` : Number(v.price_delta) ? ` (${Number(v.price_delta) > 0 ? '+' : ''}${v.price_delta})` : ''}${p.manage_stock ? (Number(v.stock) > 0 ? ` · ${v.stock} in stock` : p.allow_backorder ? ' · backorder' : ' · out of stock') : ''}` }))} /></Field>}
                           <Field label="Qty">
                             <div className="flex items-center gap-1">
                               <Button type="button" size="icon" variant="outline" onClick={() => setQty(l, qty - 1)} disabled={qty <= 1} aria-label="Decrease quantity"><Minus /></Button>
@@ -320,7 +321,7 @@ export default function OrderWizard() {
                           <div className="space-y-3 border-t border-border pt-3">
                             <div className="flex flex-wrap items-center justify-between gap-3">
                               <div><p className="text-sm font-semibold">Create links for users</p><p className="text-xs text-muted-foreground">One user = one card = one link. Each piece gets its own link to write on the NFC card or print as a QR code.</p></div>
-                              <Segmented id={`lk-${l.key}`} value={l.link.on ? 'yes' : 'no'} onChange={(v) => setLink(l, { on: v === 'yes' })} options={[{ value: 'no', label: 'No' }, { value: 'yes', label: 'Yes' }]} />
+                              <Segmented id={`lk-${l.key}`} value={l.link.on ? 'yes' : 'no'} onChange={(v) => setLink(l, { on: v === 'yes', ...(v === 'yes' && !l.link.plan_id ? { plan_id: String(p.variants?.find((x) => x.name === l.variant)?.plan_id || p.plan_id || '') } : {}) })} options={[{ value: 'no', label: 'No' }, { value: 'yes', label: 'Yes' }]} />
                             </div>
                             {l.link.on && (
                               <div className="space-y-3">

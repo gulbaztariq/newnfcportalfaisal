@@ -2,7 +2,7 @@ import {
   LayoutDashboard, ShieldCheck, Users, LayoutTemplate, IdCard, Nfc, Package, Receipt, Banknote, ArrowLeftRight, TicketPercent,
   Network, Coins, Globe2, Languages, Mail, Newspaper, Settings, MessageSquareText, UserCircle, Wallet, Store, Link2, CalendarClock, MailCheck, MonitorPlay, Building2,
   ShoppingBag, FileText, TrendingUp, BookOpen, Boxes, Truck, Megaphone, History, QrCode, Landmark,
-  UserRound, BarChart3, Zap,
+  UserRound, BarChart3, Zap, Tags,
 } from 'lucide-react';
 import { MODULES } from '@/lib/modules';
 import { can } from '@/lib/perms';
@@ -23,6 +23,7 @@ export const adminMenu = (user) => filterMenu([
     group: 'Sales', items: [
       { label: 'Orders', icon: ShoppingBag, to: '/admin/orders', perm: 'orders' },
       { label: 'Products', icon: Nfc, to: '/admin/products', perm: 'orders' },
+      { label: 'Categories', icon: Tags, to: '/admin/product-categories', perm: 'orders' },
       { label: 'Order sources', icon: Globe2, to: '/admin/order-sources', perm: 'orders' },
       { label: 'Invoices', icon: FileText, to: '/admin/invoices', perm: 'invoices' },
       MODULES.shortLinksMenu && { label: 'Short links & QR', icon: QrCode, to: '/admin/short-links', perm: 'shortlinks' },

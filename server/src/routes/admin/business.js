@@ -68,6 +68,18 @@ r.put('/nfc-cards/:id/components', wrap(async (req, res) => {
   res.json({ message: 'Costing saved', unit_cost: await inventory.productUnitCost(p.id) });
 }));
 /** paginated, searchable product list (the shop catalogue and items synced from order sources are different things); `all=1` keeps the full list for dropdowns */
+/* product categories (the dropdown on the product form) */
+r.use('/product-categories', crud(M.ProductCategory, { fields: ['name', 'sort', 'status'], booleans: ['status'], rules: { name: 'required|max:60' }, search: ['name'], order: [['sort', 'ASC'], ['name', 'ASC']],
+  beforeSave: async (data, _req, row) => {
+    _req._oldName = row?.name;
+    if (data.name !== undefined) {
+      data.name = String(data.name).trim();
+      if (await M.ProductCategory.findOne({ where: { name: data.name, id: { [Op.ne]: row?.id || 0 } } })) fail(422, 'Validation failed', { name: 'This category already exists' });
+    }
+    return data;
+  },
+  afterSave: async (row, req) => { if (req._oldName && req._oldName !== row.name) await M.NfcCard.update({ category: row.name }, { where: { category: req._oldName } }); },
+}));
 /** manual stock change: { variant, change: +5 / -2 } adds or removes pieces, { variant, set: 40 } counts them again; always logged */
 r.post('/nfc-cards/:id/stock', wrap(async (req, res) => {
   const p = await M.NfcCard.findByPk(req.params.id); if (!p) fail(404, 'Not found');
@@ -123,14 +135,31 @@ r.use('/nfc-cards', crud(M.NfcCard, {
     if (data.sample_price !== undefined) data.sample_price = data.sample_price === '' || data.sample_price === null ? null : Math.max(0, r2(data.sample_price));
     if (data.wholesale_tiers !== undefined) { const t = orders.parseTiers(data.wholesale_tiers); data.wholesale_tiers = t.length ? t : null; } // empty = use the global tiers
     if (row?.order_source_id && data.price !== undefined && r2(data.price) !== r2(row.price)) data.price_locked = true; // hand-edited price: the sync keeps it
+    // the SKU is written for you: the first letters of the name and a running number (TNC-001); variations get TNC-001-01, TNC-001-02...
+    const name = String(data.name ?? row?.name ?? '');
+    if (!String(data.sku ?? row?.sku ?? '').trim()) {
+      const words = name.toUpperCase().replace(/[^A-Z0-9 ]/g, ' ').split(/\s+/).filter(Boolean);
+      const prefix = (words.length > 1 ? words.map((w) => w[0]).join('').slice(0, 4) : (words[0] || 'P').slice(0, 3)) || 'P';
+      const used = (await M.NfcCard.findAll({ where: { sku: { [Op.like]: `${prefix}-%` } }, attributes: ['sku'] })).map((x) => parseInt(String(x.sku).split('-')[1], 10) || 0);
+      data.sku = `${prefix}-${String(Math.max(0, ...used) + 1).padStart(3, '0')}`;
+    }
+    const productSku = String(data.sku ?? row?.sku ?? '');
     if (data.variants !== undefined) {
-      const seen = new Set();
-      data.variants = jsonList(data.variants).filter((v) => v && String(v.name || '').trim()).map((v) => {
+      const seen = new Set(); const before = new Map((row?.variants || []).map((x) => [x.name.toLowerCase(), x]));
+      const incoming = jsonList(data.variants).filter((v) => v && String(v.name || '').trim());
+      let next = Math.max(0, ...incoming.map((v) => parseInt(String(v.sku || before.get(String(v.name).trim().toLowerCase())?.sku || '').split('-').pop(), 10) || 0));
+      data.variants = incoming.map((v) => {
         const name = String(v.name).trim().slice(0, 60);
         if (seen.has(name.toLowerCase())) fail(422, 'Validation failed', { variants: `The variation "${name}" is listed twice` });
         seen.add(name.toLowerCase());
-        return { name, sku: String(v.sku || '').trim().toUpperCase().slice(0, 60) || undefined, price_delta: r2(v.price_delta), stock: Math.max(0, parseInt(v.stock, 10) || 0), enabled: v.enabled === false || v.enabled === 'false' ? false : undefined };
+        const hasPrice = v.price !== undefined && v.price !== null && v.price !== '';
+        if (hasPrice && Number(v.price) < 0) fail(422, 'Validation failed', { variants: `The price of "${name}" cannot be negative` });
+        const price = hasPrice ? r2(v.price) : r2(Number(data.price ?? row?.price ?? 0) + Number(v.price_delta || 0));
+        let sku = String(v.sku || before.get(name.toLowerCase())?.sku || '').trim().toUpperCase().slice(0, 60);
+        if (!sku) { next += 1; sku = `${productSku}-${String(next).padStart(2, '0')}`; }
+        return { name, sku, price, stock: Math.max(0, parseInt(v.stock, 10) || 0), plan_id: Number(v.plan_id) || undefined, enabled: v.enabled === false || v.enabled === 'false' ? false : undefined };
       });
+      if (data.variants.length) data.price = Math.min(...data.variants.map((v) => v.price)); // a product with variations shows its lowest price
     }
     if (data.stock_qty !== undefined) data.stock_qty = Math.max(0, parseInt(data.stock_qty, 10) || 0);
     if (data.low_stock_threshold !== undefined) data.low_stock_threshold = Math.max(0, parseInt(data.low_stock_threshold, 10) || 0);
@@ -302,7 +331,7 @@ r.post('/orders', wrap(async (req, res) => {
     // new customer: account + vCard (plan comes from the products); an existing account with this e-mail is reused
     user = await M.User.findOne({ where: { email } });
     if (user && user.role !== 'user') fail(422, 'Validation failed', { email: 'This e-mail belongs to a staff account' });
-    const plan = q.lines.find((l) => l.product.plan_id)?.product.plan_id;
+    const plan = q.lines.find((l) => l.plan_id)?.plan_id;
     if (!user) {
       const password = crypto.randomBytes(6).toString('base64url');
       const [first, ...rest] = String(b.name).trim().split(/\s+/);

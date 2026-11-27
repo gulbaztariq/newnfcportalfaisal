@@ -83,13 +83,15 @@ async function quote(lines, { is_cod = false, discount = 0, discountType, discou
     const variant = (p.variants || []).find((v) => v.name === l.variant && v.enabled !== false) || null;
     if ((p.variants || []).length && !variant) throw new HttpError(422, `Choose an option for ${p.name}`);
     { const av = stock.available(p, variant?.name); if (av.tracked && qty > av.qty && !p.allow_backorder) throw new HttpError(422, av.qty > 0 ? `Only ${av.qty} left of ${p.name}${variant ? ` (${variant.name})` : ''}` : `${p.name}${variant ? ` (${variant.name})` : ''} is out of stock`); }
-    const basePrice = r2(Number(p.price) + Number(variant?.price_delta || 0));
+    // a variation carries its own price; older ones only have a change from the product price
+    const vBase = variant && variant.price !== undefined && variant.price !== null && variant.price !== '' ? Number(variant.price) : Number(p.price) + Number(variant?.price_delta || 0);
+    const basePrice = r2(vBase);
     const discounted = afterDiscount(basePrice, p.discount_type, p.discount_value); // the product's own discount
     let listPrice = discounted; let tierPercent = 0;
     if (type === 'sample') {
       if (qty > sampleMax) throw new HttpError(422, `Samples are limited to ${sampleMax} pieces per product (${p.name})`);
       // a sample costs more than a normal piece: its own price, or the normal price plus the sample markup
-      listPrice = Number(p.sample_price) > 0 ? r2(Number(p.sample_price) + Number(variant?.price_delta || 0)) : r2(basePrice * (1 + sampleMarkup / 100));
+      listPrice = Number(p.sample_price) > 0 ? r2(Number(p.sample_price) + (vBase - Number(p.price))) : r2(basePrice * (1 + sampleMarkup / 100));
     } else if (type === 'wholesale') {
       const tiers = p.no_wholesale_tiers ? [] : parseTiers(p.wholesale_tiers).length ? parseTiers(p.wholesale_tiers) : globalTiers; // switched off: the price is already a wholesale price
       const tier = tierFor(tiers, qty);
@@ -102,7 +104,7 @@ async function quote(lines, { is_cod = false, discount = 0, discountType, discou
     const unit = own ?? listPrice;
     const custom = !!l.customization && Number(p.customization_price) > 0;
     const cPrice = custom ? r2(p.customization_price) : 0;
-    out.push({ product: p, name: p.name, variant: variant?.name || null, quantity: qty, list_price: listPrice, base_price: basePrice, tier_percent: tierPercent, unit_price: unit, customization: custom, customization_price: cPrice, total: r2((unit + cPrice) * qty), plan: p.plan ? { id: p.plan.id, name: p.plan.name } : null });
+    out.push({ product: p, name: p.name, variant: variant?.name || null, quantity: qty, list_price: listPrice, base_price: basePrice, tier_percent: tierPercent, unit_price: unit, customization: custom, customization_price: cPrice, total: r2((unit + cPrice) * qty), plan_id: variant?.plan_id || p.plan_id || null, plan: p.plan ? { id: p.plan.id, name: p.plan.name } : null });
   }
   if (!out.length) throw new HttpError(422, 'Your cart is empty');
   const subtotal = r2(out.reduce((a, l) => a + l.total, 0));

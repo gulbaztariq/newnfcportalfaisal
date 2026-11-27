@@ -72,6 +72,7 @@ const BZ = {
   OrderWizard: lazy(() => import('@/pages/admin/OrderWizard')),
   OrderSources: lazyNamed(() => import('@/pages/admin/Orders'), 'OrderSources'),
   GuestDetail: lazyNamed(() => import('@/pages/admin/Guests'), 'GuestDetail'),
+  ProductCategories: lazy(() => import('@/pages/admin/ProductCategories')),
   Products: lazyNamed(() => import('@/pages/admin/Orders'), 'Products'),
   ShortLinks: lazyNamed(() => import('@/pages/admin/AdminTools'), 'ShortLinks'),
   Announcements: lazyNamed(() => import('@/pages/admin/AdminTools'), 'Announcements'),
@@ -164,6 +165,7 @@ export default function App() {
                 <Route path="orders/new" element={<BZ.OrderWizard />} />
                 <Route path="orders/:id" element={<BZ.OrderDetail />} />
                 <Route path="order-sources" element={<BZ.OrderSources />} />
+                <Route path="product-categories" element={<BZ.ProductCategories />} />
                 <Route path="whatsapp-leads" element={<BZ.WhatsappLeads />} />
                 <Route path="contact-tags" element={<Navigate to="/admin/orders?view=tags" replace />} />
                 <Route path="guest-customers" element={<Navigate to="/admin/orders?view=guests" replace />} />
