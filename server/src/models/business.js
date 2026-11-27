@@ -22,6 +22,12 @@ module.exports = function defineBusiness(sequelize, json, M) {
   NfcOrder.hasMany(NfcOrderItem, { as: 'items', foreignKey: 'nfc_order_id', onDelete: 'CASCADE' }); NfcOrderItem.belongsTo(NfcOrder, { foreignKey: 'nfc_order_id' });
   NfcOrderItem.belongsTo(NfcCard, { as: 'product', foreignKey: 'nfc_card_id' });
   // every change of a product's (or variation's) stock, with the balance after it
+  // product categories: the dropdown on the product form
+  const ProductCategory = sequelize.define('product_category', {
+    name: { type: T.STRING(60), allowNull: false, unique: true },
+    sort: { type: T.INTEGER, defaultValue: 0 },
+    status: { type: T.BOOLEAN, defaultValue: true },
+  });
   const ProductStockLog = sequelize.define('product_stock_log', {
     variant: T.STRING(80), change: { type: T.INTEGER, allowNull: false }, balance: { type: T.INTEGER, allowNull: false },
     reason: { type: T.STRING(20), allowNull: false }, // order | cancel | adjust | set
@@ -326,7 +332,7 @@ module.exports = function defineBusiness(sequelize, json, M) {
 
   return {
     ContactTag, ContactTagMessage,
-    NfcOrderItem, ProductStockLog, ShortLink, ShortLinkClick, LinkOtp, Invoice, InvoicePayment, FinanceAccount, Partner, FinanceCategory, FinanceEntry,
+    NfcOrderItem, ProductStockLog, ProductCategory, ShortLink, ShortLinkClick, LinkOtp, Invoice, InvoicePayment, FinanceAccount, Partner, FinanceCategory, FinanceEntry,
     Vendor, InventoryItem, ProductComponent, Purchase, StockMovement, VendorBill, VendorPayment, CourierSettlement,
     GuestCustomer, OrganisationEvent,
     OrderSource,

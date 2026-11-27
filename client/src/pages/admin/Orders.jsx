@@ -445,11 +445,8 @@ export function Products() {
   const shown = rows || [];
   return (
     <>
-      <PageHeader title="Products" description="NFC cards, standees, tags, keyrings and more - shown in the website shop and in user NFC orders.">
+      <PageHeader title="Products" description="What you sell. These are the products you pick on the New order page.">
         <SearchInput value={q} onChange={setQ} placeholder="Search name, SKU or category..." />
-        <FilterSelect value={source} onChange={setSource} placeholder={`All products (${totals.all})`} options={[{ value: 'shop', label: `Shop products (${totals.shop})` }, { value: 'synced', label: `Synced from order sources (${totals.synced})` }]} />
-        <FilterSelect value={visibility} onChange={setVisibility} placeholder="Shown and hidden" options={[{ value: 'shown', label: 'Shown in shop' }, { value: 'hidden', label: 'Hidden in shop' }]} />
-        {MODULES.publicShop && <ButtonLink href="/shop" target="_blank" rel="noreferrer" variant="outline"><ExternalLink />View shop</ButtonLink>}
         <Button onClick={() => setEditing(blankProduct)}><Plus />Add product</Button>
       </PageHeader>
       <Card>
@@ -459,13 +456,10 @@ export function Products() {
               <span className="grid size-11 shrink-0 place-items-center overflow-hidden rounded-xl bg-muted">{p.front_image ? <img src={p.front_image} alt="" loading="lazy" className="size-full object-cover" /> : <Nfc className="size-5 text-muted-foreground" />}</span>
               <div className="min-w-0"><p className="truncate font-medium">{p.name}</p><p className="truncate text-xs text-muted-foreground">{[p.category, p.sku].filter(Boolean).join(' · ') || '-'}</p></div>
             </div>) },
-          { key: 'kind', label: 'Order type', render: (p) => (p.product_kind ? <Badge tone="primary">{KIND_LABEL[p.product_kind] || p.product_kind}</Badge> : <span className="text-xs text-muted-foreground">NFC product (default)</span>) },
-          { key: 'src', label: 'Source', render: (p) => p.order_source?.name || <span className="text-xs text-muted-foreground">Own product</span> },
           { key: 'price', label: 'Price', render: (p) => (
-            <div><span className="font-semibold">{rs(p.price)}</span>{Number(p.discount_value) > 0 && <p className="text-xs text-success">Discount {p.discount_type === 'percent' ? `${Number(p.discount_value)}%` : rs(p.discount_value)}</p>}{p.plan && <p className="text-xs text-muted-foreground">Plan: {p.plan.name}</p>}</div>) },
+            <div><span className="font-semibold">{p.variants?.length ? 'From ' : ''}{rs(p.price)}</span></div>) },
           { key: 'stock', label: 'Stock', render: (p) => { const si = stockInfo(p); return si ? (<button type="button" className="cursor-pointer text-left" onClick={() => setStocking(p)}><Badge tone={STOCK_TONE[si.status]}>{STOCK_LABEL[si.status]}</Badge><p className="mt-0.5 text-xs text-muted-foreground tabular-nums">{si.total} piece{si.total === 1 ? '' : 's'}{p.variants?.length ? ` · ${p.variants.length} variations` : ''}</p></button>) : <span className="text-xs text-muted-foreground">{p.variants?.length ? `${p.variants.length} variations · ` : ''}Not tracked</span>; } },
           { key: 'active', label: 'Active', render: (p) => <Tip content={p.status ? 'Can be ordered' : 'Hidden from orders'}><span><Switch size="sm" checked={!!p.status} onChange={(v) => toggle(p, 'status', v)} /></span></Tip> },
-          { key: 'shop', label: 'In shop', render: (p) => <Switch size="sm" checked={!!p.show_in_shop} onChange={(v) => toggle(p, 'show_in_shop', v)} /> },
           { key: 'actions', label: '', align: 'right', render: (p) => (
             <div className="flex justify-end gap-0.5">
               {p.manage_stock && <Tip content="Stock: add, remove, history"><Button size="icon-sm" variant="ghost" onClick={() => setStocking(p)}><Boxes /></Button></Tip>}
@@ -484,59 +478,50 @@ export function Products() {
 }
 
 function ProductForm({ product, onClose, onSaved }) {
-  const form = useForm({ ...blankProduct, ...product, plan_id: product.plan_id || '', order_source_id: product.order_source_id || '', product_kind: product.product_kind || '', discount_type: product.discount_type || 'fixed', discount_value: product.discount_value ?? '', variants: product.variants || [] });
+  const form = useForm({ ...blankProduct, ...product, variants: (product.variants || []).map((x) => ({ ...x, price: x.price ?? (Number(product.price || 0) + Number(x.price_delta || 0)) })) });
   const [busy, setBusy] = useState(false);
   const [plans, setPlans] = useState([]);
-  const [sources, setSources] = useState([]);
-  useEffect(() => { api.get('/admin/order-sources', { params: { per_page: 100 } }).then(({ data }) => setSources((data.data || []).map((x) => ({ value: x.id, label: x.name })))).catch(() => {}); }, []);
+  const [cats, setCats] = useState([]);
+  const [attrs, setAttrs] = useState([]);
   useEffect(() => { api.get('/admin/lookups').then(({ data }) => setPlans(data.plans.map((x) => ({ value: x.id, label: x.name })))); }, []);
+  useEffect(() => { api.get('/admin/product-categories', { params: { all: 1 } }).then(({ data }) => setCats(data.data.filter((c) => c.status).map((c) => ({ value: c.name, label: c.name })))).catch(() => {}); }, []);
   const v = form.values;
+  const hasVars = v.variants.length > 0;
   const save = async () => {
+    const clean = v.variants.filter((x) => String(x.name || '').trim());
+    if (clean.some((x) => x.price === '' || x.price === undefined || Number(x.price) < 0)) { toast.error('Enter the price of every variation'); return; }
     setBusy(true);
-    const body = { ...v, variants: JSON.stringify(v.variants.filter((x) => x.name)) };
+    const body = { ...v, price: clean.length ? Math.min(...clean.map((x) => Number(x.price))) : v.price, variants: JSON.stringify(clean) };
     for (const k of ['front_image', 'back_image']) if (!(body[k] instanceof File)) delete body[k];
     for (const k of ['id', 'created_at', 'updated_at', 'components', 'images', 'slug', 'plan']) delete body[k];
     try { await run(product.id ? api.put(`/admin/nfc-cards/${product.id}`, toFormData(body)) : api.post('/admin/nfc-cards', toFormData(body))); onSaved(); } catch (e) { form.setErrors(e.errors || {}); } finally { setBusy(false); }
   };
-  const [attrs, setAttrs] = useState([]);
   const generate = () => {
     const lists = attrs.map((a) => a.values.split(',').map((x) => x.trim()).filter(Boolean)).filter((l) => l.length);
     if (!lists.length) return;
-    const have = new Map(v.variants.map((x) => [x.name.toLowerCase(), x]));
-    form.set('variants', combos(lists).map((name) => have.get(name.toLowerCase()) || { name, sku: '', price_delta: 0, stock: 0 }).concat(v.variants.filter((x) => !combos(lists).some((n) => n.toLowerCase() === x.name.toLowerCase()))));
-    toast.success(`${combos(lists).length} variations ready. Set the SKU, price and stock of each.`);
+    const names = combos(lists); const have = new Map(v.variants.map((x) => [x.name.toLowerCase(), x]));
+    form.set('variants', names.map((name) => have.get(name.toLowerCase()) || { name, price: v.price || '', stock: 0 }).concat(v.variants.filter((x) => !names.some((n) => n.toLowerCase() === x.name.toLowerCase()))));
+    form.set('manage_stock', true);
+    toast.success(`${names.length} variations ready. Write the price and quantity of each.`);
   };
+  const addVariation = () => { form.set('variants', [...v.variants, { name: '', price: v.price || '', stock: 0 }]); form.set('manage_stock', true); };
   const setVar = (i, k, val) => form.set('variants', v.variants.map((x, j) => (j === i ? { ...x, [k]: val } : x)));
+  const grid = 'sm:grid-cols-[1fr_6.5rem_5rem_9rem_3rem_2.5rem]';
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()} size="xl" icon={Package} title={product.id ? `Edit ${product.name}` : 'New product'}
       footer={<><Button variant="outline" onClick={onClose}>Cancel</Button><Button onClick={save} loading={busy}>Save product</Button></>}>
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label="Name" required error={form.errors.name} className="sm:col-span-2"><Input {...form.input('name')} /></Field>
-        <Field label="Category" hint="e.g. Cards, Standees, Stickers"><Input {...form.input('category')} /></Field>
-        <Field label="Size" hint="e.g. 100 x 120 mm"><Input {...form.input('size_label')} /></Field>
-        <Field label="Price (Rs)" required error={form.errors.price}><Input {...form.input('price')} type="number" min="0" /></Field>
-        <Field label="Compare-at price" hint="Shown struck through"><Input {...form.input('compare_price')} type="number" min="0" /></Field>
-        <Field label="Customisation price" hint="0 = not offered"><Input {...form.input('customization_price')} type="number" min="0" /></Field>
-        <Field label="SKU"><Input {...form.input('sku')} /></Field>
-        <Field label="Order source" hint="The website or channel this product comes from"><Select value={v.order_source_id} onChange={(x) => form.set('order_source_id', x)} allowEmpty placeholder="Own product (no source)" options={sources} /></Field>
-        <Field label="Discount" hint="Taken off the price on every order" error={form.errors.discount_value}>
-          <div className="flex gap-2"><Input {...form.input('discount_value')} type="number" min="0" placeholder="0" /><Segmented id="pdt" value={v.discount_type} onChange={(x) => form.set('discount_type', x)} options={[{ value: 'fixed', label: 'Rs' }, { value: 'percent', label: '%' }]} /></div>
-        </Field>
-        <Field label="Plan included" className="sm:col-span-2" hint="Customers who get this product (e.g. an NFC card) also get this plan when an account is created with the order. Leave empty for non-plan products (stickers, stands...).">
-          <Select value={v.plan_id} onChange={(x) => form.set('plan_id', x)} allowEmpty placeholder="Non-plan product" options={plans} />
-        </Field>
-        <Field label="Order type this product is for" className="sm:col-span-2" hint="Decides which order types offer it. A tag that hides the owner's number is a Contact tag.">
-          <Select value={v.product_kind} onChange={(x) => form.set('product_kind', x)} allowEmpty placeholder="Not set (a normal NFC product)" options={PRODUCT_KINDS} />
-        </Field>
-        {['contact_tag', 'airport_tag'].includes(v.product_kind) && <Field label="Tags per unit" hint="A pack of 2 makes 2 tags when it is ordered"><Input {...form.input('tags_per_unit')} type="number" min="1" max="50" /></Field>}
-        <Field label="Short description" className="sm:col-span-2"><Input {...form.input('short_description')} maxLength={500} /></Field>
-        <Field label="Description" className="sm:col-span-2"><Textarea {...form.input('description')} rows={3} /></Field>
+        <Field label="Category" hint={cats.length ? undefined : 'No categories yet. Add them under Sales > Categories.'}><Select value={v.category} onChange={(x) => form.set('category', x)} allowEmpty placeholder="Choose a category" options={cats} /></Field>
+        {!hasVars
+          ? <Field label="Price (Rs)" required error={form.errors.price}><Input {...form.input('price')} type="number" min="0" /></Field>
+          : <Field label="Price" hint="Each variation has its own price below"><Input readOnly value={`From Rs ${Math.min(...v.variants.map((x) => Number(x.price) || 0)).toLocaleString('en-US')}`} /></Field>}
         <div className="space-y-3 rounded-2xl border border-border p-4 sm:col-span-2">
           <div><p className="text-sm font-semibold">Inventory</p><p className="text-xs text-muted-foreground">Count the pieces you have. Orders take them off, a cancelled order gives them back.</p></div>
-          <SwitchRow title="Manage stock" description={v.variants.length ? 'Each variation below has its own quantity' : 'Track the quantity of this product'} {...{ checked: !!v.manage_stock, onChange: (x) => form.set('manage_stock', x) }} />
+          <SwitchRow title="Manage stock" description={hasVars ? 'Each variation below has its own quantity' : 'Track the quantity of this product'} {...{ checked: !!v.manage_stock, onChange: (x) => form.set('manage_stock', x) }} />
           {v.manage_stock && (
             <div className="grid gap-3 sm:grid-cols-3">
-              {!v.variants.length && <Field label="Quantity in stock"><Input type="number" value={v.stock_qty} onChange={(e) => form.set('stock_qty', e.target.value)} /></Field>}
+              {!hasVars && <Field label="Quantity in stock"><Input type="number" value={v.stock_qty} onChange={(e) => form.set('stock_qty', e.target.value)} /></Field>}
               <Field label="Low stock at" hint="Shown as low when this many are left"><Input type="number" min="0" value={v.low_stock_threshold} onChange={(e) => form.set('low_stock_threshold', e.target.value)} /></Field>
               <div className="sm:col-span-3"><SwitchRow title="Allow backorders" description="Keep selling when it is out of stock" {...{ checked: !!v.allow_backorder, onChange: (x) => form.set('allow_backorder', x) }} /></div>
             </div>
@@ -544,8 +529,8 @@ function ProductForm({ product, onClose, onSaved }) {
         </div>
         <div className="space-y-3 rounded-2xl border border-border p-4 sm:col-span-2">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <div><p className="text-sm font-semibold">Variations</p><p className="text-xs text-muted-foreground">Sizes, colours, materials. Each variation has its own SKU, price change and stock.</p></div>
-            <Button size="xs" variant="soft" onClick={() => form.set('variants', [...v.variants, { name: '', sku: '', price_delta: 0, stock: 0 }])}><Plus />Add variation</Button>
+            <div><p className="text-sm font-semibold">Variations</p><p className="text-xs text-muted-foreground">Sizes, colours, materials, plans. Write the price and quantity of each; the SKU is written for you.</p></div>
+            <Button size="xs" variant="soft" onClick={addVariation}><Plus />Add variation</Button>
           </div>
           <div className="space-y-2 rounded-xl bg-muted/40 p-3">
             <p className="text-xs font-medium text-muted-foreground">Make them from attributes: give each attribute its values, separated by commas</p>
@@ -562,15 +547,18 @@ function ProductForm({ product, onClose, onSaved }) {
             </div>
           </div>
           {form.errors.variants && <p className="text-sm text-danger">{form.errors.variants}</p>}
-          {v.variants.length > 0 && (
+          {hasVars && (
             <div className="space-y-2">
-              <div className="hidden gap-2 px-1 text-xs font-medium text-muted-foreground sm:grid sm:grid-cols-[1fr_8rem_6rem_6rem_3.5rem_2.5rem]"><span>Variation</span><span>SKU</span><span>Price +/-</span><span>{v.manage_stock ? 'Stock' : ''}</span><span>On sale</span><span /></div>
+              <div className={cn('hidden gap-2 px-1 text-xs font-medium text-muted-foreground sm:grid', grid)}><span>Variation</span><span>Price (Rs)</span><span>Qty</span><span>Plan</span><span>On sale</span><span /></div>
               {v.variants.map((x, i) => (
-                <div key={i} className={cn('grid gap-2 sm:grid-cols-[1fr_8rem_6rem_6rem_3.5rem_2.5rem] sm:items-center', x.enabled === false && 'opacity-60')}>
-                  <Input value={x.name} onChange={(e) => setVar(i, 'name', e.target.value)} placeholder="e.g. Black / PVC" aria-label="Variation" />
-                  <Input value={x.sku || ''} onChange={(e) => setVar(i, 'sku', e.target.value)} placeholder="SKU" aria-label="SKU" />
-                  <Input type="number" value={x.price_delta} onChange={(e) => setVar(i, 'price_delta', e.target.value)} placeholder="+ price" aria-label="Price change" />
-                  {v.manage_stock ? <Input type="number" min="0" value={x.stock ?? 0} onChange={(e) => setVar(i, 'stock', e.target.value)} aria-label="Stock" /> : <span />}
+                <div key={i} className={cn('grid gap-2 sm:items-center', grid, x.enabled === false && 'opacity-60')}>
+                  <div className="min-w-0">
+                    <Input value={x.name} onChange={(e) => setVar(i, 'name', e.target.value)} placeholder="e.g. Black / PVC" aria-label="Variation" />
+                    {x.sku && <p className="mt-0.5 truncate px-1 font-mono text-[11px] text-muted-foreground">SKU {x.sku}</p>}
+                  </div>
+                  <Input type="number" min="0" value={x.price ?? ''} onChange={(e) => setVar(i, 'price', e.target.value)} placeholder="Price" aria-label="Price" />
+                  <Input type="number" min="0" value={x.stock ?? 0} onChange={(e) => setVar(i, 'stock', e.target.value)} aria-label="Quantity" />
+                  <Select value={x.plan_id || ''} onChange={(val) => setVar(i, 'plan_id', val)} allowEmpty placeholder="No plan" options={plans} />
                   <Switch size="sm" checked={x.enabled !== false} onChange={(on) => setVar(i, 'enabled', on)} />
                   <Button variant="ghost" size="icon" onClick={() => form.set('variants', v.variants.filter((_, j) => j !== i))} aria-label="Remove variation"><Trash2 /></Button>
                 </div>
@@ -578,17 +566,11 @@ function ProductForm({ product, onClose, onSaved }) {
             </div>
           )}
         </div>
+        <Field label="Customisation price" hint="0 = not offered"><Input {...form.input('customization_price')} type="number" min="0" /></Field>
+        <Field label="Sort order"><Input {...form.input('sort')} type="number" /></Field>
         <Field label="Main image"><ImageUpload value={v.front_image} onChange={(f) => form.set('front_image', f)} /></Field>
         <Field label="Second image"><ImageUpload value={v.back_image} onChange={(f) => form.set('back_image', f)} /></Field>
-        <Field label="Weight (grams)" hint="Used for courier booking"><Input {...form.input('weight_grams')} type="number" min="1" /></Field>
-        <Field label="Sort order"><Input {...form.input('sort')} type="number" /></Field>
-        <div className="grid gap-2 sm:col-span-2 sm:grid-cols-2">
-          <SwitchRow title="Show in shop" {...{ checked: v.show_in_shop, onChange: (x) => form.set('show_in_shop', x) }} />
-          <SwitchRow title="Featured" {...{ checked: v.featured, onChange: (x) => form.set('featured', x) }} />
-          <SwitchRow title="Active" description="Inactive products cannot be ordered" {...{ checked: v.status, onChange: (x) => form.set('status', x) }} />
-          {MODULES.inventory && <SwitchRow title="Track stock" description="Take components from inventory on dispatch" {...{ checked: v.track_stock, onChange: (x) => form.set('track_stock', x) }} />}
-          <SwitchRow title="Already a wholesale price" description="Wholesale orders get no quantity-tier discount on this product" {...{ checked: !!v.no_wholesale_tiers, onChange: (x) => form.set('no_wholesale_tiers', x) }} />
-        </div>
+        <div className="sm:col-span-2"><SwitchRow title="Active" description="Inactive products cannot be ordered" {...{ checked: v.status, onChange: (x) => form.set('status', x) }} /></div>
       </div>
     </Dialog>
   );
